@@ -8,7 +8,8 @@ from tqdm import tqdm
 
 def get_psf_ellip(catalog, return_shear=False):
     """This utility gets the PSF ellipticity (uncalibrated shear) from a data
-    or sims catalog. Function taken from https://github.com/mr-superonion/utils_shear_ana/blob/c5030baacfb4c2ac3df9969605ffac96f804e35f/utils_shear_ana/catutil.py#L1781
+    or sims catalog. Function taken from 
+    https://github.com/mr-superonion/utils_shear_ana/blob/c5030baacfb4c2ac3df9969605ffac96f804e35f/utils_shear_ana/catutil.py#L1781
     """
     if "e1_psf" in catalog.dtype.names:
         return catalog["e1_psf"], catalog["e2_psf"]
@@ -45,18 +46,18 @@ def make_hscy3_cat(
         add_photz = True,
         photoz_method = "dnnz",
         check_all_galaxies = False,
-        ):
+    ):
     final_lenscat = Table()
     for field_name in field_names:
-        pth = fpath_cats + fpath_primcats + '{}.fits'.format(field_name)
+        pth = fpath_cats + fpath_primcats + f'{field_name}.fits'
         print(pth)
         lenscat = Table.read(pth)
         if use_bmode_mask:
             lenscat = lenscat[lenscat["b_mode_mask"]]
         if add_photz:
-            secondary_cats = glob(fpath_secondary+"{}_tracts/*_pz.fits".format(field_name))
+            secondary_cats = glob(fpath_secondary+f"{field_name}_tracts/*_pz.fits")
             for secondary_cat in tqdm(secondary_cats,
-                                      desc="Processing {}".format(field_name),
+                                      desc=f"Processing {field_name}",
                                       total=len(secondary_cats)):
                 hdul_nofz = Table.read(secondary_cat,hdu=1)
                 hdul_nofz.keep_columns([
@@ -79,8 +80,8 @@ def make_hscy3_cat(
     lens_bin_mask = final_lenscat['hsc_y3_zbin']>0
     final_lenscat = final_lenscat[lens_bin_mask]
 
-    final_lenscat.rename_column('i_ra','RA')
-    final_lenscat.rename_column('i_dec','Dec')
+    final_lenscat.rename_column('i_ra','ra')
+    final_lenscat.rename_column('i_dec','dec')
     final_lenscat.rename_column('i_hsmshaperegauss_e1','e_1')
     final_lenscat.rename_column('i_hsmshaperegauss_e2','e_2')
     final_lenscat.rename_column('i_hsmshaperegauss_derived_weight','weight')
@@ -94,16 +95,16 @@ def make_hscy3_cat(
     e1_psf,e2_psf = get_psf_ellip(final_lenscat,return_shear=False)
     final_lenscat['e1_psf'] = e1_psf
     final_lenscat['e2_psf'] = e2_psf
-    all_columns = ['object_id', 'RA','Dec','e_1','e_2','z_bin','weight','m_corr','c_1','c_2','resolution','e_rms','e1_psf','e2_psf','aperture_mag']
+    all_columns = ['object_id', 'ra','dec','e_1','e_2','z_bin','weight','m_corr','c_1','c_2','resolution','e_rms','e1_psf','e2_psf','aperture_mag']
     if add_photz:
         all_columns += [
-            "{}_photoz_best".format(photoz_method),
-            "{}_photoz_err68_min".format(photoz_method),
-            "{}_photoz_err68_max".format(photoz_method),
-            "{}_photoz_err95_min".format(photoz_method),
-            "{}_photoz_err95_max".format(photoz_method),
-            "{}_photoz_risk_best".format(photoz_method),
-            "{}_photoz_std_best".format(photoz_method)
+            f"{photoz_method}_photoz_best",
+            f"{photoz_method}_photoz_err68_min",
+            f"{photoz_method}_photoz_err68_max",
+            f"{photoz_method}_photoz_err95_min",
+            f"{photoz_method}_photoz_err95_max",
+            f"{photoz_method}_photoz_risk_best",
+            f"{photoz_method}_photoz_std_best"
         ]
     final_lenscat.keep_columns(all_columns)
 
