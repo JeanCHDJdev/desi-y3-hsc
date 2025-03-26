@@ -1,26 +1,70 @@
-import numpy as np 
 import time 
-
-import numpy as np
-import glob
 import matplotlib.pyplot as plt
 import os
 import fitsio as fio
-import pandas as pd
-import warnings
+import numpy as np
+import logging
+import psutil
+import memory_profiler
 
 from mocpy import MOC
 from pathlib import Path
 from astropy import units as u
-from astropy.coordinates import SkyCoord, Angle, match_coordinates_sky
-from astropy.io import fits
-from astropy.table import Table
+from astropy.coordinates import SkyCoord
 from argparse import ArgumentParser
 
-from desitarget.targetmask import desi_mask
+#from desitarget.targetmask import desi_mask
 from pycorr import (
     TwoPointCorrelationFunction, TwoPointEstimator, NaturalTwoPointEstimator, utils, setup_logging
 )
+
+def setup_crosscorr_logging(log_file='out.log', log_level=logging.INFO):
+    """
+    Set up logging with both console and file output
+    
+    Args:
+        log_file (str): Path to the log file
+        log_level (int): Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    """
+    log_dir = Path(log_file).parent
+    if log_dir:
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+    formatter = logging.Formatter(
+        '%(asctime)s:%(name)s:%(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(formatter)
+
+    logger = logging.getLogger(__name__)
+    logger.setLevel(log_level)
+
+    logger.handlers.clear()
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
+    def log_memory_usage():
+        """
+        Log current process memory usage
+        """
+        try:
+            process = psutil.Process()
+            memory_usage = process.memory_info().rss / 1e6  # Convert to MB
+            logger.info(f"Memory Usage: {memory_usage:.2f} MB")
+        except Exception as e:
+            logger.error(f"Could not log memory usage: {e}")
+
+    logger.memory_usage = log_memory_usage
+
+    # log file location for user reference
+    print(f"Logging to file: {Path(log_file).resolve()}")
+
+    return logger
 
 def parse_args():
     parser = ArgumentParser()
@@ -30,15 +74,16 @@ def parse_args():
         '--output_dir', 
         type=str, 
         default='out/',
-        help='Path to the output file (storing the cross-correlation)'
+        help='Path to the output file (storing the cross-correlation). '
         'Default is out/'
         )
     parser.add_argument(
-        '-w',
-        '--nproc', 
-        type=int, 
-        help='Number of threads to use for cross-correlation'
-        'Default is 1'
+        '-t',
+        '--tgt',
+        type=str,
+        default='LRG',
+        help='Target to cross-correlate with HSC. '
+        'Default is LRG'
         )
     parser.add_argument(
         '-r',
@@ -51,34 +96,71 @@ def parse_args():
         '-l',
         '--log', 
         type=str,
-        default='log.txt',
+        default='out.log',
         help='Log file to store run settings'
     )
+    parser.add_argument(
+        '-w',
+        '--nproc', 
+        type=int, 
+        help='Number of threads to use for cross-correlation. '
+        'Default is 1'
+        )
     
     return parser.parse_args()
 
 class CrossCorrelation():
     def fetch_desi_files(self, randoms=False):
-
-        root = Path(
-            '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/nonKP'
-            )
-        path = f'{self.tgt}{f"_{self.cap}_*" if self.cap else ("_[0-9]*_" if randoms else "_")}clustering{".ran" if randoms else ".dat"}.fits'
-        return list(root.glob(path))
+        try:
+            root = Path(
+                '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/nonKP'
+                )
+            path = f'{self.tgt}{f"_{self.cap}_*" if self.cap else ("_[0-9]*_" if randoms else "_")}clustering{".ran" if randoms else ".dat"}.fits'
+            files = list(root.glob(path))
+            if not files:
+                raise FileNotFoundError(f"No files found for path: {path}")
+            return files
+        except PermissionError:
+            logging.error("Permission denied accessing catalog files")
+            raise
+    
+    def fetch_hsc_files(self, randoms=False):
+        if randoms:
+            #TODO : implement this
+            pass
+        else:
+            return Path(
+                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cathscy3_cat.fits'
+                )
 
     def __init__(
             self, 
-            tgt, 
-            mocfile, 
-            output_dir, 
-            bin_distances,
-            nproc=None, 
-            nrandoms=4, 
-            cap=None
+            tgt : str, 
+            moc : MOC, 
+            output_dir :str | Path, 
+            bin_distances : np.ndarray,
+            bin_redshift1 : np.ndarray,
+            bin_redshift2 : np.ndarray,
+            nproc:int=None, 
+            nrandoms:int=4, 
+            cap:str=None,  
+            logger:logging.Logger=None
             ):
+        
+        assert logger is not None, 'Logger not provided'
+        self.logger = logger
+        
+        self.ra_hsc_col = 'RA'
+        self.dec_hsc_col = 'Dec'
+        self.w_hsc_col = 'weight'
+        self.z_hsc_col = 'dnnz_photoz_best'
 
-        self.moc = Path(mocfile)
-        assert self.moc.exists(), f'{self.moc} does not exist'
+        self.ra_desi_col = 'RA'
+        self.dec_desi_col = 'DEC'
+        self.w_desi_col = 'WEIGHT'
+        self.z_desi_col = 'Z'
+
+        ti = time.time()
 
         avb_cap = ['NGC', 'SGC']
         if cap:
@@ -98,40 +180,96 @@ class CrossCorrelation():
         self.bin_distances = bin_distances
 
         ## Filesystem setup
-        # FESI
         fs = {}
-        self.output_dir = Path(output_dir)
+        self.output_dir = Path(output_dir, tgt)
         if not self.output_dir.exists():
             self.output_dir.mkdir(parents=True)
-            fs['outdir'] = Path(self.output_dir)
-        random_files = np.random.choice(
-            self.fetch_desi_files(randoms=True), size=self.nrandoms, replace=False
-            )
-        fs['randoms1'] = random_files
+        fs['outdir'] = Path(self.output_dir)
+
+        # Grabbing the catalogs on initialisation
         fs['catalog1'] = self.fetch_desi_files(randoms=False)
-        fs['moc'] = self.moc
+        fs['randoms1'] = np.random.choice(
+            self.fetch_desi_files(randoms=True), size=self.nrandoms, replace=False
+        )
+        fs['catalog2'] = self.fetch_hsc_files(randoms=False)
+        fs['randoms2'] = np.random.choice(
+            self.fetch_hsc_files(randoms=True), size=self.nrandoms, replace=False
+        )
+        
+        ## Loading the MOC footprint
+        self.moc = moc
 
-        ## todo : initialize randoms for HSC
-        fs['catalog2'] = Path('/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cathscy3_cat.fits')
-        fs['randoms2'] = ''
-
+        # Keep the filesystem
         self.fs = fs 
 
-        print(f'Filesystem : {fs}')
+        tr = time.time()
+        logger.info(f'Collating randoms ...')
+        self.randoms1 = collate_randoms(
+            self.fs['randoms1'],
+            ra_col=self.ra_desi_col,
+            dec_col=self.dec_desi_col,
+            w_col=self.w_desi_col,
+            z_col=self.z_desi_col,
+            moc=self.moc
+            )
+        self.randoms2 = collate_randoms(
+            self.fs['randoms2'], 
+            ra_col=self.ra_hsc_col,
+            dec_col=self.dec_hsc_col,
+            w_col=self.w_hsc_col,
+            z_col=self.z_hsc_col,
+            moc=self.moc,
+            )
+        print(f'Collated randoms in {time.time()-tr:.2f} seconds')
 
-    def run(self, bin1, bin2):
-        moc = MOC.from_fits(filename=self.fs['moc'])
+        ti = time.time()
+        self.data1 = read_file(
+            self.fs['catalog1'], 'RA', 'DEC', 'WEIGHT', mask=self.moc
+            )
+        self.data2 = read_file(
+            self.fs['catalog2'], 'RA', 'Dec', 'weight', mask=self.moc
+            )
+        self.logger.info(f'Read catalogs {time.time()-ti:.2f} seconds')
 
+        # Setup redshift masks
+        self.zmask_data1 = np.digitize(self.data1[self.z_desi_col], bin_redshift1)
+        self.zmask_data2 = np.digitize(self.data2[self.z_hsc_col], bin_redshift2)
+        self.zmask_randoms1 = np.digitize(self.randoms1[self.z_desi_col], bin_redshift1)
+        self.zmask_randoms2 = np.digitize(self.randoms2[self.z_hsc_col], bin_redshift2)
+
+        self.logger.info(f'Filesystem : {fs}')
+
+    def run(self, bin_index1, bin_index2):
+
+        # Setup redshift masking
+        z_mask_d1 = (self.zmask_data1 == bin_index1)
+        z_mask_d2 = (self.zmask_data2 == bin_index2)
+        z_mask_r1 = (self.zmask_randoms1 == bin_index1)
+        z_mask_r2 = (self.zmask_randoms2 == bin_index2)
+
+        self.logger.info(f'Running for {self.tgt}, {bin_index1}, {bin_index2}')
         tpcf = TwoPointCorrelationFunction(
             edges=self.bin_distances,
-            data_positions1=read_coords(d1, 'RA', 'DEC'),
-            data_positions2=read_coords(d2, 'RA', 'Dec'),
-            randoms_positions1=read_coords(r1, 'RA', 'DEC'),
-            randoms_positions2=read_coords(r2, 'RA', 'Dec'),
-            data_weights1=read_weights(dw1, 'WEIGHT'),
-            data_weights2=read_weights(dw2, 'weight'),
-            randoms_weights1=read_weights(rw1, 'WEIGHT'),
-            randoms_weights1=read_weights(rw2, 'weight'),
+            data_positions1=[
+                self.data1[self.ra_desi_col][z_mask_d1], 
+                self.data1[self.dec_desi_col][z_mask_d1]
+                ],
+            data_positions2=[
+                self.data2[self.ra_hsc_col][z_mask_d2], 
+                self.data2[self.dec_hsc_col][z_mask_d2]
+                ],
+            randoms_positions1=[
+                self.randoms1[self.ra_desi_col][z_mask_r1],
+                self.randoms1[self.dec_desi_col][z_mask_r1]
+                ],
+            randoms_positions2=[
+                self.randoms2[self.ra_hsc_col][z_mask_r2],
+                self.randoms2[self.dec_hsc_col][z_mask_r2]
+                ],
+            data_weights1=self.data1[self.w_desi_col][z_mask_d1],
+            data_weights2=self.data2[self.w_hsc_col][z_mask_d2],
+            randoms_weights1=self.randoms1[self.w_desi_col][z_mask_r1],
+            randoms_weights2=self.randoms2[self.w_hsc_col][z_mask_r2],
             n_threads=self.nproc,
             mode='theta',
             position_type='rd', # 'rd' for RA/Dec
@@ -140,62 +278,79 @@ class CrossCorrelation():
         )
         outfile = Path(
             self.output_dir, 
-            f'{self.tgt}_{self.cap}_b1x{bin1}_b2x{bin2}.fits'
+            f'{self.tgt}_{self.cap}_b1x{bin_index1}_b2x{bin_index2}.fits'
             )
         tpcf.write(outfile, overwrite=True)
 
+def collate_randoms(random_files, ra_col, dec_col, w_col, z_col, moc=None):
 
-def collate_randoms(random_files, ra_col, dec_col, w_col):
     assert len(random_files) > 0, f"No random files "
     randoms = []
     size = 0
+
     for f in random_files:
         with fio.FITS(f) as rand:
-            data = rand[1].read(columns=[ra_col, dec_col, w_col])
+            data = rand[1].read(columns=[ra_col, dec_col, w_col, z_col])
+            if moc is not None:
+                coords = SkyCoord(data[ra_col]*u.deg, data[dec_col]*u.deg, frame='icrs')
+                mask = moc.contains_skycoord(coords)
+                data = data[np.flatnonzero(mask)]
+            if len(data) == 0:
+                continue
             size += len(data)
             randoms.append(data)  
 
-    print(f"Collated {size} randoms (from {len(random_files)} files)")
-    dtype = [(ra_col, 'f8'), (dec_col, 'f8'), (w_col, 'f8')]
+    print(f"Collated {size} randoms (from {len(random_files)} files) on {moc}")
+    dtype = [(ra_col, 'f8'), (dec_col, 'f8'), (w_col, 'f8'), (z_col, 'f8')]
+
     return np.concatenate(randoms).astype(dtype)
 
-def sample_file_on_mask(file, ra_col, dec_col, weight_col, mask=None):
-    with fio.FITS(file) as f:
-        if mask is not None:
-            rows = np.flatnonzero(mask)
-            data = f[1].read(columns=[ra_col, dec_col, weight_col], rows=rows)
-        else:
-            data = f[1].read(columns=[ra_col, dec_col, weight_col])
-    
-    return data[ra_col], data[dec_col], data[weight_col]
+def read_file(file, ra_col, dec_col, weight_col, z_col, mask=None):
 
-def read_coords(file, ra_col, dec_col):
+    rows = get_rows(mask)
     with fio.FITS(file) as f:
-        data = f[1].read(columns=[ra_col, dec_col])
-    return SkyCoord(data[ra_col]*u.deg, data[dec_col]*u.deg, frame='icrs')
+        data = f[1].read(columns=[ra_col, dec_col, weight_col, z_col], rows=rows)
 
-def read_weights(file, weight_col):
-    with fio.FITS(file) as f:
-        weight = f[1].read(column=weight_col)
-    return weight
+    dtype = [(ra_col, 'f8'), (dec_col, 'f8'), (weight_col, 'f8'), (z_col, 'f8')]
+    return np.array(data).astype(dtype)
+
+def get_rows(mask):
+    if mask is not None:
+        rows = np.flatnonzero(mask)
+    else:
+        rows = None
+    return rows
 
 def main():
     args = parse_args()
 
+    tgt = args.tgt
     output_dir = args.output_dir
     nr = args.randoms
     nproc = args.nproc
     log = args.log
 
+    logger = setup_crosscorr_logging(log_file=log)
     setup_logging()
 
+    # for now, we will only consider the following targets, could do more later
+    avb_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
+    if tgt:
+        assert tgt in avb_tgt, f'{tgt} not in {avb_tgt}'
+        if isinstance(tgt, str):
+            tgts = [tgt]
+    else:
+        tgts = avb_tgt
+    
     bin_distances = np.linspace(0., 200., 51)
 
-    bins_bgs = np.arange(0, 0.7, 8) # 0 < z < 0.6
-    bins_lrg = np.arange(0.3, 1.1, 9) # 0.4 < z < 1
-    bins_elg = np.arange(0.6, 1.7, 12) # 0.6 < z < 1.6
+    bins_bgs = np.arange(0, 0.7, 0.1) # 0 < z < 0.6
+    bins_lrg = np.arange(0.3, 1.1, 0.1) # 0.4 < z < 1
+    bins_elg = np.arange(0.6, 1.7, 0.1) # 0.6 < z < 1.6
     bins_qso = np.arange(0.9, 2.2, 0.1) # 0.9 < z < 2.1
+
     bins_hsc = np.linspace(0.3, 1.2, 4) 
+
     bins_redshift = {
         'BGS_ANY': bins_bgs,
         'LRG': bins_lrg,
@@ -203,78 +358,51 @@ def main():
         'QSO': bins_qso,
         'HSC': bins_hsc,
     }
-    with open(log, 'a') as f:
-        f.write(f'Number of randoms: {nr}\n')
-        f.write(f'Number of threads: {nproc}\n')
-        f.write(f'Output directory: {output_dir}\n')
-        f.write('Bins:\n')
-        f.write(f'{bins_redshift}\n')
-        f.write(f'Fiducial bin distances: {bin_distances}\n')
-        f.write(f'Log file: {log}\n')
-        f.write('\n')
 
-    # for now, we will only consider the following targets, could do more later
-    avb_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
-    assert tgt in avb_tgt, f'{tgt} not in {avb_tgt}'
-    
-    setup_logging()
+    logger.info(f'Number of randoms: {nr}\n')
+    logger.info(f'Number of threads: {nproc}\n')
+    logger.info(f'Output directory: {output_dir}\n')
+    logger.info('Bins:\n')
+    logger.info(f'{bins_redshift}\n')
+    logger.info(f'Fiducial bin distances: {bin_distances}\n')
+    logger.info(f'Log file: {log}\n')
+    logger.info('\n')
 
-    moc_list = Path('/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/mocs/').glob('hsc_moc*.fits')
-
-    ra_hsc_col = 'RA'
-    dec_hsc_col = 'Dec'
-    w_hsc_col = 'weight'
-    ra_desi_col = 'RA'
-    dec_desi_col = 'DEC'
-    w_desi_col = 'WEIGHT'
+    moc_list = Path(
+        '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/mocs/'
+        ).glob(
+            'hsc_moc*.fits'
+            )
 
     for mocf in moc_list:
+        logger.info(f'Running for MOC : {mocf}\n')
         moc = MOC.from_fits(filename=mocf)
-        coords_hsc = read_coords(mocf, ra_hsc_col, dec_hsc_col)
-        mask = moc.contains_skycoord(coords_hsc)
 
-        print(f'{mocf} contains {mask.sum()} HSC objects')
-        if mask.sum() == 0:
-            raise ValueError(f'{mocf} contains no HSC objects')
-        
-        for tgt in avb_tgt:
+        for t in tgts:
+            bin1 = bins_redshift[tgt]
+            bin2 = bins_redshift['HSC']
+            logger.memory_usage()
             cc = CrossCorrelation(
-                tgt, 
-                mocf, 
-                output_dir, 
-                bin1, 
-                bin2, 
+                t, 
+                moc, 
+                output_dir,
+                bin_distances=bin_distances,
+                bin_redshift1=bin1,
+                bin_redshift2=bin2, 
                 nproc=nproc, 
                 nrandoms=nr, 
                 cap=None
             )
-            randoms1 = cc.collate_randoms(cc.fs['randoms1'])
+            logger.memory_usage()
 
-        bin1 = bins_redshift[tgt]
-        bin2 = bins_redshift['HSC']
-        print(f'Running for {tgt}, {bin1}, {bin2}')
-        cc = CrossCorrelation(
-            tgt, 
-            mocf, 
-            output_dir, 
-            nproc=nproc, 
-            nrandoms=nr, 
-            cap=None
-            )
-        
-        cc.run()
+            logger.info(f'Running for {tgt}, {bin1}, {bin2}')
 
-
-    desi_tgt = np.array(desi[1]['DESI_TARGET'].read())
-
-    is_bgs  = (desi_tgt & desi_mask.BGS_ANY != 0)   #- instead of 2**60
-    is_lrg  = (desi_tgt & desi_mask.LRG != 0)
-    is_elg  = (desi_tgt & desi_mask.ELG != 0)
-    is_qso  = (desi_tgt & desi_mask.QSO != 0)
-
-    tgt = 'LRG'
-    print('Set up bins and targets')
-
+            for b in range(len(bin1)-1):
+                for c in range(len(bin2)-1):
+                    tbc = time.time()
+                    cc.run(b, c)
+                    txt = f'Finished {tgt}, {b} (desi) : {bin1[b]}, {c} (hsc) : {bin2[c]} in {time.time()-tbc:.2f}s\n'
+                    logger.info(txt)
 
 if __name__ == '__main__':
     main()
