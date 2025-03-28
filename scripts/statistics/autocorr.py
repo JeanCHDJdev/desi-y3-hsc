@@ -38,11 +38,11 @@ def parse_args():
         'Default is all targets'
         )
     parser.add_argument(
-        '-rd',
-        '--sample_rate_desi', 
+        '-r',
+        '--sample_rate', 
         type=int,
-        default=1,
-        help='Sampling rate for the randoms of DESI. '
+        default=1, 
+        help='Sampling rate for the randoms. '
         'Defaults to 1.'
     )
     parser.add_argument(
@@ -75,13 +75,18 @@ def main():
 
     tgt = args.tgt
     output_dir = args.output_dir
-    sample_rate_desi = args.sample_rate_desi
+    sample_rate = args.sample_rate
     nproc = args.nproc
     log = args.log
     mode = args.mode
 
+    if not Path(output_dir).exists():
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+    if not Path(output_dir, 'bins').exists():
+        Path(output_dir, 'bins').mkdir(parents=True, exist_ok=True)
+
     if log is None:
-        logger = cu.setup_crosscorr_logging()
+        logger = cu.setup_crosscorr_logging(log_file=str(Path(output_dir, 'autolog')))
     else:
         logger = cu.setup_crosscorr_logging(log_file=log)
     setup_logging()
@@ -99,11 +104,6 @@ def main():
         tgts = avb_tgt
     
 
-    if not Path(output_dir).exists():
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
-    if not Path(output_dir, 'bins').exists():
-        Path(output_dir, 'bins').mkdir(parents=True, exist_ok=True)
-
     print('=' * 80)
     np.savetxt(Path(output_dir, 'bins', 'bin_distances.txt'), cu.bin_distances)
     np.savetxt(Path(output_dir, 'bins', 'bins_bgs.txt'), cu.bins_bgs)
@@ -118,9 +118,6 @@ def main():
         'QSO': cu.bins_qso,
     }
 
-    logger.info(
-        f'Sample rate on DESI randoms: {sample_rate_desi}\n'
-        )
     logger.info(f'Number of threads: {nproc}\n')
     logger.info(f'Output directory: {output_dir}\n')
     logger.info(f'Bins redshift :{bins_redshift}\n')
@@ -147,7 +144,7 @@ def main():
                     bin_distances=cu.bin_distances,
                     bin_redshift1=bin1,
                     nproc=nproc, 
-                    sample_rate_desi=sample_rate_desi, 
+                    sample_rate_hsc=sample_rate, 
                     logger=logger,
                 )
             else:
@@ -158,7 +155,7 @@ def main():
                     bin_distances=cu.bin_distances,
                     bin_redshift1=bin1,
                     nproc=nproc, 
-                    sample_rate_desi=sample_rate_desi, 
+                    sample_rate_desi=sample_rate, 
                     logger=logger,
                 )
             logger.memory_usage()
@@ -166,7 +163,7 @@ def main():
             for b in range(1, len(bin1)):
                 tbc = time.time()
                 cc.run(b, m)
-                txt = f'Finished {tgt}, {b} (desi) : {bin1[b]} in {time.time()-tbc:.2f}s\n'
+                txt = f'Finished {t}, {b} (desi) : {bin1[b]} in {time.time()-tbc:.2f}s\n'
                 logger.info(txt)
 
 if __name__ == '__main__':

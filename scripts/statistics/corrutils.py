@@ -398,7 +398,7 @@ class HSCAutoCorrelation():
             bin_distances : np.ndarray,
             bin_redshift1 : np.ndarray,
             nproc:int=None, 
-            sample_rate_desi:int=1, 
+            sample_rate_hsc:int=1, 
             logger:logging.Logger=None
             ):
         
@@ -440,7 +440,7 @@ class HSCAutoCorrelation():
         self.fs = fs 
 
         # Sample rate for randoms
-        self.sample_rate_desi = sample_rate_desi
+        self.sample_rate_hsc = sample_rate_hsc
 
         trd = time.time()
         logger.info(f'Collating randoms ...')
@@ -451,9 +451,15 @@ class HSCAutoCorrelation():
             w_col=None,
             z_col=None,
             moc=self.moc,
-            sample_rate=self.sample_rate_desi
+            sample_rate=1
             )
-        logger.info(f'Collated DESI randoms in {time.time()-trd:.2f} seconds')
+        ## here we can actually subsample the randoms
+        self.randoms1 = self.randoms1[::self.sample_rate_hsc] #[::self.sample_rate_hsc]
+        logger.info(
+            f'Collated HSC randoms in {time.time()-trd:.2f} seconds'
+            f' with sample rate {self.sample_rate_hsc}'
+            f' and {len(self.randoms1)} randoms'
+            )
 
         tid = time.time()
         self.data1 = sample_file_on_moc(
@@ -487,8 +493,8 @@ class HSCAutoCorrelation():
                 ],
             data_positions2=None,
             randoms_positions1=[
-                self.randoms1[self.ra_hsc_col],
-                self.randoms1[self.dec_hsc_col]
+                self.randoms1[self.ra_randoms_hsc_col],
+                self.randoms1[self.dec_randoms_hsc_col]
                 ],
             randoms_positions2=None,
             data_weights1=self.data1[self.w_hsc_col][z_mask_d1],
@@ -597,7 +603,9 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
         log_file (str): Path to the log file
         log_level (int): Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     """
+    log_file = str(Path(log_file).with_suffix(''))
     log_file += f'_{time.strftime("%Y%m%d_%H%M%S")}.log'
+    print(f"Logging to {log_file}")
     log_dir = Path(log_file).parent
     if log_dir:
         log_dir.mkdir(parents=True, exist_ok=True)

@@ -162,7 +162,7 @@ def main():
                 for c in range(1, len(bin2)):
                     tbc = time.time()
                     cc.run(b, c, m)
-                    txt = f'Finished {tgt}, {b} (desi) : {bin1[b]}, {c} (hsc) : {bin2[c]} in {time.time()-tbc:.2f}s\n'
+                    txt = f'Finished {t}, {b} (desi) : {bin1[b]}, {c} (hsc) : {bin2[c]} in {time.time()-tbc:.2f}s\n'
                     logger.info(txt)
 
 if __name__ == '__main__':
