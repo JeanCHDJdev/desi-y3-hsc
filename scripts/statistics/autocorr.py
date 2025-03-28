@@ -110,6 +110,7 @@ def main():
     np.savetxt(Path(output_dir, 'bins', 'bins_lrg.txt'), cu.bins_lrg)
     np.savetxt(Path(output_dir, 'bins', 'bins_elg.txt'), cu.bins_elg)
     np.savetxt(Path(output_dir, 'bins', 'bins_qso.txt'), cu.bins_qso)
+    np.savetxt(Path(output_dir, 'bins', 'bins_hsc.txt'), cu.bins_hsc)
 
     bins_redshift = {
         'BGS_ANY': cu.bins_bgs,
@@ -125,7 +126,7 @@ def main():
 
     moc_list = cu.moc_list
 
-    for m in range(len(moc_list)):
+    for m in range(1, len(moc_list)):
         mocf = moc_list[m]
         logger.info(f'Processing {mocf} ...\n')
         moc = MOC.from_fits(mocf)
@@ -137,8 +138,7 @@ def main():
                 bin1 = cu.bins_hsc
             logger.memory_usage()
             if mode == 'hsc':
-                cc = cu.HSCAutoCorrelation(
-                    t, 
+                cc = cu.HSCAutoCorrelation( 
                     moc, 
                     output_dir,
                     bin_distances=cu.bin_distances,

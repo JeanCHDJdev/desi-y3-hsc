@@ -32,7 +32,7 @@ moc_list = [
         ]
 
 ## Defining fiducial bins here
-bin_distances = np.linspace(0.01, 3, 31) #np.logspace(np.log10(0.001), np.log10(3), 71)
+bin_distances = np.linspace(0.01, 3, 121) #np.logspace(np.log10(0.001), np.log10(3), 71)
 
 bins_bgs = np.arange(0, 0.6, 0.2) # 0 < z < 0.6
 bins_lrg = np.arange(0.4, 1.2, 0.2) # 0.4 < z < 1
@@ -392,7 +392,6 @@ class HSCAutoCorrelation():
 
     def __init__(
             self, 
-            tgt : str, 
             moc : MOC, 
             output_dir :str | Path, 
             bin_distances : np.ndarray,
@@ -412,10 +411,6 @@ class HSCAutoCorrelation():
         self.w_hsc_col = 'weight'
         self.z_hsc_col = 'dnnz_photoz_best'
 
-        avb_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
-        assert tgt in avb_tgt, f'{tgt} not in {avb_tgt}'
-        self.tgt = tgt
-
         if nproc is None:
             nproc = max(os.cpu_count()-2, 1)
         self.nproc = nproc
@@ -424,7 +419,7 @@ class HSCAutoCorrelation():
 
         ## Filesystem setup
         fs = {}
-        self.output_dir = Path(output_dir, tgt)
+        self.output_dir = Path(output_dir, 'HSC')
         if not self.output_dir.exists():
             self.output_dir.mkdir(parents=True)
         fs['outdir'] = Path(self.output_dir)
