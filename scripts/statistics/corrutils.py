@@ -22,6 +22,24 @@ from pycorr import (
     TwoPointCorrelationFunction, setup_logging
 )
 
+## MOC list 
+moc_list = [
+            Path(
+                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/mocs/', 
+                f'hsc_moc{i+1}.fits'
+            )
+            for i in range(0, 4)
+        ]
+
+## Defining fiducial bins here
+bin_distances = np.linspace(0.01, 3, 31) #np.logspace(np.log10(0.001), np.log10(3), 71)
+
+bins_bgs = np.arange(0, 0.6, 0.2) # 0 < z < 0.6
+bins_lrg = np.arange(0.4, 1.2, 0.2) # 0.4 < z < 1
+bins_elg = np.arange(0.8, 1.7, 0.2) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
+bins_qso = np.arange(0.8, 3.4, 0.2) # 0.9 < z < 2.1
+
+bins_hsc = np.arange(0.3, 2.1, 0.3) # 0.3 < z < 1.5 + some redshifts over 1.5
 
 class CrossCorrelation():
     def fetch_desi_files(self, randoms=False):
@@ -340,6 +358,142 @@ class DESIAutoCorrelation():
             data_weights1=self.data1[self.w_desi_col][z_mask_d1],
             data_weights2=None,
             randoms_weights1=self.randoms1[self.w_desi_col][z_mask_r1],
+            randoms_weights2=None,
+            nthreads=self.nproc,
+            mode='theta',
+            position_type='rd', # 'rd' for RA/Dec
+            engine='corrfunc',
+            estimator='landyszalay',
+        )
+        outfile = Path(
+            self.output_dir, 
+            f'{self.tgt}__b1x{bin_index1}_moc{moc_index}.npy'
+            )
+        tpcf.save(outfile)
+
+class HSCAutoCorrelation():
+    def fetch_hsc_files(self, randoms=False):
+        try:
+            if randoms:
+                root = Path(
+                    '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/rand'
+                    )
+                return list(root.glob('hscran*.fits'))
+            else:
+                return [Path(
+                    '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits'
+                    )]
+        except PermissionError:
+            logging.error(f"Permission denied accessing HSC files and randoms = {randoms}")
+            raise
+        except FileNotFoundError:
+            logging.error(f"HSC catalog file not found and randoms = {randoms}") 
+            raise
+
+    def __init__(
+            self, 
+            tgt : str, 
+            moc : MOC, 
+            output_dir :str | Path, 
+            bin_distances : np.ndarray,
+            bin_redshift1 : np.ndarray,
+            nproc:int=None, 
+            sample_rate_desi:int=1, 
+            logger:logging.Logger=None
+            ):
+        
+        assert logger is not None, 'Logger not provided'
+        self.logger = logger
+
+        self.ra_hsc_col = 'RA'
+        self.ra_randoms_hsc_col = 'ra'
+        self.dec_hsc_col = 'Dec'
+        self.dec_randoms_hsc_col = 'dec'
+        self.w_hsc_col = 'weight'
+        self.z_hsc_col = 'dnnz_photoz_best'
+
+        avb_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
+        assert tgt in avb_tgt, f'{tgt} not in {avb_tgt}'
+        self.tgt = tgt
+
+        if nproc is None:
+            nproc = max(os.cpu_count()-2, 1)
+        self.nproc = nproc
+
+        self.bin_distances = bin_distances
+
+        ## Filesystem setup
+        fs = {}
+        self.output_dir = Path(output_dir, tgt)
+        if not self.output_dir.exists():
+            self.output_dir.mkdir(parents=True)
+        fs['outdir'] = Path(self.output_dir)
+
+        # Grabbing the catalogs on initialisation
+        fs['catalog1'] = self.fetch_hsc_files(randoms=False)
+        fs['randoms1'] = self.fetch_hsc_files(randoms=True)
+        
+        ## Loading the MOC footprint
+        self.moc = moc
+
+        # Keep the filesystem
+        self.fs = fs 
+
+        # Sample rate for randoms
+        self.sample_rate_desi = sample_rate_desi
+
+        trd = time.time()
+        logger.info(f'Collating randoms ...')
+        self.randoms1 = sample_randoms_on_moc(
+            list(self.fs['randoms1']),
+            ra_col=self.ra_randoms_hsc_col,
+            dec_col=self.dec_randoms_hsc_col,
+            w_col=None,
+            z_col=None,
+            moc=self.moc,
+            sample_rate=self.sample_rate_desi
+            )
+        logger.info(f'Collated DESI randoms in {time.time()-trd:.2f} seconds')
+
+        tid = time.time()
+        self.data1 = sample_file_on_moc(
+            self.fs['catalog1'][0], 
+            ra_col=self.ra_hsc_col, 
+            dec_col=self.dec_hsc_col, 
+            weight_col=self.w_hsc_col, 
+            z_col=self.z_hsc_col,
+            moc=self.moc
+            )
+        self.logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds')
+
+        # Setup redshift masks
+        self.zmask_data1 = np.digitize(self.data1[self.z_hsc_col], bin_redshift1)
+        # no mask on redshift for HSC randoms
+
+        logger.info(f'z mask data desi {self.zmask_data1[:10]}, length {len(self.zmask_data1)}') 
+
+    def run(self, bin_index1, moc_index):
+
+        # Setup redshift masking
+        z_mask_d1 = (self.zmask_data1 == bin_index1)
+
+        self.logger.info(f'N sources in data1: {np.sum(z_mask_d1)}')
+
+        tpcf = TwoPointCorrelationFunction(
+            edges=self.bin_distances,
+            data_positions1=[
+                self.data1[self.ra_hsc_col][z_mask_d1], 
+                self.data1[self.dec_hsc_col][z_mask_d1]
+                ],
+            data_positions2=None,
+            randoms_positions1=[
+                self.randoms1[self.ra_hsc_col],
+                self.randoms1[self.dec_hsc_col]
+                ],
+            randoms_positions2=None,
+            data_weights1=self.data1[self.w_hsc_col][z_mask_d1],
+            data_weights2=None,
+            randoms_weights1=None,
             randoms_weights2=None,
             nthreads=self.nproc,
             mode='theta',

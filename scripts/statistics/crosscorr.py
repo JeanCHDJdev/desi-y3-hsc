@@ -98,17 +98,6 @@ def main():
             tgts = [tgt]
     else:
         tgts = avb_tgt
-    
-    #bin_distances = np.linspace(0., 200., 51)
-    bin_distances = np.linspace(0.01, 3, 51) #np.logspace(np.log10(0.001), np.log10(3), 71)
-
-    ## these bins are based on the nonKP/*_clustering.dat.fits in the LSS files..
-    bins_bgs = np.arange(0, 0.6, 0.1) # 0 < z < 0.6
-    bins_lrg = np.arange(0.4, 1.2, 0.1) # 0.4 < z < 1
-    bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
-    bins_qso = np.arange(0.8, 3.4, 0.1) # 0.9 < z < 2.1
-
-    bins_hsc = np.arange(0.3, 2.1, 0.3) # 0.3 < z < 1.5 + some redshifts over 1.5
 
     if not Path(output_dir).exists():
         Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -116,19 +105,19 @@ def main():
         Path(output_dir, 'bins').mkdir(parents=True, exist_ok=True)
 
     print('=' * 80)
-    np.savetxt(Path(output_dir, 'bins', 'bin_distances.txt'), bin_distances)
-    np.savetxt(Path(output_dir, 'bins', 'bins_bgs.txt'), bins_bgs)
-    np.savetxt(Path(output_dir, 'bins', 'bins_lrg.txt'), bins_lrg)
-    np.savetxt(Path(output_dir, 'bins', 'bins_elg.txt'), bins_elg)
-    np.savetxt(Path(output_dir, 'bins', 'bins_qso.txt'), bins_qso)
-    np.savetxt(Path(output_dir, 'bins', 'bins_hsc.txt'), bins_hsc)
+    np.savetxt(Path(output_dir, 'bins', 'bin_distances.txt'), cu.bin_distances)
+    np.savetxt(Path(output_dir, 'bins', 'bins_bgs.txt'), cu.bins_bgs)
+    np.savetxt(Path(output_dir, 'bins', 'bins_lrg.txt'), cu.bins_lrg)
+    np.savetxt(Path(output_dir, 'bins', 'bins_elg.txt'), cu.bins_elg)
+    np.savetxt(Path(output_dir, 'bins', 'bins_qso.txt'), cu.bins_qso)
+    np.savetxt(Path(output_dir, 'bins', 'bins_hsc.txt'), cu.bins_hsc)
 
     bins_redshift = {
-        'BGS_ANY': bins_bgs,
-        'LRG': bins_lrg,
-        'ELGnotqso': bins_elg,
-        'QSO': bins_qso,
-        'HSC': bins_hsc,
+        'BGS_ANY': cu.bins_bgs,
+        'LRG': cu.bins_lrg,
+        'ELGnotqso': cu.bins_elg,
+        'QSO': cu.bins_qso,
+        'HSC': cu.bins_hsc,
     }
 
     logger.info(
@@ -137,19 +126,15 @@ def main():
     logger.info(f'Number of threads: {nproc}\n')
     logger.info(f'Output directory: {output_dir}\n')
     logger.info(f'Bins redshift :{bins_redshift}\n')
-    logger.info(f'Fiducial bin distances: {bin_distances}\n')
+    logger.info(f'Fiducial bin distances: {cu.bin_distances}\n')
 
-    moc_list = [
-        Path(
-            '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/mocs/', 
-            f'hsc_moc{i+1}.fits'
-        )
-        for i in range(0, 4)
-        ]
+    moc_list = cu.moc_list
 
-    for m, mocf in enumerate(moc_list):
-        logger.info(f'Running for MOC : {mocf}, moc index = {m}\n')
+    for m in range(len(moc_list)):
+        mocf = moc_list[m]
+        logger.info(f'Processing {mocf} ...\n')
         moc = MOC.from_fits(mocf)
+
 
         for t in tgts:
             bin1 = bins_redshift[tgt]
@@ -160,7 +145,7 @@ def main():
                 t, 
                 moc, 
                 output_dir,
-                bin_distances=bin_distances,
+                bin_distances=cu.bin_distances,
                 bin_redshift1=bin1,
                 bin_redshift2=bin2, 
                 nproc=nproc, 

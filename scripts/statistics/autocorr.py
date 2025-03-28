@@ -26,7 +26,7 @@ def parse_args():
         '--output_dir', 
         type=str, 
         default='out/',
-        help='Path to the output file (storing the cross-correlation). '
+        help='Path to the output file (storing the auto-correlation). '
         'Default is out/'
         )
     parser.add_argument(
@@ -34,7 +34,7 @@ def parse_args():
         '--tgt',
         type=str,
         default=None,
-        help='Target to cross-correlate with HSC. '
+        help='Target to auto-correlate '
         'Default is all targets'
         )
     parser.add_argument(
@@ -56,8 +56,16 @@ def parse_args():
         '-w',
         '--nproc', 
         type=int, 
-        help='Number of threads to use for cross-correlation. '
+        help='Number of threads to use for auto-correlation. '
         'Default is all-2.'
+        )
+    parser.add_argument(
+        '-m',
+        '--mode', 
+        type=str, 
+        default='desi',
+        choices=['desi', 'hsc'],
+        help='Mode of auto-correlation. '
         )
     
     return parser.parse_args()
@@ -70,6 +78,7 @@ def main():
     sample_rate_desi = args.sample_rate_desi
     nproc = args.nproc
     log = args.log
+    mode = args.mode
 
     if log is None:
         logger = cu.setup_crosscorr_logging()
@@ -89,13 +98,6 @@ def main():
     else:
         tgts = avb_tgt
     
-    #bin_distances = np.linspace(0., 200., 51)
-    bin_distances = np.linspace(0.01, 3, 31) #np.logspace(np.log10(0.001), np.log10(3), 71)
-
-    bins_bgs = np.arange(0, 0.6, 0.1) # 0 < z < 0.6
-    bins_lrg = np.arange(0.4, 1.2, 0.1) # 0.4 < z < 1
-    bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
-    bins_qso = np.arange(0.8, 3.4, 0.1) # 0.9 < z < 2.1
 
     if not Path(output_dir).exists():
         Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -103,17 +105,17 @@ def main():
         Path(output_dir, 'bins').mkdir(parents=True, exist_ok=True)
 
     print('=' * 80)
-    np.savetxt(Path(output_dir, 'bins', 'bin_distances.txt'), bin_distances)
-    np.savetxt(Path(output_dir, 'bins', 'bins_bgs.txt'), bins_bgs)
-    np.savetxt(Path(output_dir, 'bins', 'bins_lrg.txt'), bins_lrg)
-    np.savetxt(Path(output_dir, 'bins', 'bins_elg.txt'), bins_elg)
-    np.savetxt(Path(output_dir, 'bins', 'bins_qso.txt'), bins_qso)
+    np.savetxt(Path(output_dir, 'bins', 'bin_distances.txt'), cu.bin_distances)
+    np.savetxt(Path(output_dir, 'bins', 'bins_bgs.txt'), cu.bins_bgs)
+    np.savetxt(Path(output_dir, 'bins', 'bins_lrg.txt'), cu.bins_lrg)
+    np.savetxt(Path(output_dir, 'bins', 'bins_elg.txt'), cu.bins_elg)
+    np.savetxt(Path(output_dir, 'bins', 'bins_qso.txt'), cu.bins_qso)
 
     bins_redshift = {
-        'BGS_ANY': bins_bgs,
-        'LRG': bins_lrg,
-        'ELGnotqso': bins_elg,
-        'QSO': bins_qso,
+        'BGS_ANY': cu.bins_bgs,
+        'LRG': cu.bins_lrg,
+        'ELGnotqso': cu.bins_elg,
+        'QSO': cu.bins_qso,
     }
 
     logger.info(
@@ -122,33 +124,43 @@ def main():
     logger.info(f'Number of threads: {nproc}\n')
     logger.info(f'Output directory: {output_dir}\n')
     logger.info(f'Bins redshift :{bins_redshift}\n')
-    logger.info(f'Fiducial bin distances: {bin_distances}\n')
+    logger.info(f'Fiducial bin distances: {cu.bin_distances}\n')
 
-    moc_list = [
-        Path(
-            '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/mocs/', 
-            f'hsc_moc{i+1}.fits'
-        )
-        for i in range(0, 4)
-        ]
+    moc_list = cu.moc_list
 
-    for m, mocf in enumerate(moc_list):
+    for m in range(len(moc_list)):
+        mocf = moc_list[m]
+        logger.info(f'Processing {mocf} ...\n')
         moc = MOC.from_fits(mocf)
 
         for t in tgts:
-            bin1 = bins_redshift[tgt]
-
+            if mode == 'desi':
+                bin1 = bins_redshift[tgt]
+            else:
+                bin1 = cu.bins_hsc
             logger.memory_usage()
-            cc = cu.DESIAutoCorrelation(
-                t, 
-                moc, 
-                output_dir,
-                bin_distances=bin_distances,
-                bin_redshift1=bin1,
-                nproc=nproc, 
-                sample_rate_desi=sample_rate_desi, 
-                logger=logger,
-            )
+            if mode == 'hsc':
+                cc = cu.HSCAutoCorrelation(
+                    t, 
+                    moc, 
+                    output_dir,
+                    bin_distances=cu.bin_distances,
+                    bin_redshift1=bin1,
+                    nproc=nproc, 
+                    sample_rate_desi=sample_rate_desi, 
+                    logger=logger,
+                )
+            else:
+                cc = cu.DESIAutoCorrelation(
+                    t, 
+                    moc, 
+                    output_dir,
+                    bin_distances=cu.bin_distances,
+                    bin_redshift1=bin1,
+                    nproc=nproc, 
+                    sample_rate_desi=sample_rate_desi, 
+                    logger=logger,
+                )
             logger.memory_usage()
 
             for b in range(1, len(bin1)):
