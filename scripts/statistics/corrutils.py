@@ -14,13 +14,8 @@ from mocpy import MOC
 from pathlib import Path
 from astropy import units as u
 from astropy.coordinates import SkyCoord
-from argparse import ArgumentParser
 
-import corrutils as cu
-
-from pycorr import (
-    TwoPointCorrelationFunction, setup_logging
-)
+from pycorr import TwoPointCorrelationFunction
 
 ## MOC list 
 moc_list = [
@@ -32,14 +27,14 @@ moc_list = [
         ]
 
 ## Defining fiducial bins here
-bin_distances = np.linspace(0.01, 3, 121) #np.logspace(np.log10(0.001), np.log10(3), 71)
+bin_distances = np.linspace(0.01, 3, 31) #np.logspace(np.log10(0.001), np.log10(3), 71)
 
 bins_bgs = np.arange(0, 0.6, 0.2) # 0 < z < 0.6
 bins_lrg = np.arange(0.4, 1.2, 0.2) # 0.4 < z < 1
 bins_elg = np.arange(0.8, 1.7, 0.2) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
 bins_qso = np.arange(0.8, 3.4, 0.2) # 0.9 < z < 2.1
 
-bins_hsc = np.arange(0.3, 2.1, 0.3) # 0.3 < z < 1.5 + some redshifts over 1.5
+bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 
 
 class CrossCorrelation():
     def fetch_desi_files(self, randoms=False):
@@ -47,7 +42,7 @@ class CrossCorrelation():
             root = Path(
                 '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/nonKP'
                 )
-            path = f'{self.tgt}{f"_{self.cap}_*" if self.cap else ("_[0-9]*_" if randoms else "_")}clustering{".ran" if randoms else ".dat"}.fits'
+            path = f'{self.tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
             files = list(root.glob(path))
             if not files:
                 raise FileNotFoundError(f"No files found for path: {path}")
@@ -85,7 +80,6 @@ class CrossCorrelation():
             nproc:int=None, 
             sample_rate_desi:int=1, 
             sample_rate_hsc:int=1,
-            cap:str=None,  
             logger:logging.Logger=None
             ):
 
@@ -103,11 +97,6 @@ class CrossCorrelation():
         self.dec_desi_col = 'DEC'
         self.w_desi_col = 'WEIGHT'
         self.z_desi_col = 'Z'
-
-        avb_cap = ['NGC', 'SGC']
-        if cap:
-            assert cap in avb_cap, f'{cap} not in {avb_cap}'
-        self.cap = cap
 
         avb_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
         assert tgt in avb_tgt, f'{tgt} not in {avb_tgt}'
@@ -151,8 +140,9 @@ class CrossCorrelation():
             w_col=self.w_desi_col,
             z_col=self.z_desi_col,
             moc=self.moc,
-            sample_rate=self.sample_rate_desi
             )
+        self.randoms1 = self.randoms1[::self.sample_rate_desi]
+        
         logger.info(f'Collated DESI randoms in {time.time()-trd:.2f} seconds')
         trh = time.time()
         self.randoms2 = sample_randoms_on_moc(
@@ -162,35 +152,35 @@ class CrossCorrelation():
             w_col=None,
             z_col=None,
             moc=self.moc,
-            sample_rate=self.sample_rate_hsc
             )
+        self.randoms2 = self.randoms2[::self.sample_rate_hsc]
         logger.info(f'Collated HSC randoms in {time.time()-trh:.2f} seconds')
 
         tid = time.time()
         self.data1 = sample_file_on_moc(
             self.fs['catalog1'][0], 
-            self.ra_desi_col, 
-            self.dec_desi_col, 
-            self.w_desi_col, 
-            self.z_desi_col,
+            ra_col=self.ra_desi_col, 
+            dec_col=self.dec_desi_col, 
+            weight_col=self.w_desi_col, 
+            z_col=self.z_desi_col,
             moc=self.moc
             )
         self.logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds')
         tih = time.time()
         self.data2 = sample_file_on_moc(
-            self.fs['catalog2'][0], 
-            self.ra_hsc_col, 
-            self.dec_hsc_col, 
-            self.w_hsc_col,
-            self.z_hsc_col, 
+            file=self.fs['catalog2'][0], 
+            ra_col=self.ra_hsc_col, 
+            dec_col=self.dec_hsc_col, 
+            weight_col=self.w_hsc_col,
+            z_col=self.z_hsc_col, 
             moc=self.moc
             )
         self.logger.info(f'Read HSC data in {time.time()-tih:.2f} seconds')
 
         # Setup redshift masks
-        self.zmask_data1 = np.digitize(self.data1[self.z_desi_col], bin_redshift1)
-        self.zmask_data2 = np.digitize(self.data2[self.z_hsc_col], bin_redshift2)
-        self.zmask_randoms1 = np.digitize(self.randoms1[self.z_desi_col], bin_redshift1)
+        self.zmask_data1 = np.digitize(self.data1[self.z_desi_col], bin_redshift1, right=True)
+        self.zmask_data2 = np.digitize(self.data2[self.z_hsc_col], bin_redshift2, right=True)
+        self.zmask_randoms1 = np.digitize(self.randoms1[self.z_desi_col], bin_redshift1, right=True)
 
     def run(self, bin_index1, bin_index2, moc_index):
 
@@ -200,8 +190,8 @@ class CrossCorrelation():
         # DESI randoms need to be redshift masked 
         z_mask_r1 = (self.zmask_randoms1 == bin_index1)
 
-        self.logger.info(f'N data1: {np.sum(z_mask_d1)}' + f' ,N randoms1: {np.sum(z_mask_r1)}')
-        self.logger.info(f'N sources in data2: {np.sum(z_mask_d2)}' + f' ,N sources in randoms2: {len(self.randoms2)}')
+        self.logger.info(f'N data1: {np.sum(z_mask_d1)}' + f', N randoms1: {np.sum(z_mask_r1)}')
+        self.logger.info(f'N data2: {np.sum(z_mask_d2)}' + f', N randoms2: {len(self.randoms2)}')
 
         tpcf = TwoPointCorrelationFunction(
             edges=self.bin_distances,
@@ -217,6 +207,7 @@ class CrossCorrelation():
                 self.randoms1[self.ra_desi_col][z_mask_r1],
                 self.randoms1[self.dec_desi_col][z_mask_r1]
                 ],
+            # HSC does not need redshift masking on randoms
             randoms_positions2=[
                 self.randoms2[self.ra_hsc_randoms_col],
                 self.randoms2[self.ra_hsc_randoms_col]
@@ -233,7 +224,7 @@ class CrossCorrelation():
         )
         outfile = Path(
             self.output_dir, 
-            f'{self.tgt}_{self.cap if self.cap else ""}_b1x{bin_index1}_b2x{bin_index2}_moc{moc_index}.npy'
+            f'{self.tgt}__b1x{bin_index1}_b2x{bin_index2}_moc{moc_index}.npy'
             )
         tpcf.save(outfile)
 
@@ -327,8 +318,8 @@ class DESIAutoCorrelation():
         self.logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds')
 
         # Setup redshift masks
-        self.zmask_data1 = np.digitize(self.data1[self.z_desi_col], bin_redshift1)
-        self.zmask_randoms1 = np.digitize(self.randoms1[self.z_desi_col], bin_redshift1)
+        self.zmask_data1 = np.digitize(self.data1[self.z_desi_col], bin_redshift1, right=True)
+        self.zmask_randoms1 = np.digitize(self.randoms1[self.z_desi_col], bin_redshift1, right=True)
 
         logger.info(f'z mask randoms desi{self.zmask_randoms1[:10]}, length {len(self.randoms1[self.z_desi_col])}')
         logger.info(f'z mask data desi {self.zmask_data1[:10]}, length {len(self.randoms1[self.z_desi_col])}') 
@@ -468,9 +459,7 @@ class HSCAutoCorrelation():
         self.logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds')
 
         # Setup redshift masks
-        self.zmask_data1 = np.digitize(self.data1[self.z_hsc_col], bin_redshift1)
-        # no mask on redshift for HSC randoms
-
+        self.zmask_data1 = np.digitize(self.data1[self.z_hsc_col], bin_redshift1, right=True)
         logger.info(f'z mask data desi {self.zmask_data1[:10]}, length {len(self.zmask_data1)}') 
 
     def run(self, bin_index1, moc_index):
@@ -504,7 +493,7 @@ class HSCAutoCorrelation():
         )
         outfile = Path(
             self.output_dir, 
-            f'{self.tgt}__b1x{bin_index1}_moc{moc_index}.npy'
+            f'HSC__{bin_index1}_moc{moc_index}.npy'
             )
         tpcf.save(outfile)
 
@@ -541,7 +530,16 @@ def process_random_file(f, ra_col, dec_col, w_col, z_col, moc, sample_rate):
         print(f"Error processing file {f}: {e}")
         return None
 
-def sample_randoms_on_moc(random_files, ra_col, dec_col, w_col=None, z_col=None, moc=None, sample_rate=1, num_processes=None):
+def sample_randoms_on_moc(
+        random_files, 
+        ra_col, 
+        dec_col, 
+        w_col=None, 
+        z_col=None, 
+        moc=None, 
+        sample_rate=1, 
+        num_processes=None
+        ):
     """
     Multiprocessed random sampling with optional MOC filtering
     """
@@ -576,15 +574,14 @@ def sample_file_on_moc(file, ra_col, dec_col, weight_col, z_col, moc=None):
 
     with fio.FITS(str(file)) as f:
         tbl = f[1]
+        data = tbl.read(columns=[ra_col, dec_col, weight_col, z_col])
         if moc is not None:
-            data = tbl.read(columns=[ra_col, dec_col])
             coords = SkyCoord(data[ra_col] * u.deg, data[dec_col] * u.deg, frame='icrs')
             mask = moc.contains_skycoords(coords)
-            rows = np.flatnonzero(mask)
-        else:
-            rows = None
-
-        data = tbl.read(columns=[ra_col, dec_col, weight_col, z_col], rows=rows)
+            del coords
+            data = data[np.flatnonzero(mask)]
+            print(f"Filtered {np.sum(mask)} rows in {file} using MOC")
+            del mask
 
     dtype = [(ra_col, 'f8'), (dec_col, 'f8'), (weight_col, 'f8'), (z_col, 'f8')]
     return np.array(data, dtype=dtype)

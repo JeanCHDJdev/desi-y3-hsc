@@ -68,6 +68,14 @@ def parse_args():
         help='Number of threads to use for cross-correlation. '
         'Default is all-2.'
         )
+    parser.add_argument(
+        '-p',
+        '--patches', 
+        type=int, 
+        nargs='+',
+        default=None,
+        help='Patches of the sky to cross-correlate. '
+        )
     
     return parser.parse_args()
 
@@ -80,9 +88,21 @@ def main():
     sample_rate_hsc = args.sample_rate_hsc
     nproc = args.nproc
     log = args.log
+    patches = args.patches
+    if patches is not None:
+        patches = np.array([int(p) for p in patches])
+        assert len(patches) > 0, 'Patches should be a list of integers'
+        assert np.all(
+            (0 < patches) & (patches < len(cu.moc_list))
+            ), (
+                f'Patches should be less than {len(cu.moc_list)} '
+                'and greater than 0'
+                )
+    else:
+        patches = np.arange(len(cu.moc_list))
 
     if log is None:
-        logger = cu.setup_crosscorr_logging()
+        logger = cu.setup_crosscorr_logging(log_file=str(Path(output_dir, 'autolog')))
     else:
         logger = cu.setup_crosscorr_logging(log_file=log)
     setup_logging()
@@ -132,9 +152,8 @@ def main():
 
     for m in range(len(moc_list)):
         mocf = moc_list[m]
-        logger.info(f'Processing {mocf} ...\n')
         moc = MOC.from_fits(mocf)
-
+        logger.info(f'MOC {m} : {mocf} ...\n')
 
         for t in tgts:
             bin1 = bins_redshift[tgt]
@@ -151,7 +170,6 @@ def main():
                 nproc=nproc, 
                 sample_rate_desi=sample_rate_desi,
                 sample_rate_hsc=sample_rate_hsc, 
-                cap=None,
                 logger=logger,
             )
             logger.memory_usage()

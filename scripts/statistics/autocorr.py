@@ -67,6 +67,14 @@ def parse_args():
         choices=['desi', 'hsc'],
         help='Mode of auto-correlation. '
         )
+    parser.add_argument(
+        '-p',
+        '--patches', 
+        type=int, 
+        nargs='+',
+        default=None,
+        help='Patches of the sky to auto-correlate. '
+        )
     
     return parser.parse_args()
 
@@ -147,7 +155,7 @@ def main():
                     sample_rate_hsc=sample_rate, 
                     logger=logger,
                 )
-            else:
+            elif mode == 'desi':
                 cc = cu.DESIAutoCorrelation(
                     t, 
                     moc, 
@@ -158,12 +166,18 @@ def main():
                     sample_rate_desi=sample_rate, 
                     logger=logger,
                 )
+            else:
+                raise ValueError(f'Unknown mode {mode}')
+            
             logger.memory_usage()
 
             for b in range(1, len(bin1)):
                 tbc = time.time()
                 cc.run(b, m)
-                txt = f'Finished {t}, {b} (desi) : {bin1[b]} in {time.time()-tbc:.2f}s\n'
+                txt = (
+                    f'Finished {t if t is not None else mode},' 
+                    f' {b} (desi) : {bin1[b]} in {time.time()-tbc:.2f}s\n'
+                )
                 logger.info(txt)
 
 if __name__ == '__main__':

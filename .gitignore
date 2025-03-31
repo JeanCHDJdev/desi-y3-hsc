@@ -1,6 +1,10 @@
 # data 
 data/**
 
+#runs
+scripts/statistics/crosscorr/**
+scripts/statistics/autos/**
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
