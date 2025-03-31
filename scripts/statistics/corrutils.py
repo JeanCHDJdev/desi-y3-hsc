@@ -141,7 +141,7 @@ class CrossCorrelation():
             z_col=self.z_desi_col,
             moc=self.moc,
             )
-        self.randoms1 = self.randoms1[::self.sample_rate_desi]
+        #self.randoms1 = self.randoms1[::self.sample_rate_desi]
         
         logger.info(f'Collated DESI randoms in {time.time()-trd:.2f} seconds')
         trh = time.time()
@@ -153,7 +153,7 @@ class CrossCorrelation():
             z_col=None,
             moc=self.moc,
             )
-        self.randoms2 = self.randoms2[::self.sample_rate_hsc]
+        #self.randoms2 = self.randoms2[::self.sample_rate_hsc]
         logger.info(f'Collated HSC randoms in {time.time()-trh:.2f} seconds')
 
         tid = time.time()
@@ -302,8 +302,8 @@ class DESIAutoCorrelation():
             w_col=self.w_desi_col,
             z_col=self.z_desi_col,
             moc=self.moc,
-            sample_rate=self.sample_rate_desi
             )
+        self.randoms1 = self.randoms1[::self.sample_rate_desi]
         logger.info(f'Collated DESI randoms in {time.time()-trd:.2f} seconds')
 
         tid = time.time()
@@ -437,10 +437,8 @@ class HSCAutoCorrelation():
             w_col=None,
             z_col=None,
             moc=self.moc,
-            sample_rate=1
             )
-        ## here we can actually subsample the randoms
-        self.randoms1 = self.randoms1[::self.sample_rate_hsc] #[::self.sample_rate_hsc]
+        self.randoms1 = self.randoms1[::self.sample_rate_hsc]
         logger.info(
             f'Collated HSC randoms in {time.time()-trd:.2f} seconds'
             f' with sample rate {self.sample_rate_hsc}'
@@ -497,7 +495,7 @@ class HSCAutoCorrelation():
             )
         tpcf.save(outfile)
 
-def process_random_file(f, ra_col, dec_col, w_col, z_col, moc, sample_rate):
+def process_random_file(f, ra_col, dec_col, w_col, z_col, moc):
     if z_col is None or w_col is None:
         cols = [ra_col, dec_col]
     else:
@@ -506,16 +504,12 @@ def process_random_file(f, ra_col, dec_col, w_col, z_col, moc, sample_rate):
     try:
         with fio.FITS(str(f)) as rand:
             tbl = rand[1]
-            print(f"Reading {f} with sample rate {sample_rate}")
 
             nrows = tbl.get_nrows()
-            data = tbl.read(
-                columns=cols, 
-                rows=np.arange(0, nrows, sample_rate) if sample_rate > 1 else None
-            )
+            data = tbl.read(columns=cols)
 
             if moc is not None:
-                print(f"Filtering {len(data)} randoms in {f} using MOC")
+                print(f"Filtering {nrows} randoms in {f} using MOC")
                 tc = time.time()
                 coords = SkyCoord(data[ra_col]*u.deg, data[dec_col]*u.deg, frame='icrs')
                 mask = moc.contains_skycoords(coords)
@@ -537,7 +531,6 @@ def sample_randoms_on_moc(
         w_col=None, 
         z_col=None, 
         moc=None, 
-        sample_rate=1, 
         num_processes=None
         ):
     """
@@ -551,7 +544,7 @@ def sample_randoms_on_moc(
     tp = time.time()
     with mp.Pool(processes=num_processes) as pool:
         results = pool.starmap(process_random_file, [
-            (f, ra_col, dec_col, w_col, z_col, moc, sample_rate) 
+            (f, ra_col, dec_col, w_col, z_col, moc) 
             for f in random_files
         ])
     print(f"Processed {len(random_files)} random files in {time.time()-tp:.2f} seconds")
@@ -563,12 +556,8 @@ def sample_randoms_on_moc(
     
     size = sum(len(r) for r in randoms)
     print(f"Collated {size} randoms (from {len(random_files)} files)")
-    if z_col is None:
-        dtype = [(ra_col, 'f8'), (dec_col, 'f8')]
-    else:
-        dtype = [(ra_col, 'f8'), (dec_col, 'f8'), (w_col, 'f8'), (z_col, 'f8')]
     
-    return np.concatenate(randoms).astype(dtype)
+    return np.concatenate(randoms)
 
 def sample_file_on_moc(file, ra_col, dec_col, weight_col, z_col, moc=None):
 
@@ -576,15 +565,15 @@ def sample_file_on_moc(file, ra_col, dec_col, weight_col, z_col, moc=None):
         tbl = f[1]
         data = tbl.read(columns=[ra_col, dec_col, weight_col, z_col])
         if moc is not None:
+            print(f"Filtering {tbl.get_nrows()} {len(data)} rows in {Path(file).stem} using MOC")
             coords = SkyCoord(data[ra_col] * u.deg, data[dec_col] * u.deg, frame='icrs')
             mask = moc.contains_skycoords(coords)
             del coords
-            data = data[np.flatnonzero(mask)]
-            print(f"Filtered {np.sum(mask)} rows in {file} using MOC")
+            data = data[mask]
+            print(f"Filtered {np.sum(mask)} rows in {Path(file).stem} using MOC")
             del mask
 
-    dtype = [(ra_col, 'f8'), (dec_col, 'f8'), (weight_col, 'f8'), (z_col, 'f8')]
-    return np.array(data, dtype=dtype)
+    return np.array(data)
 
 
 def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):

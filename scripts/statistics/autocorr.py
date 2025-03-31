@@ -25,9 +25,9 @@ def parse_args():
         '-o',
         '--output_dir', 
         type=str, 
-        default='out/',
+        default='autos/new/',
         help='Path to the output file (storing the auto-correlation). '
-        'Default is out/'
+        'Default is autos/new/'
         )
     parser.add_argument(
         '-t',
@@ -134,7 +134,7 @@ def main():
 
     moc_list = cu.moc_list
 
-    for m in range(1, len(moc_list)):
+    for m in range(0, len(moc_list)-3):
         mocf = moc_list[m]
         logger.info(f'Processing {mocf} ...\n')
         moc = MOC.from_fits(mocf)
@@ -176,7 +176,7 @@ def main():
                 cc.run(b, m)
                 txt = (
                     f'Finished {t if t is not None else mode},' 
-                    f' {b} (desi) : {bin1[b]} in {time.time()-tbc:.2f}s\n'
+                    f' {b} (desi) : {bin1[b-1]}-{bin1[b]} in {time.time()-tbc:.2f}s\n'
                 )
                 logger.info(txt)
 

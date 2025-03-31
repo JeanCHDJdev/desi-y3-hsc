@@ -26,9 +26,9 @@ def parse_args():
         '-o',
         '--output_dir', 
         type=str, 
-        default='out/',
+        default='crosscorr/new/',
         help='Path to the output file (storing the cross-correlation). '
-        'Default is out/'
+        'Default is crosscorr/new/'
         )
     parser.add_argument(
         '-t',
@@ -66,7 +66,7 @@ def parse_args():
         '--nproc', 
         type=int, 
         help='Number of threads to use for cross-correlation. '
-        'Default is all-2.'
+        'Default is `os.cpu_count()-2`.'
         )
     parser.add_argument(
         '-p',
@@ -176,11 +176,11 @@ def main():
 
             logger.info(f'Running for {tgt}, bin1 {bin1}, bin2 {bin2}, moc {m}\n' + "=" * 80)
 
-            for b in range(1, len(bin1)):
+            for b in range(2, len(bin1)):
                 for c in range(1, len(bin2)):
                     tbc = time.time()
                     cc.run(b, c, m)
-                    txt = f'Finished {t}, {b} (desi) : {bin1[b]}, {c} (hsc) : {bin2[c]} in {time.time()-tbc:.2f}s\n'
+                    txt = f'Finished {t}, {b} (desi) : {bin1[b-1]}-{bin1[b]}, {c} (hsc) : {bin2[c-1]}-{bin2[c]} in {time.time()-tbc:.2f}s\n'
                     logger.info(txt)
 
 if __name__ == '__main__':
