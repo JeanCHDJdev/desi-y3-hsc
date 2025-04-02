@@ -110,22 +110,19 @@ def main():
             tgts = [tgt]
     else:
         tgts = avb_tgt
-    
 
     print('=' * 80)
-    np.savetxt(Path(output_dir, 'bins', 'bin_distances.txt'), cu.bin_distances)
-    np.savetxt(Path(output_dir, 'bins', 'bins_bgs.txt'), cu.bins_bgs)
-    np.savetxt(Path(output_dir, 'bins', 'bins_lrg.txt'), cu.bins_lrg)
-    np.savetxt(Path(output_dir, 'bins', 'bins_elg.txt'), cu.bins_elg)
-    np.savetxt(Path(output_dir, 'bins', 'bins_qso.txt'), cu.bins_qso)
-    np.savetxt(Path(output_dir, 'bins', 'bins_hsc.txt'), cu.bins_hsc)
 
     bins_redshift = {
         'BGS_ANY': cu.bins_bgs,
         'LRG': cu.bins_lrg,
         'ELGnotqso': cu.bins_elg,
         'QSO': cu.bins_qso,
+        'HSC': cu.bins_hsc,
+        'distances': cu.bin_distances,
     }
+    for k, v in bins_redshift.items():
+        np.savetxt(Path(output_dir, 'bins', f'bins_{k}.txt'), v)
 
     logger.info(f'Number of threads: {nproc}\n')
     logger.info(f'Output directory: {output_dir}\n')
@@ -141,7 +138,7 @@ def main():
 
         for t in tgts:
             if mode == 'desi':
-                bin1 = bins_redshift[tgt]
+                bin1 = bins_redshift[t]
             else:
                 bin1 = cu.bins_hsc
             logger.memory_usage()
@@ -181,7 +178,7 @@ def main():
                 logger.info(txt)
 
 if __name__ == '__main__':
-    print('Starting cross-correlation script ...')
+    print('Starting auto-correlation script ...')
     ti = time.time()
     main()
-    print(f'Finished cross-correlation script in {time.time()-ti:.2f}s')
+    print(f'Finished auto-correlation script in {time.time()-ti:.2f}s')

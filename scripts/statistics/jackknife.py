@@ -157,7 +157,7 @@ def main():
             bin2 = bins_redshift['HSC']
 
             logger.memory_usage()
-            cc = cu.CrossCorrelation(
+            cc = cu.JackknifeCrossCorrelation(
                 t, 
                 moc, 
                 output_dir,

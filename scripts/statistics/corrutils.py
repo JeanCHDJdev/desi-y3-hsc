@@ -15,7 +15,7 @@ from pathlib import Path
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 
-from pycorr import TwoPointCorrelationFunction
+from pycorr import TwoPointCorrelationFunction, KMeansSubsampler
 
 ## MOC list 
 moc_list = [
@@ -27,48 +27,16 @@ moc_list = [
         ]
 
 ## Defining fiducial bins here
-bin_distances = np.linspace(0.01, 3, 31) #np.logspace(np.log10(0.001), np.log10(3), 71)
+bin_distances = np.linspace(0.01, 2, 41) #np.logspace(np.log10(0.001), np.log10(3), 71)
 
-bins_bgs = np.arange(0, 0.6, 0.2) # 0 < z < 0.6
-bins_lrg = np.arange(0.4, 1.2, 0.2) # 0.4 < z < 1
-bins_elg = np.arange(0.8, 1.7, 0.2) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
-bins_qso = np.arange(0.8, 3.4, 0.2) # 0.9 < z < 2.1
+bins_bgs = np.arange(0, 0.6, 0.1) # 0 < z < 0.6
+bins_lrg = np.arange(0.4, 1.2, 0.1) # 0.4 < z < 1
+bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
+bins_qso = np.arange(0.8, 3.4, 0.1) # 0.9 < z < 2.1
 
 bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 
 
 class CrossCorrelation():
-    def fetch_desi_files(self, randoms=False):
-        try:
-            root = Path(
-                '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/nonKP'
-                )
-            path = f'{self.tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
-            files = list(root.glob(path))
-            if not files:
-                raise FileNotFoundError(f"No files found for path: {path}")
-            return files
-        except PermissionError:
-            logging.error("Permission denied accessing catalog files")
-            raise
-    
-    def fetch_hsc_files(self, randoms=False):
-        try:
-            if randoms:
-                root = Path(
-                    '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/rand'
-                    )
-                return list(root.glob('hscran*.fits'))
-            else:
-                return [Path(
-                    '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits'
-                    )]
-        except PermissionError:
-            logging.error(f"Permission denied accessing HSC files and randoms = {randoms}")
-            raise
-        except FileNotFoundError:
-            logging.error(f"HSC catalog file not found and randoms = {randoms}") 
-            raise
-
     def __init__(
             self, 
             tgt : str, 
@@ -116,10 +84,10 @@ class CrossCorrelation():
         fs['outdir'] = Path(self.output_dir)
 
         # Grabbing the catalogs on initialisation
-        fs['catalog1'] = self.fetch_desi_files(randoms=False)
-        fs['randoms1'] = self.fetch_desi_files(randoms=True)
-        fs['catalog2'] = self.fetch_hsc_files(randoms=False)
-        fs['randoms2'] = self.fetch_hsc_files(randoms=True)
+        fs['catalog1'] = fetch_desi_files(tgt, randoms=False)
+        fs['randoms1'] = fetch_desi_files(tgt, randoms=True)
+        fs['catalog2'] = fetch_hsc_files(randoms=False)
+        fs['randoms2'] = fetch_hsc_files(randoms=True)
         
         ## Loading the MOC footprint
         self.moc = moc
@@ -228,21 +196,209 @@ class CrossCorrelation():
             )
         tpcf.save(outfile)
 
-class DESIAutoCorrelation():
-    def fetch_desi_files(self, randoms=False):
-        try:
-            root = Path(
-                '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/nonKP'
-                )
-            path = f'{self.tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
-            files = list(root.glob(path))
-            if not files:
-                raise FileNotFoundError(f"No files found for path: {path}")
-            return files
-        except PermissionError:
-            logging.error("Permission denied accessing catalog files")
-            raise
+class JackknifeCrossCorrelation():
+    def __init__(
+            self, 
+            tgt : str, 
+            moc : MOC, 
+            output_dir :str | Path, 
+            bin_distances : np.ndarray,
+            bin_redshift1 : np.ndarray,
+            bin_redshift2 : np.ndarray,
+            nproc:int=None, 
+            sample_rate_desi:int=1, 
+            sample_rate_hsc:int=1,
+            logger:logging.Logger=None
+            ):
 
+        assert logger is not None, 'Logger not provided'
+        self.logger = logger
+        
+        self.ra_hsc_col = 'RA'
+        self.dec_hsc_col = 'Dec'
+        self.ra_hsc_randoms_col = 'ra'
+        self.dec_hsc_randoms_col = 'dec'
+        self.w_hsc_col = 'weight'
+        self.z_hsc_col = 'dnnz_photoz_best'
+
+        self.ra_desi_col = 'RA'
+        self.dec_desi_col = 'DEC'
+        self.w_desi_col = 'WEIGHT'
+        self.z_desi_col = 'Z'
+
+        avb_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
+        assert tgt in avb_tgt, f'{tgt} not in {avb_tgt}'
+        self.tgt = tgt
+
+        if nproc is None: 
+            nproc = max(os.cpu_count()-2, 1)
+        self.nproc = nproc
+
+        self.bin_distances = bin_distances
+
+        ## Filesystem setup
+        fs = {}
+        self.output_dir = Path(output_dir, tgt)
+        if not self.output_dir.exists():
+            self.output_dir.mkdir(parents=True)
+        fs['outdir'] = Path(self.output_dir)
+
+        if not Path(self.output_dir, 'cov').exists():
+            Path(self.output_dir, 'cov').mkdir(parents=True)
+
+        # Grabbing the catalogs on initialisation
+        fs['catalog1'] = fetch_desi_files(tgt, randoms=False)
+        fs['randoms1'] = fetch_desi_files(tgt, randoms=True)
+        fs['catalog2'] = fetch_hsc_files(randoms=False)
+        fs['randoms2'] = fetch_hsc_files(randoms=True)
+        
+        ## Loading the MOC footprint
+        self.moc = moc
+
+        # Keep the filesystem
+        self.fs = fs 
+
+        # Sample rate for randoms
+        self.sample_rate_desi = sample_rate_desi
+        self.sample_rate_hsc = sample_rate_hsc
+
+        trd = time.time()
+        logger.info(f'Collating randoms ...')
+        self.randoms1 = sample_randoms_on_moc(
+            list(self.fs['randoms1'][:5]),
+            ra_col=self.ra_desi_col,
+            dec_col=self.dec_desi_col,
+            w_col=self.w_desi_col,
+            z_col=self.z_desi_col,
+            moc=self.moc,
+            )
+        
+        logger.info(f'Collated DESI randoms in {time.time()-trd:.2f} seconds')
+        trh = time.time()
+        self.randoms2 = sample_randoms_on_moc(
+            list(self.fs['randoms2']), 
+            ra_col='ra',
+            dec_col='dec',
+            w_col=None,
+            z_col=None,
+            moc=self.moc,
+            )
+        #self.randoms2 = self.randoms2[::self.sample_rate_hsc]
+        logger.info(f'Collated HSC randoms in {time.time()-trh:.2f} seconds')
+
+        tid = time.time()
+        self.data1 = sample_file_on_moc(
+            self.fs['catalog1'][0], 
+            ra_col=self.ra_desi_col, 
+            dec_col=self.dec_desi_col, 
+            weight_col=self.w_desi_col, 
+            z_col=self.z_desi_col,
+            moc=self.moc
+            )
+        self.logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds')
+        tih = time.time()
+        self.data2 = sample_file_on_moc(
+            file=self.fs['catalog2'][0], 
+            ra_col=self.ra_hsc_col, 
+            dec_col=self.dec_hsc_col, 
+            weight_col=self.w_hsc_col,
+            z_col=self.z_hsc_col, 
+            moc=self.moc
+            )
+        self.logger.info(f'Read HSC data in {time.time()-tih:.2f} seconds')
+
+        # Setup redshift masks
+        self.zmask_data1 = np.digitize(self.data1[self.z_desi_col], bin_redshift1, right=True)
+        self.zmask_data2 = np.digitize(self.data2[self.z_hsc_col], bin_redshift2, right=True)
+        self.zmask_randoms1 = np.digitize(self.randoms1[self.z_desi_col], bin_redshift1, right=True)
+
+        ## rp2 needs no subsampling on redshift
+        rp2 = [
+            self.randoms2[self.ra_hsc_randoms_col],
+            self.randoms2[self.dec_hsc_randoms_col]
+            ]
+        logger.info(f'Randoms2 shape {self.randoms2[self.ra_hsc_randoms_col].shape}')
+        logger.info('Subsampling randoms2 ...')
+        subsampler = KMeansSubsampler(
+            mode='angular', 
+            # The largest, most complete dataset we have is rp2
+            # and no redshift sampling is needed for jackknife
+            positions=rp2, 
+            nsamples=20, # default was 128
+            nside=128,  # default seems to be 512 lets go for lower for now as a test
+            random_state=42, 
+            position_type='rd'
+            )
+        labels = subsampler.label(rp2)
+        self.subsampler = subsampler
+        subsampler.log_info(f'Labels from {labels.min()} to {labels.max()}.')
+
+    def run(self, bin_index1, bin_index2, moc_index):
+
+        # Setup redshift masking
+        z_mask_d1 = (self.zmask_data1 == bin_index1)
+        z_mask_d2 = (self.zmask_data2 == bin_index2)
+        # DESI randoms need to be redshift masked 
+        z_mask_r1 = (self.zmask_randoms1 == bin_index1)
+
+        self.logger.info(f'N data1: {np.sum(z_mask_d1)}' + f', N randoms1: {np.sum(z_mask_r1)}')
+        self.logger.info(f'N data2: {np.sum(z_mask_d2)}' + f', N randoms2: {len(self.randoms2)}')
+
+        dp1 = [
+            self.data1[self.ra_desi_col][z_mask_d1], 
+            self.data1[self.dec_desi_col][z_mask_d1]
+            ]
+        dp2 = [
+            self.data2[self.ra_hsc_col][z_mask_d2], 
+            self.data2[self.dec_hsc_col][z_mask_d2]
+            ]
+        rp1 = [
+            self.randoms1[self.ra_desi_col][z_mask_r1],
+            self.randoms1[self.dec_desi_col][z_mask_r1]
+            ]
+        rp2 = [
+            self.randoms2[self.ra_hsc_randoms_col],
+            self.randoms2[self.dec_hsc_randoms_col]
+            ]
+        dw1 = self.data1[self.w_desi_col][z_mask_d1]
+        dw2 = self.data2[self.w_hsc_col][z_mask_d2]
+        rw1 = self.randoms1[self.w_desi_col][z_mask_r1]
+
+        tpcf = TwoPointCorrelationFunction(
+            edges=self.bin_distances,
+
+            data_positions1=dp1,
+            data_positions2=dp2,
+
+            randoms_positions1=rp1,
+            randoms_positions2=rp2,
+
+            data_weights1=dw1,
+            data_weights2=dw2,
+
+            randoms_weights1=rw1,
+            randoms_weights2=None,
+
+            data_samples1=self.subsampler.label(dp1),
+            data_samples2=self.subsampler.label(dp2),
+
+            randoms_samples1=self.subsampler.label(rp1),
+            randoms_samples2=self.subsampler.label(rp2),
+
+            nthreads=self.nproc,
+            mode='theta',
+            position_type='rd', # 'rd' for RA/Dec
+            engine='corrfunc',
+            estimator='landyszalay',
+        )
+        outfile = Path(
+            self.output_dir, 
+            'cov',
+            f'{self.tgt}__b1x{bin_index1}_b2x{bin_index2}_moc{moc_index}.npy'
+            )
+        tpcf.save(outfile)
+
+class DESIAutoCorrelation():
     def __init__(
             self, 
             tgt : str, 
@@ -281,8 +437,8 @@ class DESIAutoCorrelation():
         fs['outdir'] = Path(self.output_dir)
 
         # Grabbing the catalogs on initialisation
-        fs['catalog1'] = self.fetch_desi_files(randoms=False)
-        fs['randoms1'] = self.fetch_desi_files(randoms=True)
+        fs['catalog1'] = fetch_desi_files(tgt, randoms=False)
+        fs['randoms1'] = fetch_desi_files(tgt, randoms=True)
         
         ## Loading the MOC footprint
         self.moc = moc
@@ -363,24 +519,6 @@ class DESIAutoCorrelation():
         tpcf.save(outfile)
 
 class HSCAutoCorrelation():
-    def fetch_hsc_files(self, randoms=False):
-        try:
-            if randoms:
-                root = Path(
-                    '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/rand'
-                    )
-                return list(root.glob('hscran*.fits'))
-            else:
-                return [Path(
-                    '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits'
-                    )]
-        except PermissionError:
-            logging.error(f"Permission denied accessing HSC files and randoms = {randoms}")
-            raise
-        except FileNotFoundError:
-            logging.error(f"HSC catalog file not found and randoms = {randoms}") 
-            raise
-
     def __init__(
             self, 
             moc : MOC, 
@@ -416,8 +554,8 @@ class HSCAutoCorrelation():
         fs['outdir'] = Path(self.output_dir)
 
         # Grabbing the catalogs on initialisation
-        fs['catalog1'] = self.fetch_hsc_files(randoms=False)
-        fs['randoms1'] = self.fetch_hsc_files(randoms=True)
+        fs['catalog1'] = fetch_hsc_files(randoms=False)
+        fs['randoms1'] = fetch_hsc_files(randoms=True)
         
         ## Loading the MOC footprint
         self.moc = moc
@@ -495,6 +633,7 @@ class HSCAutoCorrelation():
             )
         tpcf.save(outfile)
 
+## Generic methods for each class
 def process_random_file(f, ra_col, dec_col, w_col, z_col, moc):
     if z_col is None or w_col is None:
         cols = [ra_col, dec_col]
@@ -623,3 +762,62 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
     logger.memory_usage = log_memory_usage
 
     return logger
+
+def fetch_desi_files(tgt, randoms=False):
+    try:
+        root = Path(
+            '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/nonKP'
+            )
+        path = f'{tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
+        files = list(root.glob(path))
+        if not files:
+            raise FileNotFoundError(f"No files found for path: {path}")
+        return files
+    except PermissionError:
+        raise
+
+def fetch_hsc_files(randoms=False):
+        try:
+            if randoms:
+                root = Path(
+                    '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/rand'
+                    )
+                return list(root.glob('hscran*.fits'))
+            else:
+                return [Path(
+                    '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits'
+                    )]
+        except PermissionError:
+            logging.error(f"Permission denied accessing HSC files and randoms = {randoms}")
+            raise
+        except FileNotFoundError:
+            logging.error(f"HSC catalog file not found and randoms = {randoms}") 
+            raise
+
+class CorrFileReader():
+    def __init__(self, ROOT):
+        self.ROOT = Path(ROOT)
+        assert self.ROOT.exists(), f"Path {self.ROOT} does not exist"
+
+    def get_file(self, b1, b2, moc, tgt):
+        """
+        Get the file name for given redshift bins and MOC.
+        """
+        DIR = self.ROOT / tgt 
+        return f'{DIR}/{tgt}__b1x{b1}_b2x{b2}_moc{moc}.npy'
+
+    def get_bins(self, name):
+        return np.loadtxt(f'{self.ROOT}/bins/bins_{name}.txt', dtype=float)
+    
+    def get_cov_result(self, b1, b2, moc, tgt):
+        """
+        Get the covariance result for given redshift bins and MOC.
+        """
+        covdir = Path(self.ROOT, tgt, 'cov')
+        if not covdir.exists():
+            raise FileNotFoundError(f"Covariance directory {covdir} does not exist")
+        else:
+            files = covdir.glob(f'*.npy')
+            return list(files)
+            
+        
