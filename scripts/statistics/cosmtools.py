@@ -3,7 +3,7 @@ from astropy import units as u
 from astropy.cosmology import FlatLambdaCDM
 
 # Define the cosmology model
-cosmo = FlatLambdaCDM(H0=70, Om0=0.3)
+cosmo = FlatLambdaCDM(H0=67.8, Om0=0.308)
 
 def arcsec2hMpc(theta, z):
     """

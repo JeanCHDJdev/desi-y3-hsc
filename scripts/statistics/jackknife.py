@@ -109,7 +109,13 @@ def main():
 
     if nproc is None:
         nproc = max(os.cpu_count()-2, 1)
-
+    print('Running jackknife with the following settings:')
+    print(f'Output directory: {output_dir}')
+    print(f'Sample rate on DESI randoms: {sample_rate_desi}')
+    print(f'Sample rate on HSC randoms: {sample_rate_hsc}')
+    print(f'Number of threads: {nproc}')
+    print(f'Log file: {log}')
+    
     # for now, we will only consider the following targets, could do more later
     avb_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
     if tgt:
@@ -146,6 +152,9 @@ def main():
     logger.info(f'Fiducial bin distances: {cu.bin_distances}\n')
 
     moc_list = cu.moc_list
+    if patches is not None:
+        moc_list = [moc_list[p] for p in patches]
+        logger.info(f'Using patches {patches} ... {[Path(moc_list[p]).stem for p in patches]}\n')
 
     for m in range(len(moc_list)):
         mocf = moc_list[m]

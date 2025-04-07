@@ -109,7 +109,7 @@ class CrossCorrelation():
             z_col=self.z_desi_col,
             moc=self.moc,
             )
-        #self.randoms1 = self.randoms1[::self.sample_rate_desi]
+        self.randoms1 = self.randoms1[::self.sample_rate_desi]
         
         logger.info(f'Collated DESI randoms in {time.time()-trd:.2f} seconds')
         trh = time.time()
@@ -121,7 +121,7 @@ class CrossCorrelation():
             z_col=None,
             moc=self.moc,
             )
-        #self.randoms2 = self.randoms2[::self.sample_rate_hsc]
+        self.randoms2 = self.randoms2[::self.sample_rate_hsc]
         logger.info(f'Collated HSC randoms in {time.time()-trh:.2f} seconds')
 
         tid = time.time()
@@ -152,6 +152,14 @@ class CrossCorrelation():
 
     def run(self, bin_index1, bin_index2, moc_index):
 
+        outfile = Path(
+            self.output_dir, 
+            f'{self.tgt}__b1x{bin_index1}_b2x{bin_index2}_moc{moc_index}.npy'
+            )
+        if outfile.exists():
+            self.logger.info(f'File {outfile} already exists, skipping')
+            return
+        
         # Setup redshift masking
         z_mask_d1 = (self.zmask_data1 == bin_index1)
         z_mask_d2 = (self.zmask_data2 == bin_index2)
@@ -190,10 +198,6 @@ class CrossCorrelation():
             engine='corrfunc',
             estimator='landyszalay',
         )
-        outfile = Path(
-            self.output_dir, 
-            f'{self.tgt}__b1x{bin_index1}_b2x{bin_index2}_moc{moc_index}.npy'
-            )
         tpcf.save(outfile)
 
 class JackknifeCrossCorrelation():
@@ -272,8 +276,11 @@ class JackknifeCrossCorrelation():
             z_col=self.z_desi_col,
             moc=self.moc,
             )
-        
-        logger.info(f'Collated DESI randoms in {time.time()-trd:.2f} seconds')
+        self.randoms1 = self.randoms1[::self.sample_rate_desi]
+        logger.info(
+            f'Collated {len(self.randoms1)} DESI randoms in {time.time()-trd:.2f} seconds'
+            f' with sample rate {self.sample_rate_desi}'
+            )
         trh = time.time()
         self.randoms2 = sample_randoms_on_moc(
             list(self.fs['randoms2']), 
@@ -283,8 +290,10 @@ class JackknifeCrossCorrelation():
             z_col=None,
             moc=self.moc,
             )
-        #self.randoms2 = self.randoms2[::self.sample_rate_hsc]
-        logger.info(f'Collated HSC randoms in {time.time()-trh:.2f} seconds')
+        self.randoms2 = self.randoms2[::self.sample_rate_hsc]
+        logger.info(
+            f'Collated {len(self.randoms2)} HSC randoms in {time.time()-trh:.2f} seconds'
+            )
 
         tid = time.time()
         self.data1 = sample_file_on_moc(
@@ -324,8 +333,8 @@ class JackknifeCrossCorrelation():
             # The largest, most complete dataset we have is rp2
             # and no redshift sampling is needed for jackknife
             positions=rp2, 
-            nsamples=20, # default was 128
-            nside=128,  # default seems to be 512 lets go for lower for now as a test
+            nsamples=64, # default was 128
+            nside=256,  # default seems to be 512 lets go for lower for now as a test
             random_state=42, 
             position_type='rd'
             )
@@ -334,7 +343,15 @@ class JackknifeCrossCorrelation():
         subsampler.log_info(f'Labels from {labels.min()} to {labels.max()}.')
 
     def run(self, bin_index1, bin_index2, moc_index):
-
+        
+        outfile = Path(
+            self.output_dir, 
+            'cov',
+            f'{self.tgt}__b1x{bin_index1}_b2x{bin_index2}_moc{moc_index}.npy'
+            )
+        if outfile.exists():
+            self.logger.info(f'File {outfile} already exists, skipping')
+            return
         # Setup redshift masking
         z_mask_d1 = (self.zmask_data1 == bin_index1)
         z_mask_d2 = (self.zmask_data2 == bin_index2)
@@ -362,7 +379,14 @@ class JackknifeCrossCorrelation():
             ]
         dw1 = self.data1[self.w_desi_col][z_mask_d1]
         dw2 = self.data2[self.w_hsc_col][z_mask_d2]
+
         rw1 = self.randoms1[self.w_desi_col][z_mask_r1]
+        rw2 = None
+
+        ds1 = self.subsampler.label(dp1)
+        ds2 = self.subsampler.label(dp2)
+        rs1 = self.subsampler.label(rp1)
+        rs2 = self.subsampler.label(rp2)
 
         tpcf = TwoPointCorrelationFunction(
             edges=self.bin_distances,
@@ -377,13 +401,13 @@ class JackknifeCrossCorrelation():
             data_weights2=dw2,
 
             randoms_weights1=rw1,
-            randoms_weights2=None,
+            randoms_weights2=rw2,
 
-            data_samples1=self.subsampler.label(dp1),
-            data_samples2=self.subsampler.label(dp2),
+            data_samples1=ds1,
+            data_samples2=ds2,
 
-            randoms_samples1=self.subsampler.label(rp1),
-            randoms_samples2=self.subsampler.label(rp2),
+            randoms_samples1=rs1,
+            randoms_samples2=rs2,
 
             nthreads=self.nproc,
             mode='theta',
@@ -391,11 +415,6 @@ class JackknifeCrossCorrelation():
             engine='corrfunc',
             estimator='landyszalay',
         )
-        outfile = Path(
-            self.output_dir, 
-            'cov',
-            f'{self.tgt}__b1x{bin_index1}_b2x{bin_index2}_moc{moc_index}.npy'
-            )
         tpcf.save(outfile)
 
 class DESIAutoCorrelation():
@@ -774,25 +793,28 @@ def fetch_desi_files(tgt, randoms=False):
             raise FileNotFoundError(f"No files found for path: {path}")
         return files
     except PermissionError:
+        logging.error(f"Permission denied accessing DESI files and randoms = {randoms}")
         raise
 
-def fetch_hsc_files(randoms=False):
-        try:
-            if randoms:
-                root = Path(
-                    '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/rand'
-                    )
-                return list(root.glob('hscran*.fits'))
-            else:
-                return [Path(
-                    '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits'
-                    )]
-        except PermissionError:
-            logging.error(f"Permission denied accessing HSC files and randoms = {randoms}")
-            raise
-        except FileNotFoundError:
-            logging.error(f"HSC catalog file not found and randoms = {randoms}") 
-            raise
+def fetch_hsc_files(randoms=False, include_dud=False):
+    try:
+        if randoms:
+            #WARNING : this path root currently does not contain D/UD randoms as they
+            #were deemed unnecessary for the clustering analysis
+            root = Path(
+                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/randoms'
+                )
+            return list(root.glob(f'edge_sc_cr_hscr{"*" if include_dud else "[0-9]"}.fits'))
+        else:
+            return [Path(
+                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits'
+                )]
+    except PermissionError:
+        logging.error(f"Permission denied accessing HSC files and randoms = {randoms}")
+        raise
+    except FileNotFoundError:
+        logging.error(f"HSC catalog file not found and randoms = {randoms}") 
+        raise
 
 class CorrFileReader():
     def __init__(self, ROOT):
@@ -805,11 +827,18 @@ class CorrFileReader():
         """
         DIR = self.ROOT / tgt 
         return f'{DIR}/{tgt}__b1x{b1}_b2x{b2}_moc{moc}.npy'
+    
+    def get_auto_file(self, b1, moc, tgt):
+        """
+        Get the file name for given redshift bins and MOC.
+        """
+        DIR = self.ROOT / tgt 
+        return f'{DIR}/{tgt}__b1x{b1}_moc{moc}.npy'
 
     def get_bins(self, name):
         return np.loadtxt(f'{self.ROOT}/bins/bins_{name}.txt', dtype=float)
     
-    def get_cov_result(self, b1, b2, moc, tgt):
+    def get_cov_result(self, tgt):
         """
         Get the covariance result for given redshift bins and MOC.
         """
@@ -819,5 +848,16 @@ class CorrFileReader():
         else:
             files = covdir.glob(f'*.npy')
             return list(files)
+        
+    def get_cov_file(self, b1, b2, moc, tgt):
+        """
+        Get the covariance file name for given redshift bins and MOC.
+        """
+        covdir = Path(self.ROOT, tgt, 'cov')
+        file = covdir / f'{tgt}__b1x{b1}_b2x{b2}_moc{moc}.npy'
+        if not file.exists():
+            raise FileNotFoundError(f"File {file} does not exist")
+        else:
+            return file
             
         
