@@ -15,6 +15,7 @@ from pathlib import Path
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 
+from scripts.statistics import cosmtools as ct
 from pycorr import TwoPointCorrelationFunction, KMeansSubsampler
 
 ## MOC list 
@@ -510,15 +511,17 @@ class DESIAutoCorrelation():
         self.logger.info(f'N sources in randoms1: {np.sum(z_mask_r1)}')
 
         tpcf = TwoPointCorrelationFunction(
-            edges=self.bin_distances,
+            edges=(np.linspace(0., 200., 101), np.linspace(-1., 1., 201)),#self.bin_distances,
             data_positions1=[
                 self.data1[self.ra_desi_col][z_mask_d1], 
-                self.data1[self.dec_desi_col][z_mask_d1]
+                self.data1[self.dec_desi_col][z_mask_d1],
+                ct.z2dist(self.data1[self.z_desi_col][z_mask_d1])
                 ],
             data_positions2=None,
             randoms_positions1=[
                 self.randoms1[self.ra_desi_col][z_mask_r1],
-                self.randoms1[self.dec_desi_col][z_mask_r1]
+                self.randoms1[self.dec_desi_col][z_mask_r1],
+                ct.z2dist(self.randoms1[self.z_desi_col][z_mask_r1]),
                 ],
             randoms_positions2=None,
             data_weights1=self.data1[self.w_desi_col][z_mask_d1],
@@ -526,8 +529,8 @@ class DESIAutoCorrelation():
             randoms_weights1=self.randoms1[self.w_desi_col][z_mask_r1],
             randoms_weights2=None,
             nthreads=self.nproc,
-            mode='theta',
-            position_type='rd', # 'rd' for RA/Dec
+            mode='smu', #'theta',
+            position_type='rdd', # 'rd' for RA/Dec #'rdd'
             engine='corrfunc',
             estimator='landyszalay',
         )
@@ -773,7 +776,7 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
         """
         try:
             process = psutil.Process()
-            memory_usage = process.memory_info().rss / 1e6  # Convert to MB
+            memory_usage = process.memory_info().rss / 1e6
             logger.info(f"Memory Usage: {memory_usage:.2f} MB")
         except Exception as e:
             logger.error(f"Could not log memory usage: {e}")

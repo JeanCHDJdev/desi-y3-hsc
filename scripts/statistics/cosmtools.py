@@ -36,3 +36,15 @@ def hMpc2arcsec(x, z):
     d_A = cosmo.angular_diameter_distance(z) 
     theta = (x * u.Mpc * cosmo.h / d_A).to(u.arcsec, u.dimensionless_angles())
     return theta.value
+
+def z2dist(z):
+    """
+    Convert redshift to comoving distance (in h^-1 Mpc).
+    
+    Parameters:
+    -----------
+
+    z: float | list[float] | np.ndarray[float]
+        Redshift
+    """
+    return cosmo.comoving_distance(z).value / cosmo.h
