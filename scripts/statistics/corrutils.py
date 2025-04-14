@@ -18,8 +18,23 @@ from astropy.coordinates import SkyCoord
 from scripts.statistics import cosmtools as ct
 from pycorr import TwoPointCorrelationFunction, KMeansSubsampler
 
-## MOC list 
-moc_list = [
+class CorrelationMeta:
+
+    # Attributes that each cross corr code needs to know about
+    ra_hsc_col = 'RA'
+    dec_hsc_col = 'Dec'
+    ra_hsc_randoms_col = 'ra'
+    dec_hsc_randoms_col = 'dec'
+    w_hsc_col = 'weight'
+    z_hsc_col = 'dnnz_photoz_best'
+
+    ra_desi_col = 'RA'
+    dec_desi_col = 'DEC'
+    w_desi_col = 'WEIGHT'
+    z_desi_col = 'Z'
+
+    ## MOC list 
+    moc_list = [
             Path(
                 '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/mocs/', 
                 f'hsc_moc{i+1}.fits'
@@ -27,17 +42,70 @@ moc_list = [
             for i in range(0, 4)
         ]
 
-## Defining fiducial bins here
-bin_distances = np.linspace(0.01, 2, 41) #np.logspace(np.log10(0.001), np.log10(3), 71)
+    ## Defining fiducial bins here
+    bin_distances = np.linspace(0.01, 2, 41) #np.logspace(np.log10(0.001), np.log10(3), 71)
 
-bins_bgs = np.arange(0, 0.6, 0.1) # 0 < z < 0.6
-bins_lrg = np.arange(0.4, 1.2, 0.1) # 0.4 < z < 1
-bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
-bins_qso = np.arange(0.8, 3.4, 0.1) # 0.9 < z < 2.1
+    bins_bgs = np.arange(0, 0.6, 0.1) # 0 < z < 0.6
+    bins_lrg = np.arange(0.4, 1.2, 0.1) # 0.4 < z < 1
+    bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
+    bins_qso = np.arange(0.8, 3.4, 0.1) # 0.9 < z < 2.1
 
-bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 
+    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 
 
-class CrossCorrelation():
+    @staticmethod
+    def save_bins(root):
+        """
+        Save the bins to a file
+        """
+        bin_dir = Path(root, 'bins')
+        if not bin_dir.exists():
+            bin_dir.mkdir(parents=True)
+            np.savez(
+                Path(bin_dir, 'bins_desi.npz'),
+                bins_bgs=CorrelationMeta.bins_bgs,
+                bins_lrg=CorrelationMeta.bins_lrg,
+                bins_elg=CorrelationMeta.bins_elg,
+                bins_qso=CorrelationMeta.bins_qso
+            )
+
+            np.savez(
+                Path(bin_dir, 'bins_hsc.npz'),
+                bins_hsc=CorrelationMeta.bins_hsc
+            )
+
+    def __init__(self, logger, tgt, moc, output_dir, bin_distances, nproc=None):
+        assert logger is not None, 'Logger not provided'
+        self.logger = logger
+
+        avb_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
+        assert tgt in avb_tgt, f'{tgt} not in {avb_tgt}'
+        self.tgt = tgt
+
+        if nproc is None: 
+            nproc = max(os.cpu_count()-2, 1)
+        self.nproc = nproc
+
+        ## Filesystem setup
+        fs = {}
+        self.output_dir = Path(output_dir, tgt)
+        if not self.output_dir.exists():
+            self.output_dir.mkdir(parents=True)
+        fs['outdir'] = Path(self.output_dir)
+
+        # Grabbing the catalogs on initialisation
+        fs['catalog1'] = fetch_desi_files(tgt, randoms=False)
+        fs['randoms1'] = fetch_desi_files(tgt, randoms=True)
+        fs['catalog2'] = fetch_hsc_files(randoms=False)
+        fs['randoms2'] = fetch_hsc_files(randoms=True)
+        
+        ## Loading the MOC footprint
+        self.moc = moc
+
+        # Keep the filesystem
+        self.fs = fs 
+
+
+class CrossCorrelation(CorrelationMeta):
     def __init__(
             self, 
             tgt : str, 
@@ -54,18 +122,6 @@ class CrossCorrelation():
 
         assert logger is not None, 'Logger not provided'
         self.logger = logger
-        
-        self.ra_hsc_col = 'RA'
-        self.dec_hsc_col = 'Dec'
-        self.ra_hsc_randoms_col = 'ra'
-        self.dec_hsc_randoms_col = 'dec'
-        self.w_hsc_col = 'weight'
-        self.z_hsc_col = 'dnnz_photoz_best'
-
-        self.ra_desi_col = 'RA'
-        self.dec_desi_col = 'DEC'
-        self.w_desi_col = 'WEIGHT'
-        self.z_desi_col = 'Z'
 
         avb_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
         assert tgt in avb_tgt, f'{tgt} not in {avb_tgt}'
@@ -511,25 +567,21 @@ class DESIAutoCorrelation():
         self.logger.info(f'N sources in randoms1: {np.sum(z_mask_r1)}')
 
         tpcf = TwoPointCorrelationFunction(
-            edges=(np.linspace(0., 200., 101), np.linspace(-1., 1., 201)),#self.bin_distances,
+            edges=(np.linspace(0., 200., 51), np.linspace(-40, 40, 81)),#self.bin_distances,
             data_positions1=[
                 self.data1[self.ra_desi_col][z_mask_d1], 
                 self.data1[self.dec_desi_col][z_mask_d1],
                 ct.z2dist(self.data1[self.z_desi_col][z_mask_d1])
                 ],
-            data_positions2=None,
             randoms_positions1=[
                 self.randoms1[self.ra_desi_col][z_mask_r1],
                 self.randoms1[self.dec_desi_col][z_mask_r1],
                 ct.z2dist(self.randoms1[self.z_desi_col][z_mask_r1]),
                 ],
-            randoms_positions2=None,
             data_weights1=self.data1[self.w_desi_col][z_mask_d1],
-            data_weights2=None,
             randoms_weights1=self.randoms1[self.w_desi_col][z_mask_r1],
-            randoms_weights2=None,
             nthreads=self.nproc,
-            mode='smu', #'theta',
+            mode='rppi', #'theta',
             position_type='rdd', # 'rd' for RA/Dec #'rdd'
             engine='corrfunc',
             estimator='landyszalay',
@@ -651,7 +703,7 @@ class HSCAutoCorrelation():
         )
         outfile = Path(
             self.output_dir, 
-            f'HSC__{bin_index1}_moc{moc_index}.npy'
+            f'HSC__b1x{bin_index1}_moc{moc_index}.npy'
             )
         tpcf.save(outfile)
 
@@ -785,11 +837,15 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
 
     return logger
 
-def fetch_desi_files(tgt, randoms=False):
+def fetch_desi_files(tgt, randoms=False, pip_weights=False):
     try:
         root = Path(
-            '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/nonKP'
+            '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/'
             )
+        if pip_weights:
+            root = Path(root, 'PIP')
+        else:
+            root = Path(root, 'nonKP')
         path = f'{tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
         files = list(root.glob(path))
         if not files:
