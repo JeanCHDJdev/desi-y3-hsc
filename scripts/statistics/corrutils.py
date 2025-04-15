@@ -73,7 +73,7 @@ class CorrelationMeta:
                 bins_hsc=CorrelationMeta.bins_hsc
             )
 
-    def __init__(self, logger, tgt, moc, output_dir, bin_distances, nproc=None):
+    def __init__(self, logger, tgt, moc, output_dir, sims, nproc=None):
         assert logger is not None, 'Logger not provided'
         self.logger = logger
 
@@ -93,10 +93,10 @@ class CorrelationMeta:
         fs['outdir'] = Path(self.output_dir)
 
         # Grabbing the catalogs on initialisation
-        fs['catalog1'] = fetch_desi_files(tgt, randoms=False)
-        fs['randoms1'] = fetch_desi_files(tgt, randoms=True)
-        fs['catalog2'] = fetch_hsc_files(randoms=False)
-        fs['randoms2'] = fetch_hsc_files(randoms=True)
+        fs['catalog1'] = fetch_desi_files(tgt, randoms=False, sims=sims)
+        fs['randoms1'] = fetch_desi_files(tgt, randoms=True, sims=sims)
+        fs['catalog2'] = fetch_hsc_files(randoms=False, sims=sims)
+        fs['randoms2'] = fetch_hsc_files(randoms=True, sims=sims)
         
         ## Loading the MOC footprint
         self.moc = moc
@@ -183,7 +183,7 @@ class CrossCorrelation(CorrelationMeta):
 
         tid = time.time()
         self.data1 = sample_file_on_moc(
-            self.fs['catalog1'][0], 
+            self.fs['catalog1'], 
             ra_col=self.ra_desi_col, 
             dec_col=self.dec_desi_col, 
             weight_col=self.w_desi_col, 
@@ -193,7 +193,7 @@ class CrossCorrelation(CorrelationMeta):
         self.logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds')
         tih = time.time()
         self.data2 = sample_file_on_moc(
-            file=self.fs['catalog2'][0], 
+            file=self.fs['catalog2'], 
             ra_col=self.ra_hsc_col, 
             dec_col=self.dec_hsc_col, 
             weight_col=self.w_hsc_col,
@@ -257,7 +257,7 @@ class CrossCorrelation(CorrelationMeta):
         )
         tpcf.save(outfile)
 
-class JackknifeCrossCorrelation():
+class JackknifeCrossCorrelation(CorrelationMeta):
     def __init__(
             self, 
             tgt : str, 
@@ -270,22 +270,10 @@ class JackknifeCrossCorrelation():
             sample_rate_desi:int=1, 
             sample_rate_hsc:int=1,
             logger:logging.Logger=None
-            ):
+        ):
 
         assert logger is not None, 'Logger not provided'
         self.logger = logger
-        
-        self.ra_hsc_col = 'RA'
-        self.dec_hsc_col = 'Dec'
-        self.ra_hsc_randoms_col = 'ra'
-        self.dec_hsc_randoms_col = 'dec'
-        self.w_hsc_col = 'weight'
-        self.z_hsc_col = 'dnnz_photoz_best'
-
-        self.ra_desi_col = 'RA'
-        self.dec_desi_col = 'DEC'
-        self.w_desi_col = 'WEIGHT'
-        self.z_desi_col = 'Z'
 
         avb_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
         assert tgt in avb_tgt, f'{tgt} not in {avb_tgt}'
@@ -354,7 +342,7 @@ class JackknifeCrossCorrelation():
 
         tid = time.time()
         self.data1 = sample_file_on_moc(
-            self.fs['catalog1'][0], 
+            self.fs['catalog1'], 
             ra_col=self.ra_desi_col, 
             dec_col=self.dec_desi_col, 
             weight_col=self.w_desi_col, 
@@ -364,7 +352,7 @@ class JackknifeCrossCorrelation():
         self.logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds')
         tih = time.time()
         self.data2 = sample_file_on_moc(
-            file=self.fs['catalog2'][0], 
+            file=self.fs['catalog2'], 
             ra_col=self.ra_hsc_col, 
             dec_col=self.dec_hsc_col, 
             weight_col=self.w_hsc_col,
@@ -474,7 +462,7 @@ class JackknifeCrossCorrelation():
         )
         tpcf.save(outfile)
 
-class DESIAutoCorrelation():
+class DESIAutoCorrelation(CorrelationMeta):
     def __init__(
             self, 
             tgt : str, 
@@ -540,7 +528,7 @@ class DESIAutoCorrelation():
 
         tid = time.time()
         self.data1 = sample_file_on_moc(
-            self.fs['catalog1'][0], 
+            self.fs['catalog1'], 
             ra_col=self.ra_desi_col, 
             dec_col=self.dec_desi_col, 
             weight_col=self.w_desi_col, 
@@ -659,7 +647,7 @@ class HSCAutoCorrelation():
 
         tid = time.time()
         self.data1 = sample_file_on_moc(
-            self.fs['catalog1'][0], 
+            self.fs['catalog1'], 
             ra_col=self.ra_hsc_col, 
             dec_col=self.dec_hsc_col, 
             weight_col=self.w_hsc_col, 
@@ -837,37 +825,51 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
 
     return logger
 
-def fetch_desi_files(tgt, randoms=False, pip_weights=False):
+def fetch_desi_files(tgt, randoms=False, pip_weights=False, sims=False):
     try:
-        root = Path(
-            '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/'
-            )
-        if pip_weights:
-            root = Path(root, 'PIP')
+        if sims:
+            raise NotImplementedError
         else:
-            root = Path(root, 'nonKP')
-        path = f'{tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
-        files = list(root.glob(path))
-        if not files:
-            raise FileNotFoundError(f"No files found for path: {path}")
-        return files
+            root = Path(
+                '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/'
+                )
+            if pip_weights:
+                root = Path(root, 'PIP')
+            else:
+                root = Path(root, 'nonKP')
+            path = f'{tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
+            files = list(root.glob(path))
+            if not files:
+                raise FileNotFoundError(f"No files found for path: {path}")
+            if len(files) == 1:
+                files = files[0]
+            return files
     except PermissionError:
         logging.error(f"Permission denied accessing DESI files and randoms = {randoms}")
         raise
 
-def fetch_hsc_files(randoms=False, include_dud=False):
+def fetch_hsc_files(randoms=False, include_dud=False, sims=False):
     try:
-        if randoms:
+        if sims and randoms:
+            root = Path(
+                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/sims'
+                )
+            raise NotImplementedError
+        elif sims:
+            return Path(
+                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/sims/hsc_y3_sims.fits'
+                )
+        elif randoms:
             #WARNING : this path root currently does not contain D/UD randoms as they
             #were deemed unnecessary for the clustering analysis
             root = Path(
                 '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/randoms'
                 )
             return list(root.glob(f'edge_sc_cr_hscr{"*" if include_dud else "[0-9]"}.fits'))
-        else:
-            return [Path(
+        elif not sims and not randoms:
+            return Path(
                 '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits'
-                )]
+                )
     except PermissionError:
         logging.error(f"Permission denied accessing HSC files and randoms = {randoms}")
         raise
@@ -876,6 +878,10 @@ def fetch_hsc_files(randoms=False, include_dud=False):
         raise
 
 class CorrFileReader():
+    '''
+    Utility class to grab correctly formatted file names for the cross-correlation
+    analysis. Provide a ROOT and the directory has to be with the expected shape.
+    '''
     def __init__(self, ROOT):
         self.ROOT = Path(ROOT)
         assert self.ROOT.exists(), f"Path {self.ROOT} does not exist"

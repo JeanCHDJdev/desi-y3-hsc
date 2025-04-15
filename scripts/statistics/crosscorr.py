@@ -89,17 +89,19 @@ def main():
     nproc = args.nproc
     log = args.log
     patches = args.patches
+    
+    moc_list = cu.CorrelationMeta.moc_list
     if patches is not None:
         patches = np.array([int(p) for p in patches])
         assert len(patches) > 0, 'Patches should be a list of integers'
         assert np.all(
-            (0 < patches) & (patches < len(cu.moc_list))
+            (0 < patches) & (patches < len())
             ), (
-                f'Patches should be less than {len(cu.moc_list)} '
+                f'Patches should be less than {len(moc_list)} '
                 'and greater than 0'
                 )
     else:
-        patches = np.arange(len(cu.moc_list))
+        patches = np.arange(len(moc_list))
 
     if log is None:
         logger = cu.setup_crosscorr_logging(log_file=str(Path(output_dir, 'autolog')))
