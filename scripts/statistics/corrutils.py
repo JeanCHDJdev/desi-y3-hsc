@@ -22,8 +22,8 @@ from pycorr import TwoPointCorrelationFunction, KMeansSubsampler
 class CorrelationMeta(ABC):
 
     # Attributes that each cross corr code needs to know about
-    ra_hsc_col = 'RA'
-    dec_hsc_col = 'Dec'
+    ra_hsc_col = 'ra'
+    dec_hsc_col = 'dec'
     ra_hsc_randoms_col = 'ra'
     dec_hsc_randoms_col = 'dec'
     w_hsc_col = 'weight'
@@ -49,9 +49,18 @@ class CorrelationMeta(ABC):
     bins_bgs = np.arange(0, 0.6, 0.1) # 0 < z < 0.6
     bins_lrg = np.arange(0.4, 1.2, 0.1) # 0.4 < z < 1
     bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
-    bins_qso = np.arange(0.8, 3.4, 0.1) # 0.9 < z < 2.1
+    bins_qso = np.arange(0.8, 3.4, 0.3) # 0.9 < z < 2.1
 
     bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 
+
+    bins_redshift = {
+        'LRG': bins_lrg,
+        'ELGnotqso': bins_elg,
+        'QSO': bins_qso,
+        'BGS_ANY': bins_bgs,
+        'HSC': bins_hsc,
+        'distances': bin_distances
+    }
 
     @staticmethod
     def save_bins(root):
@@ -62,16 +71,8 @@ class CorrelationMeta(ABC):
         if not bin_dir.exists():
             bin_dir.mkdir(parents=True)
             np.savez(
-                Path(bin_dir, 'bins_desi.npz'),
-                bins_bgs=CorrelationMeta.bins_bgs,
-                bins_lrg=CorrelationMeta.bins_lrg,
-                bins_elg=CorrelationMeta.bins_elg,
-                bins_qso=CorrelationMeta.bins_qso
-            )
-
-            np.savez(
-                Path(bin_dir, 'bins_hsc.npz'),
-                bins_hsc=CorrelationMeta.bins_hsc
+                Path(bin_dir, 'bins_redshift.npz'),
+                **{k: v for k, v in CorrelationMeta.bins_redshift.items()}
             )
 
     def __init__(
@@ -82,8 +83,6 @@ class CorrelationMeta(ABC):
             tgt2=None,
             output_dir=None, 
             sims=False,
-            bin_redshift1=None,
-            bin_redshift2=None,
             sample_rate_desi=1,
             sample_rate_hsc=1, 
             nproc=None
@@ -109,7 +108,7 @@ class CorrelationMeta(ABC):
                     tgt2 = tgt1
 
         if tgt1 == tgt2:
-            self.autocorr == True
+            self.autocorr = True
             if tgt1 in desi_tgt:
                 self.use_desi = True
             elif tgt1 in hsc_tgt:
@@ -126,10 +125,17 @@ class CorrelationMeta(ABC):
                 self.use_hsc = True
             if tgt1 in hsc_tgt and tgt2 in desi_tgt:
                 # switch targets; useful for later
-                self.tgt1, self.tgt2 = self.tgt2, self.tgt1
-                
+                tgt1, tgt2 = tgt2, tgt1
+
+        self.tgt1 = tgt1
+        self.tgt2 = tgt2
+
         if not self.use_desi and not self.use_hsc:
             raise ValueError(f'Unknown targets {tgt1} and {tgt2}')
+    
+        # once targets are figured out we can call the bins
+        bin_redshift1 = self.bins_redshift[tgt1]
+        bin_redshift2 = self.bins_redshift[tgt2]
 
         # Setup multiprocessing; can do mpi4py later on
         if nproc is None: 
@@ -138,23 +144,20 @@ class CorrelationMeta(ABC):
 
         # Filesystem setup
         fs = {}
-        assert tgt1 is not None, 'No target provided'
-        self.output_dir = Path(output_dir, f'{tgt1}{f"_{tgt2}" if tgt2 is not None else ""}')
+        self.output_dir = Path(output_dir, f'{tgt1}x{tgt2}')
         if not self.output_dir.exists():
             self.output_dir.mkdir(parents=True)
         fs['outdir'] = Path(self.output_dir)
 
         # Grabbing the catalogs on initialisation
         if self.use_desi:
-            fs['catalog1'] = list(fetch_desi_files(tgt1, randoms=False, sims=sims))
-            fs['randoms1'] = list(fetch_desi_files(tgt1, randoms=True, sims=sims))
-        elif self.use_hsc and not self.use_desi:
-            fs['catalog2'] = list(fetch_hsc_files(randoms=False, sims=sims))
-            fs['randoms2'] = list(fetch_hsc_files(randoms=True, sims=sims))
-        elif self.use_desi and self.use_hsc:
-            fs['catalog2'] = list(fetch_hsc_files(randoms=False, sims=sims))
-            fs['randoms2'] = list(fetch_hsc_files(randoms=True, sims=sims))
-        
+            fs['catalog1'] = fetch_desi_files(tgt1, randoms=False, sims=sims)
+            fs['randoms1'] = fetch_desi_files(tgt1, randoms=True, sims=sims)
+
+        if self.use_hsc:
+            fs['catalog2'] = fetch_hsc_files(randoms=False, sims=sims, include_dud=False)
+            fs['randoms2'] = fetch_hsc_files(randoms=True, sims=sims, include_dud=False)
+
         # Loading the MOC footprint
         self.moc = moc
 
@@ -166,7 +169,7 @@ class CorrelationMeta(ABC):
         self.sample_rate_hsc = sample_rate_hsc
 
         logger.info(f'Collating randoms ...')
-        if self.fs.has_key('randoms1'):
+        if 'randoms1' in self.fs:
             trd = time.time()
             self.randoms1 = sample_randoms_on_moc(
                 self.fs['randoms1'][:5],
@@ -176,10 +179,15 @@ class CorrelationMeta(ABC):
                 z_col=self.z_desi_col,
                 moc=self.moc,
                 )
+            all_r = len(self.randoms1)
             self.randoms1 = self.randoms1[::self.sample_rate_desi]
+            samp_r = len(self.randoms1)
         
-            logger.info(f'Collated DESI randoms in {time.time()-trd:.2f} seconds')
-        if self.fs.has_key('randoms2'):
+            logger.info(
+                f'Collated DESI randoms in {time.time()-trd:.2f}s. Reduction : {samp_r/all_r*100:.2f}% ({all_r} -> {samp_r})'
+                )
+
+        if 'randoms2' in self.fs:
             trh = time.time()
             self.randoms2 = sample_randoms_on_moc(
                 self.fs['randoms2'], 
@@ -189,8 +197,12 @@ class CorrelationMeta(ABC):
                 z_col=None,
                 moc=self.moc,
                 )
+            all_r = len(self.randoms2)
             self.randoms2 = self.randoms2[::self.sample_rate_hsc]
-            logger.info(f'Collated HSC randoms in {time.time()-trh:.2f} seconds')
+            samp_r = len(self.randoms2)
+            logger.info(
+                f'Collated HSC randoms in {time.time()-trh:.2f}s. Reduction : {samp_r/all_r*100:.2f}% ({all_r} -> {samp_r})'
+                )
 
         if self.use_desi:
             tid = time.time()
@@ -225,11 +237,11 @@ class CorrelationMeta(ABC):
         if self.use_hsc and self.autocorr:
             # in the case of autocorrelation with hsc, we move the 2nd dataset to be the first
             self.randoms1 = self.randoms2
+            del self.randoms2
             self.data1 = self.data2
-            self.zmask_data1 = self.zmask_data2
             del self.data2
-            del self.randoms1
-
+            self.zmask_data1 = self.zmask_data2
+            del self.zmask_data2
     
     @abstractmethod
     def run_corr(self):
@@ -255,20 +267,33 @@ class CorrelationMeta(ABC):
         if outfile.exists():
             self.logger.info(f'File {outfile} already exists, skipping')
             return
+        self.outfile = outfile
         
         # Setup redshift masking
         self.z_mask_d1 = (self.zmask_data1 == bin_index1)
         if self.use_desi:
+            # DESI randoms need to be redshift masked 
             self.z_mask_r1 = (self.zmask_randoms1 == bin_index1)
         if not self.autocorr:
-            # DESI randoms need to be redshift masked 
+            # in the case of crosscorr, we wapply a mask to the randoms
             self.z_mask_d2 = (self.zmask_data2 == bin_index2)
+
         if self.use_desi:
-            self.logger.info(f'N data {self.tgt1}: {np.sum(self.z_mask_d1)}' + f', N randoms {self.tgt1}: {np.sum(self.z_mask_r1)}')
+            self.logger.info(
+                f'N data {self.tgt1}: {np.sum(self.z_mask_d1)}' + f', N randoms {self.tgt1}: {np.sum(self.z_mask_r1)}'
+                )
         if self.use_hsc and not self.autocorr:
-            self.logger.info(f'N data {self.tgt2}: {np.sum(self.z_mask_d2)}' + f', N randoms {self.tgt2}: {len(self.randoms2)}')
+            self.logger.info(
+                f'N data {self.tgt2}: {np.sum(self.z_mask_d2)}' + f', N randoms {self.tgt2}: {len(self.randoms2)}'
+                )
         if self.use_hsc and self.autocorr:
-            self.logger.info(f'N data {self.tgt1}: {np.sum(self.z_mask_d1)}' + f', N randoms {self.tgt1}: {len(self.randoms1)}')
+            self.logger.info(
+                f'N data {self.tgt1}: {np.sum(self.z_mask_d1)}' + f', N randoms {self.tgt1}: {len(self.randoms1)}'
+                )
+
+        ## assertion safeties :
+        assert len(self.data1) == len(self.z_mask_d1)
+        assert len(self.randoms1) == len(self.z_mask_r1)
 
         self.run_corr()
 
@@ -276,25 +301,21 @@ class CorrelationMeta(ABC):
 class CrossCorrelation(CorrelationMeta):
     def __init__(
             self, 
-            tgt : str, 
+            tgt1 : str, 
+            tgt2 : str,
             moc : MOC, 
             output_dir :str | Path, 
-            bin_distances : np.ndarray,
-            bin_redshift1 : np.ndarray,
-            bin_redshift2 : np.ndarray,
             nproc : int=None, 
             sample_rate_desi : int=1, 
             sample_rate_hsc : int=1,
             logger:logging.Logger=None
             ):
 
-        super.__init__(
-            tgt=tgt,
+        super().__init__(
+            tgt1=tgt1,
+            tgt2=tgt2,
             moc=moc,
             output_dir=output_dir,
-            bin_distances=bin_distances,
-            bin_redshift1=bin_redshift1,
-            bin_redshift2=bin_redshift2,
             nproc=nproc,
             sample_rate_desi=sample_rate_desi,
             sample_rate_hsc=sample_rate_hsc,
@@ -337,27 +358,25 @@ class CrossCorrelation(CorrelationMeta):
 class JackknifeCrossCorrelation(CorrelationMeta):
     def __init__(
             self, 
-            tgt : str, 
+            tgt1 : str, 
+            tgt2 : str, 
             moc : MOC, 
             output_dir :str | Path, 
-            bin_distances : np.ndarray,
-            bin_redshift1 : np.ndarray,
-            bin_redshift2 : np.ndarray,
             nproc : int=None, 
+            sims : bool=False,
             sample_rate_desi : int=1, 
             sample_rate_hsc : int=1,
             logger : logging.Logger=None,
-            nside : int=256,
-            nsamples : int=64,
+            nside : int=256, # default seems to be 512 lets go for lower for now as a test
+            nsamples : int=64, # default was 128
             seed : int=42
         ):
         super().__init__(
-            tgt=tgt,
+            tgt1=tgt1, 
+            tgt2=tgt2,
             moc=moc,
             output_dir=output_dir,
-            bin_distances=bin_distances,
-            bin_redshift1=bin_redshift1,
-            bin_redshift2=bin_redshift2,
+            sims=sims,
             nproc=nproc,
             sample_rate_desi=sample_rate_desi,
             sample_rate_hsc=sample_rate_hsc,
@@ -369,14 +388,14 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             self.randoms2[self.dec_hsc_randoms_col]
             ]
         logger.info(f'Randoms2 length {len(self.randoms2)}')
-        logger.info('Subsampling randoms2 ...')
+        logger.info('Subsampling randoms2 with KMeansSubsampler...')
         subsampler = KMeansSubsampler(
             mode='angular', 
             # The largest, most complete dataset we have is rp2
             # and no redshift sampling is needed for jackknife
             positions=rp2, 
-            nsamples=nsamples, # default was 128
-            nside=nside,  # default seems to be 512 lets go for lower for now as a test
+            nsamples=nsamples,
+            nside=nside,
             random_state=seed, 
             position_type='rd'
             )
@@ -448,21 +467,20 @@ class JackknifeCrossCorrelation(CorrelationMeta):
 class DESIAutoCorrelation(CorrelationMeta):
     def __init__(
             self, 
-            tgt : str, 
+            tgt1 : str,
+            tgt2 : str, 
             moc : MOC, 
             output_dir :str | Path, 
-            bin_distances : np.ndarray,
-            bin_redshift1 : np.ndarray,
             nproc:int=None, 
             sample_rate_desi:int=1, 
             logger:logging.Logger=None
         ):
+        assert tgt1==tgt2, f'Auto correlation only for {tgt1} and {tgt2} equal'
         super().__init__(
-            tgt=tgt,
+            tgt1=tgt1,
+            tgt2=tgt2,
             moc=moc,
             output_dir=output_dir,
-            bin_distances=bin_distances,
-            bin_redshift1=bin_redshift1,
             nproc=nproc,
             sample_rate_desi=sample_rate_desi,
             logger=logger
@@ -722,20 +740,30 @@ def fetch_hsc_files(randoms=False, include_dud=False, sims=False):
         raise
 
 def figure_out_class(tgt1, tgt2=None, jackknife=False):
+    desi_avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
+    hsc_avb = ['HSC']
+    if tgt1 is None and tgt2 is None:
+        raise ValueError('No target provided')
     if tgt2 is None:
         tgt2 = tgt1
-    if tgt1 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']:
-        if tgt2 in ['HSC']:
-            if jackknife:
-                return JackknifeCrossCorrelation
-            else:
-                return CrossCorrelation
-    if tgt1 in ['HSC']:
-        return HSCAutoCorrelation
-    if tgt2 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']:
-        return DESIAutoCorrelation
+    if tgt1 is None:
+        tgt1 = tgt2
+        
+    if tgt1 != tgt2:
+        # cross-correlation case
+        if tgt1 in desi_avb:
+            if tgt2 in hsc_avb:
+                if jackknife:
+                    return JackknifeCrossCorrelation
+                else:
+                    return CrossCorrelation
     else:
-        raise ValueError(f'Unknown targets {tgt1}, {tgt2}')
+        # autocorrelation case
+        if tgt1 in hsc_avb and tgt2 in hsc_avb:
+            return HSCAutoCorrelation
+        if tgt2 in desi_avb and tgt1 in desi_avb:
+            return DESIAutoCorrelation
+    raise ValueError('Unknown target combination')
 
 class CorrFileReader():
     '''
@@ -746,40 +774,39 @@ class CorrFileReader():
         self.ROOT = Path(ROOT)
         assert self.ROOT.exists(), f"Path {self.ROOT} does not exist"
 
-    def get_file(self, b1, b2, moc, tgt):
+    def get_file(self, b1, b2, tgt1, tgt2, moc):
         """
         Get the file name for given redshift bins and MOC.
         """
-        DIR = self.ROOT / tgt 
-        return f'{DIR}/{tgt}__b1x{b1}_b2x{b2}_moc{moc}.npy'
+        DIR = self.ROOT / f'{tgt1}x{tgt2}'
+        return f'{DIR}/{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{moc}.npy'
     
-    def get_auto_file(self, b1, moc, tgt):
+    def get_auto_file(self, b1, tgt, moc):
         """
         Get the file name for given redshift bins and MOC.
         """
-        DIR = self.ROOT / tgt 
-        return f'{DIR}/{tgt}__b1x{b1}_moc{moc}.npy'
+        return self.get_file(b1, b1, tgt, tgt, moc)
 
     def get_bins(self, name):
         return np.loadtxt(f'{self.ROOT}/bins/bins_{name}.txt', dtype=float)
     
-    def get_cov_result(self, tgt):
+    def get_cov_results(self, tgt1, tgt2='HSC'):
         """
         Get the covariance result for given redshift bins and MOC.
         """
-        covdir = Path(self.ROOT, tgt, 'cov')
+        covdir = Path(self.ROOT, f'{tgt1}x{tgt2}', 'cov')
         if not covdir.exists():
             raise FileNotFoundError(f"Covariance directory {covdir} does not exist")
         else:
             files = covdir.glob(f'*.npy')
             return list(files)
         
-    def get_cov_file(self, b1, b2, moc, tgt):
+    def get_cov_file(self, b1, b2, moc, tgt1, tgt2='HSC'):
         """
         Get the covariance file name for given redshift bins and MOC.
         """
-        covdir = Path(self.ROOT, tgt, 'cov')
-        file = covdir / f'{tgt}__b1x{b1}_b2x{b2}_moc{moc}.npy'
+        covdir = Path(self.ROOT, f'{tgt1}x{tgt2}', 'cov')
+        file = covdir / f'{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{moc}.npy'
         if not file.exists():
             raise FileNotFoundError(f"File {file} does not exist")
         else:

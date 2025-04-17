@@ -135,11 +135,6 @@ def main():
     nproc = args.nproc
     log = args.log
     patches = args.patches
-
-    if tgt1 is None:
-        tgt1 = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
-    if tgt2 is None:
-        tgt2 = tgt1
     
     print(f'Running cross-correlation for the following targets: {tgt1}x{tgt2}')
 
@@ -171,7 +166,6 @@ def main():
         'sample_rate_hsc': sample_rate_hsc,
         'nproc': nproc,
         'logger': logger,
-        'patches': patches,
         'output_dir': output_dir,
     }
     if jackknife:
@@ -193,16 +187,8 @@ def main():
         Path(output_dir, 'bins').mkdir(parents=True, exist_ok=True)
     print('=' * 80)
 
-    bins_redshift = {
-        'BGS_ANY': cu.CorrelationMeta.bins_bgs,
-        'LRG': cu.CorrelationMeta.bins_lrg,
-        'ELGnotqso': cu.CorrelationMeta.bins_elg,
-        'QSO': cu.CorrelationMeta.bins_qso,
-        'HSC': cu.CorrelationMeta.bins_hsc,
-        'distances': cu.CorrelationMeta.bin_distances,
-    }
     cu.CorrelationMeta.save_bins(output_dir) 
-
+    
     logger.info(
         f'Sample rate on DESI randoms: {sample_rate_desi} and on HSC randoms: {sample_rate_hsc}\n'
         )
@@ -233,8 +219,6 @@ def main():
 
         # tgt1 is always a list of DESI type targets
         for t1, t2 in zip(tgt1, tgt2):
-            bin1 = bins_redshift[t1]
-            bin2 = bins_redshift[t2]
 
             logger.memory_usage()
             corrclass = cu.figure_out_class(t1, t2, jackknife)
@@ -242,8 +226,6 @@ def main():
             cc = corrclass(
                 tgt1=t1,
                 tgt2=t2,
-                bin1=bin1,
-                bin2=bin2,
                 moc=moc,
                 **corrargs
             )
