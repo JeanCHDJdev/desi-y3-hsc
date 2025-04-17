@@ -320,7 +320,7 @@ class CrossCorrelation(CorrelationMeta):
             # HSC does not need redshift masking on randoms
             randoms_positions2=[
                 self.randoms2[self.ra_hsc_randoms_col],
-                self.randoms2[self.ra_hsc_randoms_col]
+                self.randoms2[self.dec_hsc_randoms_col]
                 ],
             data_weights1=self.data1[self.w_desi_col][self.z_mask_d1],
             data_weights2=self.data2[self.w_hsc_col][self.z_mask_d2],
@@ -368,7 +368,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             self.randoms2[self.ra_hsc_randoms_col],
             self.randoms2[self.dec_hsc_randoms_col]
             ]
-        logger.info(f'Randoms2 shape {self.randoms2[self.ra_hsc_randoms_col].shape}')
+        logger.info(f'Randoms2 length {len(self.randoms2)}')
         logger.info('Subsampling randoms2 ...')
         subsampler = KMeansSubsampler(
             mode='angular', 
@@ -471,7 +471,7 @@ class DESIAutoCorrelation(CorrelationMeta):
     def run_corr(self):
 
         tpcf = TwoPointCorrelationFunction(
-            edges=(np.linspace(0., 200., 51), np.linspace(-40, 40, 81)),#self.bin_distances,
+            edges=(np.linspace(0., 200., 51), np.linspace(-40, 40, 81)),
             data_positions1=[
                 self.data1[self.ra_desi_col][self.z_mask_d1], 
                 self.data1[self.dec_desi_col][self.z_mask_d1],
@@ -720,6 +720,22 @@ def fetch_hsc_files(randoms=False, include_dud=False, sims=False):
     except FileNotFoundError:
         logging.error(f"HSC catalog file not found and randoms = {randoms}") 
         raise
+
+def figure_out_class(tgt1, tgt2=None, jackknife=False):
+    if tgt2 is None:
+        tgt2 = tgt1
+    if tgt1 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']:
+        if tgt2 in ['HSC']:
+            if jackknife:
+                return JackknifeCrossCorrelation
+            else:
+                return CrossCorrelation
+    if tgt1 in ['HSC']:
+        return HSCAutoCorrelation
+    if tgt2 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']:
+        return DESIAutoCorrelation
+    else:
+        raise ValueError(f'Unknown targets {tgt1}, {tgt2}')
 
 class CorrFileReader():
     '''
