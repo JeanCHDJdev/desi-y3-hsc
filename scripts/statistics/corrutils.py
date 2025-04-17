@@ -70,10 +70,10 @@ class CorrelationMeta(ABC):
         bin_dir = Path(root, 'bins')
         if not bin_dir.exists():
             bin_dir.mkdir(parents=True)
-            np.savez(
-                Path(bin_dir, 'bins_redshift.npz'),
-                **{k: v for k, v in CorrelationMeta.bins_redshift.items()}
-            )
+        np.savez(
+            Path(bin_dir, 'bins_redshift.npz'),
+            **{k: v for k, v in CorrelationMeta.bins_redshift.items()}
+        )
 
     def __init__(
             self, 
@@ -748,7 +748,7 @@ def figure_out_class(tgt1, tgt2=None, jackknife=False):
         tgt2 = tgt1
     if tgt1 is None:
         tgt1 = tgt2
-        
+
     if tgt1 != tgt2:
         # cross-correlation case
         if tgt1 in desi_avb:

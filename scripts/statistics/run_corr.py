@@ -183,19 +183,17 @@ def main():
 
     if not Path(output_dir).exists():
         Path(output_dir).mkdir(parents=True, exist_ok=True)
-    if not Path(output_dir, 'bins').exists():
-        Path(output_dir, 'bins').mkdir(parents=True, exist_ok=True)
-    print('=' * 80)
-
+    logger.info('Saving bins ...')
     cu.CorrelationMeta.save_bins(output_dir) 
+    print('=' * 80)
     
     logger.info(
         f'Sample rate on DESI randoms: {sample_rate_desi} and on HSC randoms: {sample_rate_hsc}\n'
         )
     logger.info(f'Number of threads: {nproc}\n')
     logger.info(f'Output directory: {output_dir}\n')
-    logger.info(f'Bins redshift :{bins_redshift}\n')
-    logger.info(f'Fiducial bin distances: {cu.CorrelationMeta.bin_distances}\n')
+    strbins = '\n'.join(f"{k} : {v}" for k, v in cu.CorrelationMeta.bins_redshift.items())
+    logger.info(f'Bins :{strbins}\n')
 
     moc_list = sorted(cu.CorrelationMeta.moc_list)
     if patches is not None:
@@ -219,6 +217,9 @@ def main():
 
         # tgt1 is always a list of DESI type targets
         for t1, t2 in zip(tgt1, tgt2):
+            # for logging purposes, no real use here
+            bin1 = cu.CorrelationMeta.bins_redshift[t1] 
+            bin2 = cu.CorrelationMeta.bins_redshift[t2]
 
             logger.memory_usage()
             corrclass = cu.figure_out_class(t1, t2, jackknife)
