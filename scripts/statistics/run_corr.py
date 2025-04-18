@@ -109,6 +109,13 @@ def parse_args():
         'Default is `os.cpu_count()-2`.'
         )
     parser.add_argument(
+        '-m',
+        '--use_mpi',
+        action='store_true',
+        help='Use MPI for parallelization. '
+        'Default is False.'
+    )
+    parser.add_argument(
         '-p',
         '--patches', 
         type=int, 

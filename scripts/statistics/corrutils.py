@@ -16,7 +16,7 @@ from pathlib import Path
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 
-from scripts.statistics import cosmtools as ct
+from scripts.statistics import cosmotools as ct
 from pycorr import TwoPointCorrelationFunction, KMeansSubsampler
 
 class CorrelationMeta(ABC):
@@ -788,7 +788,11 @@ class CorrFileReader():
         return self.get_file(b1, b1, tgt, tgt, moc)
 
     def get_bins(self, name):
-        return np.loadtxt(f'{self.ROOT}/bins/bins_{name}.txt', dtype=float)
+        bins = np.load(f'{self.ROOT}/bins/bins_redshift.npz')
+        if name not in bins:
+            raise ValueError(f"Unknown bin name {name}. Available bins are {bins.files}")
+        else:
+            return bins[name]
     
     def get_cov_results(self, tgt1, tgt2='HSC'):
         """
@@ -801,7 +805,7 @@ class CorrFileReader():
             files = covdir.glob(f'*.npy')
             return list(files)
         
-    def get_cov_file(self, b1, b2, moc, tgt1, tgt2='HSC'):
+    def get_cov_file(self, b1, b2, tgt1, tgt2='HSC', moc=0):
         """
         Get the covariance file name for given redshift bins and MOC.
         """
