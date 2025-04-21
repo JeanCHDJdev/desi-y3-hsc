@@ -89,22 +89,29 @@ def make_hscy3_cat(
             final_lenscat = vstack([final_lenscat,lenscat])
     lens_bin_mask = final_lenscat['hsc_y3_zbin']>0
     final_lenscat = final_lenscat[lens_bin_mask]
+    rename_map = {
+        'i_ra': 'ra',
+        'i_dec': 'dec',
+        'i_hsmshaperegauss_e1': 'e_1',
+        'i_hsmshaperegauss_e2': 'e_2',
+        'i_hsmshaperegauss_derived_weight': 'weight',
+        'i_hsmshaperegauss_derived_rms_e': 'e_rms',
+        'i_hsmshaperegauss_derived_shear_bias_m': 'm_corr',
+        'i_hsmshaperegauss_derived_shear_bias_c1': 'c_1',
+        'i_hsmshaperegauss_derived_shear_bias_c2': 'c_2',
+        'i_hsmshaperegauss_resolution': 'resolution',
+        'i_apertureflux_10_mag': 'i_aperture_mag',
+        'i_cmodel_mag': 'i_cm_mag',
+        'i_cmodel_magerr': 'i_cm_magerr',
+        'i_cmodel_flux': 'i_cm_flux',
+        'i_cmodel_fluxerr': 'i_cm_fluxerr',
+        'i_cmodel_flag': 'i_cm_flag',
+        'hsc_y3_zbin': 'z_bin',
+    }
+    
+    for old, new in rename_map.items():
+        final_lenscat.rename_column(old, new)
 
-    final_lenscat.rename_column('i_ra','ra')
-    final_lenscat.rename_column('i_dec','dec')
-    final_lenscat.rename_column('i_hsmshaperegauss_e1','e_1')
-    final_lenscat.rename_column('i_hsmshaperegauss_e2','e_2')
-    final_lenscat.rename_column('i_hsmshaperegauss_derived_weight','weight')
-    final_lenscat.rename_column('i_hsmshaperegauss_derived_rms_e','e_rms')
-    final_lenscat.rename_column('i_hsmshaperegauss_derived_shear_bias_m','m_corr')
-    final_lenscat.rename_column('i_hsmshaperegauss_derived_shear_bias_c1','c_1')
-    final_lenscat.rename_column('i_hsmshaperegauss_derived_shear_bias_c2','c_2')
-    final_lenscat.rename_column('i_hsmshaperegauss_resolution','resolution')
-    final_lenscat.rename_column('i_apertureflux_10_mag','i_aperture_mag')
-    final_lenscat.rename_column('i_cmodel_mag','i_cm_mag')
-    final_lenscat.rename_column('i_cmodel_magerr','i_cm_magerr')
-    final_lenscat.rename_column('i_cmodel_flag','i_cm_flag')
-    final_lenscat.rename_column('hsc_y3_zbin','z_bin')
     e1_psf,e2_psf = get_psf_ellip(final_lenscat,return_shear=False)
     final_lenscat['e1_psf'] = e1_psf
     final_lenscat['e2_psf'] = e2_psf
@@ -126,6 +133,8 @@ def make_hscy3_cat(
         'i_aperture_mag',
         'i_cm_mag',
         'i_cm_magerr',
+        'i_cm_flux',
+        'i_cm_fluxerr',
         'i_cm_flag',
         ]
     if add_photz:
