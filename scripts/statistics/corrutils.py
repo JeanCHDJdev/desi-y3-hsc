@@ -83,6 +83,7 @@ class CorrelationMeta(ABC):
             tgt2=None,
             output_dir=None, 
             sims=False,
+            pip=False,
             sample_rate_desi=1,
             sample_rate_hsc=1, 
             nproc=None
@@ -151,8 +152,8 @@ class CorrelationMeta(ABC):
 
         # Grabbing the catalogs on initialisation
         if self.use_desi:
-            fs['catalog1'] = fetch_desi_files(tgt1, randoms=False, sims=sims)
-            fs['randoms1'] = fetch_desi_files(tgt1, randoms=True, sims=sims)
+            fs['catalog1'] = fetch_desi_files(tgt1, randoms=False, pip_weights=pip, sims=sims)
+            fs['randoms1'] = fetch_desi_files(tgt1, randoms=True, pip_weights=pip, sims=sims)
 
         if self.use_hsc:
             fs['catalog2'] = fetch_hsc_files(randoms=False, sims=sims, include_dud=False)
@@ -305,6 +306,8 @@ class CrossCorrelation(CorrelationMeta):
             tgt2 : str,
             moc : MOC, 
             output_dir :str | Path, 
+            sims : bool=False,
+            pip : bool=False,
             nproc : int=None, 
             sample_rate_desi : int=1, 
             sample_rate_hsc : int=1,
@@ -315,6 +318,8 @@ class CrossCorrelation(CorrelationMeta):
             tgt1=tgt1,
             tgt2=tgt2,
             moc=moc,
+            sims=sims,
+            pip=pip,
             output_dir=output_dir,
             nproc=nproc,
             sample_rate_desi=sample_rate_desi,
@@ -364,6 +369,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             output_dir :str | Path, 
             nproc : int=None, 
             sims : bool=False,
+            pip : bool=False,
             sample_rate_desi : int=1, 
             sample_rate_hsc : int=1,
             logger : logging.Logger=None,
@@ -377,6 +383,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             moc=moc,
             output_dir=output_dir,
             sims=sims,
+            pip=pip,
             nproc=nproc,
             sample_rate_desi=sample_rate_desi,
             sample_rate_hsc=sample_rate_hsc,
@@ -470,6 +477,8 @@ class DESIAutoCorrelation(CorrelationMeta):
             tgt1 : str,
             tgt2 : str, 
             moc : MOC, 
+            sims : bool,
+            pip : bool,
             output_dir :str | Path, 
             nproc:int=None, 
             sample_rate_desi:int=1, 
@@ -480,6 +489,8 @@ class DESIAutoCorrelation(CorrelationMeta):
             tgt1=tgt1,
             tgt2=tgt2,
             moc=moc,
+            sims=False,
+            pip=False,
             output_dir=output_dir,
             nproc=nproc,
             sample_rate_desi=sample_rate_desi,

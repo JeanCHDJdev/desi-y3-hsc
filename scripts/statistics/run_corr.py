@@ -88,10 +88,17 @@ def parse_args():
         'Defaults to 1.'
     )
     parser.add_argument(
+        '-p',
+        '--pip',
+        default=False,
+        action='store_true',
+        help='Whether to use the PIP weighting scheme. '
+    )
+    parser.add_argument(
         '-s',
         '--sims',
-        type=bool,
         default=False,
+        action='store_true',
         help='Whether to use the simulated data. '
     )
     parser.add_argument(
@@ -116,13 +123,13 @@ def parse_args():
         'Default is False.'
     )
     parser.add_argument(
-        '-p',
-        '--patches', 
+        '-a',
+        '--areas', 
         type=int, 
         nargs='+',
         default=None,
         choices=range(1, 4),
-        help='Patches of the sky to cross-correlate. '
+        help='areas of the sky to cross-correlate. '
         )
     
     return parser.parse_args()
@@ -135,27 +142,31 @@ def main():
     jackknife = args.jackknife
     
     sims = args.sims
+    pip = args.pip
     sample_rate_desi = args.sample_rate_desi
     sample_rate_hsc = args.sample_rate_hsc
 
     output_dir = args.output_dir
     nproc = args.nproc
     log = args.log
-    patches = args.patches
+    areas = args.areas
+    
+    if sims and pip:
+        raise ValueError('Cannot use both simulated and pip weighting scheme at the same time.')
     
     print(f'Running cross-correlation for the following targets: {tgt1}x{tgt2}')
 
-    if patches is not None:
-        patches = np.array([int(p) for p in patches])
-        assert len(patches) > 0, 'Patches should be a list of integers'
+    if areas is not None:
+        areas = np.array([int(p) for p in areas])
+        assert len(areas) > 0, 'areas should be a list of integers'
         assert np.all(
-            (0 < patches) & (patches < len(cu.CorrelationMeta.moc_list))
+            (0 < areas) & (areas < len(cu.CorrelationMeta.moc_list))
             ), (
-                f'Patches should be less than {len(cu.CorrelationMeta.moc_list)} '
+                f'areas should be less than {len(cu.CorrelationMeta.moc_list)} '
                 'and greater than 0'
                 )
     else:
-        patches = np.arange(len(cu.CorrelationMeta.moc_list))
+        areas = np.arange(len(cu.CorrelationMeta.moc_list))
 
     ## logging infrastructure
     if log is None:
@@ -169,6 +180,7 @@ def main():
     
     corrargs = {
         'sims': sims,
+        'pip': pip,
         'sample_rate_desi': sample_rate_desi,
         'sample_rate_hsc': sample_rate_hsc,
         'nproc': nproc,
@@ -203,9 +215,9 @@ def main():
     logger.info(f'Bins :{strbins}\n')
 
     moc_list = sorted(cu.CorrelationMeta.moc_list)
-    if patches is not None:
-        moc_list = [moc_list[p] for p in patches]
-        logger.info(f'Using patches {patches} ... {[Path(moc_list[p]).stem for p in patches]}\n')
+    if areas is not None:
+        moc_list = [moc_list[p] for p in areas]
+        logger.info(f'Using areas {areas} ... {[Path(moc_list[p]).stem for p in areas]}\n')
 
     # some more checks on targets
     if isinstance(tgt2, str): 
