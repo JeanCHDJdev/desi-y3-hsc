@@ -90,6 +90,21 @@ class CorrelationMeta(ABC):
             ):
         assert logger is not None, 'Logger not provided'
         self.logger = logger
+        
+        # rename the class attributes if using simulations bc not the same class names
+        self.sims = sims
+        if self.sims:
+            self.ra_hsc_col = 'RA'
+            self.dec_hsc_col = 'DEC'
+            self.ra_hsc_randoms_col = None
+            self.dec_hsc_randoms_col = None
+            self.w_hsc_col = None
+            self.z_hsc_col = 'Z'
+
+            self.ra_desi_col = 'ra'
+            self.dec_desi_col = 'dec'
+            self.w_desi_col = None
+            self.z_desi_col = 'z'
 
         self.autocorr = False
         self.use_hsc = False
@@ -153,11 +168,13 @@ class CorrelationMeta(ABC):
         # Grabbing the catalogs on initialisation
         if self.use_desi:
             fs['catalog1'] = fetch_desi_files(tgt1, randoms=False, pip_weights=pip, sims=sims)
-            fs['randoms1'] = fetch_desi_files(tgt1, randoms=True, pip_weights=pip, sims=sims)
+            if not sims:
+                fs['randoms1'] = fetch_desi_files(tgt1, randoms=True, pip_weights=pip, sims=sims)
 
         if self.use_hsc:
             fs['catalog2'] = fetch_hsc_files(randoms=False, sims=sims, include_dud=False)
-            fs['randoms2'] = fetch_hsc_files(randoms=True, sims=sims, include_dud=False)
+            if not sims:
+                fs['randoms2'] = fetch_hsc_files(randoms=True, sims=sims, include_dud=False)
 
         # Loading the MOC footprint
         self.moc = moc
@@ -173,6 +190,8 @@ class CorrelationMeta(ABC):
         if 'randoms1' in self.fs:
             trd = time.time()
             self.randoms1 = sample_randoms_on_moc(
+                # use onle the first 5 randoms for now, it's fine... 
+                # could do more but not really worth the hassle
                 self.fs['randoms1'][:5],
                 ra_col=self.ra_desi_col,
                 dec_col=self.dec_desi_col,
@@ -180,12 +199,13 @@ class CorrelationMeta(ABC):
                 z_col=self.z_desi_col,
                 moc=self.moc,
                 )
-            all_r = len(self.randoms1)
+            all_r_length = len(self.randoms1)
             self.randoms1 = self.randoms1[::self.sample_rate_desi]
-            samp_r = len(self.randoms1)
+            samp_r_length = len(self.randoms1)
         
             logger.info(
-                f'Collated DESI randoms in {time.time()-trd:.2f}s. Reduction : {samp_r/all_r*100:.2f}% ({all_r} -> {samp_r})'
+                f'Collated DESI randoms in {time.time()-trd:.2f}s. ' 
+                f'Reduction : {samp_r_length/all_r_length*100:.2f}% ({all_r_length} -> {samp_r_length})'
                 )
 
         if 'randoms2' in self.fs:
@@ -198,11 +218,12 @@ class CorrelationMeta(ABC):
                 z_col=None,
                 moc=self.moc,
                 )
-            all_r = len(self.randoms2)
+            all_r_length = len(self.randoms2)
             self.randoms2 = self.randoms2[::self.sample_rate_hsc]
-            samp_r = len(self.randoms2)
+            samp_r_length = len(self.randoms2)
             logger.info(
-                f'Collated HSC randoms in {time.time()-trh:.2f}s. Reduction : {samp_r/all_r*100:.2f}% ({all_r} -> {samp_r})'
+                f'Collated HSC randoms in {time.time()-trh:.2f}s. ' 
+                f'Reduction : {samp_r_length/all_r_length*100:.2f}% ({all_r_length} -> {samp_r_length})'
                 )
 
         if self.use_desi:
@@ -211,27 +232,29 @@ class CorrelationMeta(ABC):
                 self.fs['catalog1'], 
                 ra_col=self.ra_desi_col, 
                 dec_col=self.dec_desi_col, 
-                weight_col=self.w_desi_col, 
+                # no weights when cross correlating simulations
+                weight_col=self.w_desi_col if not sims else None, 
                 z_col=self.z_desi_col,
                 moc=self.moc
                 )
-            logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds')
+            logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds ({len(self.data1)} rows)')
         if self.use_hsc:
             tih = time.time()
             self.data2 = sample_file_on_moc(
                 self.fs['catalog2'], 
                 ra_col=self.ra_hsc_col, 
                 dec_col=self.dec_hsc_col, 
-                weight_col=self.w_hsc_col,
+                weight_col=self.w_hsc_col if not sims else None,
                 z_col=self.z_hsc_col, 
                 moc=self.moc
                 )
-            logger.info(f'Read HSC data in {time.time()-tih:.2f} seconds')
+            logger.info(f'Read HSC data in {time.time()-tih:.2f} seconds ({len(self.data2)} rows)')
 
         # Setup redshift masks
         if self.use_desi:
             self.zmask_data1 = np.digitize(self.data1[self.z_desi_col], bin_redshift1, right=True)
-            self.zmask_randoms1 = np.digitize(self.randoms1[self.z_desi_col], bin_redshift1, right=True)
+            if not self.sims:
+                self.zmask_randoms1 = np.digitize(self.randoms1[self.z_desi_col], bin_redshift1, right=True)
         if self.use_hsc:
             self.zmask_data2 = np.digitize(self.data2[self.z_hsc_col], bin_redshift2, right=True)
 
@@ -247,7 +270,8 @@ class CorrelationMeta(ABC):
     @abstractmethod
     def run_corr(self):
         ''' 
-        Abstract base method for running the correlation function
+        Abstract base method for running the correlation function, has to be overridden
+        by inheriting classes.
         '''
         raise NotImplementedError(
             'run_corr() not implemented in the derived class. '
@@ -255,7 +279,7 @@ class CorrelationMeta(ABC):
     
     def run(self, bin_index1, bin_index2, moc_index):
         '''
-        Abstract base method for running the correlation function
+        Base method to call when running cross corr.
         '''
         if self.autocorr:
             desccorr = self.tgt1
@@ -281,15 +305,18 @@ class CorrelationMeta(ABC):
 
         if self.use_desi:
             self.logger.info(
-                f'N data {self.tgt1}: {np.sum(self.z_mask_d1)}' + f', N randoms {self.tgt1}: {np.sum(self.z_mask_r1)}'
+                f'N data {self.tgt1}: {np.sum(self.z_mask_d1)}' + 
+                f', N randoms {self.tgt1}: {np.sum(self.z_mask_r1)}'
                 )
         if self.use_hsc and not self.autocorr:
             self.logger.info(
-                f'N data {self.tgt2}: {np.sum(self.z_mask_d2)}' + f', N randoms {self.tgt2}: {len(self.randoms2)}'
+                f'N data {self.tgt2}: {np.sum(self.z_mask_d2)}' + 
+                f', N randoms {self.tgt2}: {len(self.randoms2)}'
                 )
         if self.use_hsc and self.autocorr:
             self.logger.info(
-                f'N data {self.tgt1}: {np.sum(self.z_mask_d1)}' + f', N randoms {self.tgt1}: {len(self.randoms1)}'
+                f'N data {self.tgt1}: {np.sum(self.z_mask_d1)}' + 
+                f', N randoms {self.tgt1}: {len(self.randoms1)}'
                 )
 
         ## assertion safeties :
@@ -300,32 +327,8 @@ class CorrelationMeta(ABC):
 
 
 class CrossCorrelation(CorrelationMeta):
-    def __init__(
-            self, 
-            tgt1 : str, 
-            tgt2 : str,
-            moc : MOC, 
-            output_dir :str | Path, 
-            sims : bool=False,
-            pip : bool=False,
-            nproc : int=None, 
-            sample_rate_desi : int=1, 
-            sample_rate_hsc : int=1,
-            logger:logging.Logger=None
-            ):
-
-        super().__init__(
-            tgt1=tgt1,
-            tgt2=tgt2,
-            moc=moc,
-            sims=sims,
-            pip=pip,
-            output_dir=output_dir,
-            nproc=nproc,
-            sample_rate_desi=sample_rate_desi,
-            sample_rate_hsc=sample_rate_hsc,
-            logger=logger
-            )
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     def run_corr(self):
 
@@ -362,40 +365,23 @@ class CrossCorrelation(CorrelationMeta):
 
 class JackknifeCrossCorrelation(CorrelationMeta):
     def __init__(
-            self, 
-            tgt1 : str, 
-            tgt2 : str, 
-            moc : MOC, 
-            output_dir :str | Path, 
-            nproc : int=None, 
-            sims : bool=False,
-            pip : bool=False,
-            sample_rate_desi : int=1, 
-            sample_rate_hsc : int=1,
-            logger : logging.Logger=None,
-            nside : int=256, # default seems to be 512 lets go for lower for now as a test
-            nsamples : int=64, # default was 128
-            seed : int=42
-        ):
-        super().__init__(
-            tgt1=tgt1, 
-            tgt2=tgt2,
-            moc=moc,
-            output_dir=output_dir,
-            sims=sims,
-            pip=pip,
-            nproc=nproc,
-            sample_rate_desi=sample_rate_desi,
-            sample_rate_hsc=sample_rate_hsc,
-            logger=logger
-        )
+        self,
+        nside: int = 256,
+        nsamples: int = 64,
+        seed: int = 42,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.nside = nside
+        self.nsamples = nsamples
+        self.seed = seed
 
         rp2 = [
             self.randoms2[self.ra_hsc_randoms_col],
             self.randoms2[self.dec_hsc_randoms_col]
             ]
-        logger.info(f'Randoms2 length {len(self.randoms2)}')
-        logger.info('Subsampling randoms2 with KMeansSubsampler...')
+        self.logger.info(f'Data2 length {len(self.data2)} and randoms2 length {len(self.randoms2)}')
+        self.logger.info('Subsampling data2 with KMeansSubsampler...')
         subsampler = KMeansSubsampler(
             mode='angular', 
             # The largest, most complete dataset we have is rp2
@@ -412,8 +398,14 @@ class JackknifeCrossCorrelation(CorrelationMeta):
 
     def run_corr(self):
         
-        self.logger.info(f'N data1: {np.sum(self.z_mask_d1)}' + f', N randoms1: {np.sum(self.z_mask_r1)}')
-        self.logger.info(f'N data2: {np.sum(self.z_mask_d2)}' + f', N randoms2: {len(self.randoms2)}')
+        self.logger.info(
+            f'N data1: {np.sum(self.z_mask_d1)}' + 
+            f', N randoms1: {np.sum(self.z_mask_r1)}'
+            )
+        self.logger.info(
+            f'N data2: {np.sum(self.z_mask_d2)}' + 
+            f', N randoms2: {len(self.randoms2)}'
+            )
 
         dp1 = [
             self.data1[self.ra_desi_col][self.z_mask_d1], 
@@ -633,11 +625,18 @@ def sample_randoms_on_moc(
     
     return np.concatenate(randoms)
 
-def sample_file_on_moc(file, ra_col, dec_col, weight_col, z_col, moc=None):
+def sample_file_on_moc(file, ra_col, dec_col, weight_col=None, z_col=None, moc=None):
 
     with fio.FITS(str(file)) as f:
         tbl = f[1]
-        data = tbl.read(columns=[ra_col, dec_col, weight_col, z_col])
+        cols_to_read = [ra_col, dec_col, weight_col, z_col]
+        if weight_col is None:
+            cols_to_read = [ra_col, dec_col, z_col]
+        if z_col is None:
+            cols_to_read = [ra_col, dec_col, weight_col]
+        if weight_col is None and z_col is None:
+            cols_to_read = [ra_col, dec_col]
+        data = tbl.read(columns=cols_to_read)
         if moc is not None:
             print(f"Filtering {tbl.get_nrows()} {len(data)} rows in {Path(file).stem} using MOC")
             coords = SkyCoord(data[ra_col] * u.deg, data[dec_col] * u.deg, frame='icrs')
@@ -698,10 +697,16 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
 
     return logger
 
-def fetch_desi_files(tgt, randoms=False, pip_weights=False, sims=False):
+def fetch_desi_files(tgt, randoms=False, pip_weights=False, sims=False, sims_version=1):
     try:
         if sims:
-            raise NotImplementedError
+            if randoms:
+                # no randoms in simulations
+                return None
+            return Path(
+                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims',
+                f'desi_targets_sim_{tgt}_v{sims_version}.fits'
+                )
         else:
             root = Path(
                 '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/'
@@ -721,16 +726,15 @@ def fetch_desi_files(tgt, randoms=False, pip_weights=False, sims=False):
         logging.error(f"Permission denied accessing DESI files and randoms = {randoms}")
         raise
 
-def fetch_hsc_files(randoms=False, include_dud=False, sims=False):
+def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=1):
     try:
-        if sims and randoms:
-            root = Path(
-                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/sims'
-                )
-            raise NotImplementedError
-        elif sims:
+        if sims:
+            if randoms:
+                # no randoms in simulations (?)
+                return None
             return Path(
-                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/sims/hsc_y3_sims.fits'
+                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/',
+                f'hscy3_sim_v{sims_version}.fits'
                 )
         elif randoms:
             #WARNING : this path root currently does not contain D/UD randoms as they
@@ -738,7 +742,9 @@ def fetch_hsc_files(randoms=False, include_dud=False, sims=False):
             root = Path(
                 '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/randoms'
                 )
-            return list(root.glob(f'edge_sc_cr_hscr{"*" if include_dud else "[0-9]"}.fits'))
+            return list(
+                root.glob(f'edge_sc_cr_hscr{"*" if include_dud else "[0-9]"}.fits')
+                )
         elif not sims and not randoms:
             return Path(
                 '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits'
