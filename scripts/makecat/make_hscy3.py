@@ -2,7 +2,7 @@
 This script modifies the original `make_hscy3.py` to make a HSC Y3 catalog
 with dnnz photo-zs. 
 '''
-from astropy.table import Table,join,vstack
+from astropy.table import Table, join, vstack, hstack
 from glob import glob
 from tqdm import tqdm
 import fitsio as fio
@@ -30,20 +30,23 @@ def get_psf_ellip(catalog, return_shear=False):
         raise ValueError("Input catalog does not have required coulmn name")
 
     if return_shear:
-        return (psf_mxx - psf_myy) / (psf_mxx + psf_myy) / 2.0, psf_mxy / (
-            psf_mxx + psf_myy
+        return (
+            (psf_mxx - psf_myy) / (psf_mxx + psf_myy) / 2.0, 
+            psf_mxy / (psf_mxx + psf_myy)
         )
     else:
-        return (psf_mxx - psf_myy) / (psf_mxx + psf_myy), 2.0 * psf_mxy / (
-            psf_mxx + psf_myy
-        )
+        return (
+            (psf_mxx - psf_myy) / (psf_mxx + psf_myy), 
+            2.0 * psf_mxy / (psf_mxx + psf_myy)
+            )
+    
 
 def make_hscy3_cat(
         fpath_cats = "/pscratch/sd/x/xiangchl/data/catalog/hsc_year3_shape/",
         fpath_primcats = "catalog_obs_reGaus_public/",
         fpath_secondary = "/global/cfs/cdirs/desicollab/science/c3/DESI-Lensing/prelim_hscy3/gfarm.ipmu.jp/~surhud/S19ACatalogs/catalog_tracts/",
-        field_names = ["GAMA09H","GAMA15H","HECTOMAP","VVDS","WIDE12H","XMM"],
-        use_bmode_mask = True,
+        field_names = ["GAMA09H", "GAMA15H", "HECTOMAP", "VVDS", "WIDE12H", "XMM"],
+        use_bmode_mask = True, #True
         add_photz = True,
         photoz_method = "dnnz",
         check_all_galaxies = False,
@@ -52,6 +55,7 @@ def make_hscy3_cat(
     for field_name in field_names:
         pth = fpath_cats + fpath_primcats + f'{field_name}.fits'
         lenscat = Table.read(pth)
+
         if use_bmode_mask:
             lenscat = lenscat[lenscat["b_mode_mask"]]
         if add_photz:
@@ -68,10 +72,19 @@ def make_hscy3_cat(
                 pz_prefix + "risk_best",
                 pz_prefix + "std_best",
             ]
-            mag_columns = ['object_id', 'i_cmodel_mag', 'i_cmodel_magerr', 'i_cmodel_flag']
-
+            mag_columns = [
+                'object_id',
+                'i_cmodel_mag',
+                'i_cmodel_magerr', 
+                ]
+            for mag in ['g', 'i', 'r', 'z', 'y']:
+                mag_columns.extend([
+                    f'forced_{mag}_cmodel_mag', 
+                    f'forced_{mag}_cmodel_magerr', 
+                    f'forced_{mag}_cmodel_flag'
+                ])
             
-            for secondary_cat in tqdm(secondary_cats, desc=f"Processing {field_name}"):
+            for secondary_cat in tqdm(secondary_cats, desc=f"{field_name}"):
                 mag_cat = secondary_cat.replace('_pz.fits', '_no_m.fits')
 
                 with fio.FITS(mag_cat) as f:
@@ -80,15 +93,18 @@ def make_hscy3_cat(
                 with fio.FITS(secondary_cat) as f:
                     hdul_nofz = Table(f[1].read(columns=columns_pz))
                 
-                joint_pz_tab = join(lenscat, hdul_nofz,keys='object_id', join_type='inner')
-                joint_mag_tab = join(lenscat, hudl_mag, keys='object_id', join_type='inner')
-                final_lenscat = vstack([final_lenscat, joint_pz_tab, joint_mag_tab])
+                joint_pz_mag = join(hudl_mag, hdul_nofz, keys='object_id', join_type='inner')
+                joint_tab = join(lenscat, joint_pz_mag, keys='object_id', join_type='inner')
+
+                final_lenscat = vstack([final_lenscat, joint_tab])
+
             if check_all_galaxies:
                 assert set(lenscat['object_id']).issubset(set(final_lenscat['object_id']))
         else:
             final_lenscat = vstack([final_lenscat,lenscat])
-    lens_bin_mask = final_lenscat['hsc_y3_zbin']>0
-    final_lenscat = final_lenscat[lens_bin_mask]
+    # can do this later...
+    #lens_bin_mask = final_lenscat['hsc_y3_zbin']>0
+    #final_lenscat = final_lenscat[lens_bin_mask]
     rename_map = {
         'i_ra': 'ra',
         'i_dec': 'dec',
@@ -103,11 +119,15 @@ def make_hscy3_cat(
         'i_apertureflux_10_mag': 'i_aperture_mag',
         'i_cmodel_mag': 'i_cm_mag',
         'i_cmodel_magerr': 'i_cm_magerr',
-        'i_cmodel_flux': 'i_cm_flux',
-        'i_cmodel_fluxerr': 'i_cm_fluxerr',
-        'i_cmodel_flag': 'i_cm_flag',
         'hsc_y3_zbin': 'z_bin',
     }
+    rename_map.update(
+        {
+            f'forced_{mag}_cmodel_mag': f'forced_{mag}_cm_mag',
+            f'forced_{mag}_cmodel_magerr': f'forced_{mag}_cm_magerr',
+            f'forced_{mag}_cmodel_flag': f'forced_{mag}_cm_flag',
+        } for mag in ['g', 'r', 'i', 'z', 'y']
+    )
     
     for old, new in rename_map.items():
         final_lenscat.rename_column(old, new)
@@ -133,9 +153,12 @@ def make_hscy3_cat(
         'i_aperture_mag',
         'i_cm_mag',
         'i_cm_magerr',
-        'i_cm_flux',
-        'i_cm_fluxerr',
-        'i_cm_flag',
+        ]
+    for mag in ['g', 'r', 'i', 'z', 'y']:
+        all_columns += [
+            f'forced_{mag}_cm_mag',
+            f'forced_{mag}_cm_magerr',
+            f'forced_{mag}_cm_flag'
         ]
     if add_photz:
         all_columns += [
@@ -158,6 +181,6 @@ def make_hscy3_cat(
 if __name__=="__main__":
     final_lenscat = make_hscy3_cat()
     final_lenscat.write(
-        "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits",
+        "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat_with_grizy.fits",
         overwrite=True
         )
