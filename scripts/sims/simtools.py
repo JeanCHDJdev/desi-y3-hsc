@@ -26,6 +26,7 @@ class BuzzardCatalog():
             )
         self.TRUTH = self.ROOT_BUZZARD / 'truth'
         self.DESI_TGTS = self.ROOT_BUZZARD / 'desi_targets_v1.2'
+        self.DESI_TGTS_RANDOMS = self.ROOT_BUZZARD / 'desi_targets'
         self.MAGS = self.ROOT_BUZZARD / 'surveymags'
 
         self.prefix = f'Chinchilla-{self.buzzard_index}_cam_rs_scat_shift_lensed.'
@@ -71,3 +72,21 @@ class BuzzardCatalog():
         if dec_flip:
             theta = np.pi - theta
         return hp.ang2pix(self.nside_buzzard, theta, phi, nest=True)
+    
+    def fetch_desi_randoms(self, target):
+        assert target in ['bgs', 'lrg', 'elg'], "Target must be one of ['BGS', 'LRG', 'ELG']"
+        return Path(
+            self.DESI_TGTS_RANDOMS,
+            f'{target}_rand{self.suffix}'
+        )
+    
+
+def sample_on_hsc(active_hsc_pixels, nside_hsc, ra, dec):
+    '''
+    Given ra, dec coordinates, give a mask on ra and dec 
+    where these coordinates are in the active hsc pixels
+    (with nside provided). nest scheme is true.
+    '''
+
+    hsc_pixels = hp.ang2pix(nside_hsc, np.radians(90-dec), np.radians(ra), nest=True)
+    return np.isin(hsc_pixels, active_hsc_pixels)
