@@ -16,7 +16,7 @@ from pathlib import Path
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 
-from scripts.statistics import cosmotools as ct
+from src.statistics import cosmotools as ct
 from pycorr import TwoPointCorrelationFunction, KMeansSubsampler
 
 class CorrelationMeta(ABC):
@@ -85,7 +85,7 @@ class CorrelationMeta(ABC):
             tgt2=None,
             output_dir=None, 
             sims=False,
-            pip=False,
+            weight_type='nonKP',
             sample_rate_desi=1,
             sample_rate_hsc=1, 
             nproc=None
@@ -172,8 +172,8 @@ class CorrelationMeta(ABC):
 
         # Grabbing the catalogs on initialisation
         if self.use_desi:
-            fs['catalog1'] = fetch_desi_files(tgt1, randoms=False, pip_weights=pip, sims=sims)
-            fs['randoms1'] = fetch_desi_files(tgt1, randoms=True, pip_weights=pip, sims=sims)
+            fs['catalog1'] = fetch_desi_files(tgt1, randoms=False, weight_type=weight_type, sims=sims)
+            fs['randoms1'] = fetch_desi_files(tgt1, randoms=True, weight_type=weight_type, sims=sims)
 
         if self.use_hsc:
             fs['catalog2'] = fetch_hsc_files(randoms=False, sims=sims, include_dud=False)
@@ -731,7 +731,7 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
 
     return logger
 
-def fetch_desi_files(tgt, randoms=False, pip_weights=False, sims=False, sims_version=1):
+def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_version=1):
     try:
         if sims:
             sims_root = '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/'
@@ -750,11 +750,18 @@ def fetch_desi_files(tgt, randoms=False, pip_weights=False, sims=False, sims_ver
             root = Path(
                 '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/'
                 )
-            if pip_weights:
+            if weight_type == 'PIP':
                 root = Path(root, 'PIP')
-            else:
+                path = f'{tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
+            elif weight_type == 'nonKP':
                 root = Path(root, 'nonKP')
-            path = f'{tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
+                path = f'{tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
+            elif weight_type == 'base':
+                root = Path(root)
+                path = f'{tgt}{"_[0-9]*_" if randoms else "_"}_full_HPmapcut{".ran" if randoms else ".dat"}.fits'
+            else:
+                raise ValueError(f"Unknown weight type {weight_type}")
+
             files = list(root.glob(path))
             if not files:
                 raise FileNotFoundError(f"No files found for path: {path}")

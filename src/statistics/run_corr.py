@@ -88,11 +88,13 @@ def parse_args():
         'Defaults to 1.'
     )
     parser.add_argument(
-        '-p',
-        '--pip',
-        default=False,
-        action='store_true',
-        help='Whether to use the PIP weighting scheme. '
+        '-w',
+        '--weight',
+        type=str,
+        default='nonKP',
+        choices=['nonKP', 'PIP', 'base'],
+        help='Weighting scheme to use. '
+        'Default is nonKP. '
     )
     parser.add_argument(
         '-s',
@@ -109,7 +111,7 @@ def parse_args():
         help='Log file to store run settings'
     )
     parser.add_argument(
-        '-w',
+        '-c',
         '--nproc', 
         type=int, 
         help='Number of threads to use for cross-correlation. '
@@ -142,7 +144,7 @@ def main():
     jackknife = args.jackknife
     
     sims = args.sims
-    pip = args.pip
+    weight_type = args.weight
     sample_rate_desi = args.sample_rate_desi
     sample_rate_hsc = args.sample_rate_hsc
 
@@ -150,9 +152,6 @@ def main():
     nproc = args.nproc
     log = args.log
     areas = args.areas
-    
-    if sims and pip:
-        raise ValueError('Cannot use both simulated and pip weighting scheme at the same time.')
     
     print(f'Running cross-correlation for the following targets: {tgt1}x{tgt2}')
 
@@ -180,7 +179,7 @@ def main():
     
     corrargs = {
         'sims': sims,
-        'pip': pip,
+        'weight_type': weight_type,
         'sample_rate_desi': sample_rate_desi,
         'sample_rate_hsc': sample_rate_hsc,
         'nproc': nproc,
@@ -202,9 +201,10 @@ def main():
 
     if not Path(output_dir).exists():
         Path(output_dir).mkdir(parents=True, exist_ok=True)
+
     logger.info('Saving bins ...')
     cu.CorrelationMeta.save_bins(output_dir) 
-    print('=' * 80)
+    logger.info('=' * 80)
     
     logger.info(
         f'Sample rate on DESI randoms: {sample_rate_desi} and on HSC randoms: {sample_rate_hsc}\n'
