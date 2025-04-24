@@ -28,11 +28,13 @@ class CorrelationMeta(ABC):
     dec_hsc_randoms_col = 'dec'
     w_hsc_col = 'weight'
     z_hsc_col = 'dnnz_photoz_best'
+    z_hsc_randoms_col = 'redshift'
 
     ra_desi_col = 'RA'
     dec_desi_col = 'DEC'
     w_desi_col = 'WEIGHT'
     z_desi_col = 'Z'
+    z_desi_randoms_col = 'Z'
 
     ## MOC list 
     moc_list = [
@@ -93,18 +95,21 @@ class CorrelationMeta(ABC):
         
         # rename the class attributes if using simulations bc not the same class names
         self.sims = sims
+        # override the columns if using simulations because they have different names and it's annoying
         if self.sims:
             self.ra_hsc_col = 'RA'
             self.dec_hsc_col = 'DEC'
-            self.ra_hsc_randoms_col = None
-            self.dec_hsc_randoms_col = None
+            self.ra_hsc_randoms_col = 'ra'
+            self.dec_hsc_randoms_col = 'dec'
             self.w_hsc_col = None
             self.z_hsc_col = 'Z'
+            self.z_hsc_randoms_col = 'redshift'
 
             self.ra_desi_col = 'ra'
             self.dec_desi_col = 'dec'
             self.w_desi_col = None
             self.z_desi_col = 'z'
+            self.z_desi_randoms_col = 'redshift'
 
         self.autocorr = False
         self.use_hsc = False
@@ -168,13 +173,11 @@ class CorrelationMeta(ABC):
         # Grabbing the catalogs on initialisation
         if self.use_desi:
             fs['catalog1'] = fetch_desi_files(tgt1, randoms=False, pip_weights=pip, sims=sims)
-            if not sims:
-                fs['randoms1'] = fetch_desi_files(tgt1, randoms=True, pip_weights=pip, sims=sims)
+            fs['randoms1'] = fetch_desi_files(tgt1, randoms=True, pip_weights=pip, sims=sims)
 
         if self.use_hsc:
             fs['catalog2'] = fetch_hsc_files(randoms=False, sims=sims, include_dud=False)
-            if not sims:
-                fs['randoms2'] = fetch_hsc_files(randoms=True, sims=sims, include_dud=False)
+            fs['randoms2'] = fetch_hsc_files(randoms=True, sims=sims, include_dud=False)
 
         # Loading the MOC footprint
         self.moc = moc
@@ -192,11 +195,11 @@ class CorrelationMeta(ABC):
             self.randoms1 = sample_randoms_on_moc(
                 # use onle the first 5 randoms for now, it's fine... 
                 # could do more but not really worth the hassle
-                self.fs['randoms1'][:5],
+                self.fs['randoms1'][:5] if not self.sims else self.fs['randoms1'],
                 ra_col=self.ra_desi_col,
                 dec_col=self.dec_desi_col,
                 w_col=self.w_desi_col,
-                z_col=self.z_desi_col,
+                z_col=self.z_desi_randoms_col,
                 moc=self.moc,
                 )
             all_r_length = len(self.randoms1)
@@ -215,7 +218,7 @@ class CorrelationMeta(ABC):
                 ra_col=self.ra_hsc_randoms_col,
                 dec_col=self.dec_hsc_randoms_col,
                 w_col=None,
-                z_col=None,
+                z_col=None if not self.sims else self.z_hsc_randoms_col,
                 moc=self.moc,
                 )
             all_r_length = len(self.randoms2)
@@ -244,7 +247,7 @@ class CorrelationMeta(ABC):
                 self.fs['catalog2'], 
                 ra_col=self.ra_hsc_col, 
                 dec_col=self.dec_hsc_col, 
-                weight_col=self.w_hsc_col if not sims else None,
+                weight_col=self.w_hsc_col if not self.sims else None,
                 z_col=self.z_hsc_col, 
                 moc=self.moc
                 )
@@ -252,11 +255,28 @@ class CorrelationMeta(ABC):
 
         # Setup redshift masks
         if self.use_desi:
-            self.zmask_data1 = np.digitize(self.data1[self.z_desi_col], bin_redshift1, right=True)
-            if not self.sims:
-                self.zmask_randoms1 = np.digitize(self.randoms1[self.z_desi_col], bin_redshift1, right=True)
+            self.zmask_data1 = np.digitize(
+                self.data1[self.z_desi_col], 
+                bin_redshift1, 
+                right=True
+                )
+            self.zmask_randoms1 = np.digitize(
+                self.randoms1[self.z_desi_randoms_col], 
+                bin_redshift1, 
+                right=True
+                )
         if self.use_hsc:
-            self.zmask_data2 = np.digitize(self.data2[self.z_hsc_col], bin_redshift2, right=True)
+            self.zmask_data2 = np.digitize(
+                self.data2[self.z_hsc_col], 
+                bin_redshift2, 
+                right=True
+                )
+            if self.sims:
+                self.zmask_randoms2 = np.digitize(
+                    self.randoms2[self.z_hsc_randoms_col], 
+                    bin_redshift2, 
+                    right=True
+                    )
 
         if self.use_hsc and self.autocorr:
             # in the case of autocorrelation with hsc, we move the 2nd dataset to be the first
@@ -353,7 +373,7 @@ class CrossCorrelation(CorrelationMeta):
                 ],
             data_weights1=self.data1[self.w_desi_col][self.z_mask_d1],
             data_weights2=self.data2[self.w_hsc_col][self.z_mask_d2],
-            randoms_weights1=self.randoms1[self.w_desi_col][self.z_mask_r1],
+            randoms_weights1=self.randoms1[self.w_desi_col][self.z_mask_r1] if not self.sims else None,
             randoms_weights2=None,
             nthreads=self.nproc,
             mode='theta',
@@ -423,11 +443,19 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             self.randoms2[self.ra_hsc_randoms_col],
             self.randoms2[self.dec_hsc_randoms_col]
             ]
-        dw1 = self.data1[self.w_desi_col][self.z_mask_d1]
-        dw2 = self.data2[self.w_hsc_col][self.z_mask_d2]
+        
+        if self.sims:
+            # no weights for simulations
+            dw1 = None
+            dw2 = None
+            rw1 = None
+            rw2 = None
+        else :
+            dw1 = self.data1[self.w_desi_col][self.z_mask_d1]
+            dw2 = self.data2[self.w_hsc_col][self.z_mask_d2]
 
-        rw1 = self.randoms1[self.w_desi_col][self.z_mask_r1]
-        rw2 = None
+            rw1 = self.randoms1[self.w_desi_col][self.z_mask_r1]
+            rw2 = None
 
         ds1 = self.subsampler.label(dp1)
         ds2 = self.subsampler.label(dp2)
@@ -501,7 +529,7 @@ class DESIAutoCorrelation(CorrelationMeta):
             randoms_positions1=[
                 self.randoms1[self.ra_desi_col][self.z_mask_r1],
                 self.randoms1[self.dec_desi_col][self.z_mask_r1],
-                ct.z2dist(self.randoms1[self.z_desi_col][self.z_mask_r1]),
+                ct.z2dist(self.randoms1[self.z_desi_randoms_col][self.z_mask_r1]),
                 ],
             data_weights1=self.data1[self.w_desi_col][self.z_mask_d1],
             randoms_weights1=self.randoms1[self.w_desi_col][self.z_mask_r1],
@@ -562,8 +590,12 @@ class HSCAutoCorrelation(CorrelationMeta):
 
 ## Generic methods for each class
 def process_random_file(f, ra_col, dec_col, w_col, z_col, moc):
-    if z_col is None or w_col is None:
-        cols = [ra_col, dec_col]
+    if z_col is None:
+        cols = [ra_col, dec_col, w_col]
+    elif w_col is None:
+        cols = [ra_col, dec_col, z_col]
+    elif w_col is not None and z_col is None:
+        cols = [ra_col, dec_col, z_col]
     else:
         cols = [ra_col, dec_col, w_col, z_col]
     
@@ -602,6 +634,8 @@ def sample_randoms_on_moc(
     """
     Multiprocessed random sampling with optional MOC filtering
     """
+    if isinstance(random_files, (str, Path)):
+        random_files = [random_files]
     assert len(random_files) > 0, f"No random files "
     
     if num_processes is None:
@@ -700,11 +734,16 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
 def fetch_desi_files(tgt, randoms=False, pip_weights=False, sims=False, sims_version=1):
     try:
         if sims:
+            sims_root = '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/'
             if randoms:
-                # no randoms in simulations
-                return None
+                return Path(
+                    sims_root,
+                    'randoms',
+                    f'{tgt}_ran_hsc_zcorr.fits'
+                )
             return Path(
-                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims',
+                sims_root,
+                f'v{sims_version}',
                 f'desi_targets_sim_{tgt}_v{sims_version}.fits'
                 )
         else:
@@ -729,11 +768,16 @@ def fetch_desi_files(tgt, randoms=False, pip_weights=False, sims=False, sims_ver
 def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=1):
     try:
         if sims:
+            sims_root = '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/'
             if randoms:
-                # no randoms in simulations (?)
-                return None
+                return Path(
+                    sims_root,
+                    'randoms',
+                    'HSC_randoms_zcorr.fits'
+                )
             return Path(
-                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/',
+                sims_root,
+                f'v{sims_version}',
                 f'hscy3_sim_v{sims_version}.fits'
                 )
         elif randoms:
