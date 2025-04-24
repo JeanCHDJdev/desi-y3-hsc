@@ -152,8 +152,6 @@ def main():
     nproc = args.nproc
     log = args.log
     areas = args.areas
-    
-    print(f'Running cross-correlation for the following targets: {tgt1}x{tgt2}')
 
     if areas is not None:
         areas = np.array([int(p) for p in areas])
@@ -192,12 +190,18 @@ def main():
             'nside': args.resolution,
         })
 
-    print('Running with the following settings:')
-    print(f'Output directory: {output_dir}')
-    print(f'Sample rate on DESI randoms: {sample_rate_desi}')
-    print(f'Sample rate on HSC randoms: {sample_rate_hsc}')
-    print(f'Number of threads: {nproc}')
-    print(f'Log file: {log}')
+    logger.info(f'Running cross-correlation for the following targets: {tgt1}x{tgt2}')
+    logger.info(f'Output directory: {output_dir}')
+    logger.info(
+        f'Sample rate on HSC randoms: {sample_rate_hsc}, '
+        f'on DESI randoms: {sample_rate_desi}'
+        )
+    logger.info(f'Number of threads: {nproc}')
+    if not sims:
+        logger.info(f'Weighting scheme: {weight_type}')
+    else:
+        logger.info('Using simulated data ...')
+    logger.info(f'Log file: {log}')
 
     if not Path(output_dir).exists():
         Path(output_dir).mkdir(parents=True, exist_ok=True)
