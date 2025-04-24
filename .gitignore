@@ -1,9 +1,10 @@
 # data 
 data/**
+*fits
 
 #runs
-scripts/statistics/crosscorr/**
-scripts/statistics/autos/**
+src/statistics/crosscorr/**
+src/statistics/autos/**
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
