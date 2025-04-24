@@ -119,15 +119,20 @@ def make_hscy3_cat(
         'i_apertureflux_10_mag': 'i_aperture_mag',
         'i_cmodel_mag': 'i_cm_mag',
         'i_cmodel_magerr': 'i_cm_magerr',
-        'hsc_y3_zbin': 'z_bin',
+        'hsc_y3_zbin': 'z_bin'
     }
     rename_map.update(
         {
-            f'forced_{mag}_cmodel_mag': f'forced_{mag}_cm_mag',
-            f'forced_{mag}_cmodel_magerr': f'forced_{mag}_cm_magerr',
-            f'forced_{mag}_cmodel_flag': f'forced_{mag}_cm_flag',
-        } for mag in ['g', 'r', 'i', 'z', 'y']
+        old: new
+            for mag in ['g', 'r', 'i', 'z', 'y']
+            for old, new in [
+                (f'forced_{mag}_cmodel_mag', f'forced_{mag}_cm_mag'),
+                (f'forced_{mag}_cmodel_magerr', f'forced_{mag}_cm_magerr'),
+                (f'forced_{mag}_cmodel_flag', f'forced_{mag}_cm_flag'),
+            ]
+        }
     )
+
     
     for old, new in rename_map.items():
         final_lenscat.rename_column(old, new)
