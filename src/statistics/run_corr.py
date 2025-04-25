@@ -99,9 +99,11 @@ def parse_args():
     parser.add_argument(
         '-s',
         '--sims',
-        default=False,
-        action='store_true',
-        help='Whether to use the simulated data. '
+        type=int,
+        default=0,
+        choices=[0, 1, 2, 3, 4],
+        help='Whether to use the simulated data, and which version. '
+        '0: no simulation'
     )
     parser.add_argument(
         '-l',

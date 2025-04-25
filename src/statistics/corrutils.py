@@ -90,7 +90,7 @@ class CorrelationMeta(ABC):
             tgt1=None, 
             tgt2=None,
             output_dir=None, 
-            sims=False,
+            sims_version=0,
             weight_type='nonKP',
             sample_rate_desi=1,
             sample_rate_hsc=1, 
@@ -100,7 +100,8 @@ class CorrelationMeta(ABC):
         self.logger = logger
         
         # rename the class attributes if using simulations bc not the same class names
-        self.sims = sims
+        self.sims = sims_version > 0
+        self.sims_version = sims_version
         # override the columns if using simulations because they have different names and it's annoying
         if self.sims:
             self.ra_hsc_col = 'RA'
@@ -179,15 +180,23 @@ class CorrelationMeta(ABC):
         # Grabbing the catalogs on initialisation
         logger.info(
             f'Grabbing catalogs for {tgt1} and {tgt2} ... ' 
-            f'weight_type={weight_type}, sims={sims}, '
+            f'weight_type={weight_type}, sims={self.sims}, '
             )
         if self.use_desi:
-            fs['catalog1'] = fetch_desi_files(tgt1, randoms=False, weight_type=weight_type, sims=sims)
-            fs['randoms1'] = fetch_desi_files(tgt1, randoms=True, weight_type=weight_type, sims=sims)
+            fs['catalog1'] = fetch_desi_files(
+                tgt1, randoms=False, weight_type=weight_type, sims=self.sims, sims_version=self.sims_version
+                )
+            fs['randoms1'] = fetch_desi_files(
+                tgt1, randoms=True, weight_type=weight_type, sims=self.sims, sims_version=self.sims_version
+                )
 
         if self.use_hsc:
-            fs['catalog2'] = fetch_hsc_files(randoms=False, sims=sims, include_dud=False)
-            fs['randoms2'] = fetch_hsc_files(randoms=True, sims=sims, include_dud=False)
+            fs['catalog2'] = fetch_hsc_files(
+                randoms=False, sims=self.sims, include_dud=False, sims_version=self.sims_version
+                )
+            fs['randoms2'] = fetch_hsc_files(
+                randoms=True, sims=self.sims, include_dud=False, sims_version=self.sims_version
+                )
         logger.info(fs)
 
         # Loading the MOC footprint
@@ -742,7 +751,7 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
 
     return logger
 
-def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_version=2):
+def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_version=0):
     try:
         if sims:
             sims_root = '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/'
