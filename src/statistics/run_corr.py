@@ -145,7 +145,7 @@ def main():
     tgt2 = args.tgt2
     jackknife = args.jackknife
     
-    sims = args.sims
+    sims_version = args.sims
     weight_type = args.weight
     sample_rate_desi = args.sample_rate_desi
     sample_rate_hsc = args.sample_rate_hsc
@@ -178,7 +178,7 @@ def main():
         nproc = max(os.cpu_count()-2, 1)
     
     corrargs = {
-        'sims': sims,
+        'sims_version': sims_version,
         'weight_type': weight_type,
         'sample_rate_desi': sample_rate_desi,
         'sample_rate_hsc': sample_rate_hsc,
@@ -199,7 +199,7 @@ def main():
         f'on DESI randoms: {sample_rate_desi}'
         )
     logger.info(f'Number of threads: {nproc}')
-    if not sims:
+    if not sims_version > 0:
         logger.info(f'Weighting scheme: {weight_type}')
     else:
         logger.info('Using simulated data ...')

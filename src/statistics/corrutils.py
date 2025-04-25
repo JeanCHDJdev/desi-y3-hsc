@@ -256,7 +256,7 @@ class CorrelationMeta(ABC):
                 ra_col=self.ra_desi_col, 
                 dec_col=self.dec_desi_col, 
                 # no weights when cross correlating simulations
-                weight_col=self.w_desi_col if not sims else None, 
+                weight_col=self.w_desi_col if not self.sims else None, 
                 z_col=self.z_desi_col,
                 moc=self.moc
                 )
