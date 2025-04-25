@@ -46,7 +46,13 @@ class CorrelationMeta(ABC):
         ]
 
     ## Defining fiducial bins here
-    bin_distances = np.linspace(0.01, 2, 41) #np.logspace(np.log10(0.001), np.log10(3), 71)
+    bin_distances = np.linspace(0.001, 2, 41)
+    #np.logspace(
+    #    np.log(2), 
+    #    np.log(0.001), 
+    #    51,
+    #    base=np.e
+    #)
 
     bins_bgs = np.arange(0, 0.6, 0.1) # 0 < z < 0.6
     bins_lrg = np.arange(0.4, 1.2, 0.1) # 0.4 < z < 1
@@ -171,6 +177,10 @@ class CorrelationMeta(ABC):
         fs['outdir'] = Path(self.output_dir)
 
         # Grabbing the catalogs on initialisation
+        logger.info(
+            f'Grabbing catalogs for {tgt1} and {tgt2} ... ' 
+            f'weight_type={weight_type}, sims={sims}, '
+            )
         if self.use_desi:
             fs['catalog1'] = fetch_desi_files(tgt1, randoms=False, weight_type=weight_type, sims=sims)
             fs['randoms1'] = fetch_desi_files(tgt1, randoms=True, weight_type=weight_type, sims=sims)
@@ -178,6 +188,7 @@ class CorrelationMeta(ABC):
         if self.use_hsc:
             fs['catalog2'] = fetch_hsc_files(randoms=False, sims=sims, include_dud=False)
             fs['randoms2'] = fetch_hsc_files(randoms=True, sims=sims, include_dud=False)
+        logger.info(fs)
 
         # Loading the MOC footprint
         self.moc = moc
@@ -731,7 +742,7 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
 
     return logger
 
-def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_version=1):
+def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_version=2):
     try:
         if sims:
             sims_root = '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/'
@@ -772,7 +783,7 @@ def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_v
         logging.error(f"Permission denied accessing DESI files and randoms = {randoms}")
         raise
 
-def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=1):
+def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=2):
     try:
         if sims:
             sims_root = '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/'
@@ -780,7 +791,7 @@ def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=1
                 return Path(
                     sims_root,
                     'randoms',
-                    'HSC_randoms_zcorr.fits'
+                    f'HSC_randoms_zcorr_v{sims_version}.fits'
                 )
             return Path(
                 sims_root,
