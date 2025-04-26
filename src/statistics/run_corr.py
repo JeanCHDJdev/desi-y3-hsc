@@ -97,11 +97,18 @@ def parse_args():
         'Default is nonKP. '
     )
     parser.add_argument(
+        '-z',
+        '--z_bin',
+        default=False,
+        action='store_true',
+        help='Wether to bin by the redshift column or the z_bin column. '
+    )
+    parser.add_argument(
         '-s',
         '--sims',
         type=int,
         default=0,
-        choices=[0, 1, 2, 3, 4],
+        choices=[0, 1, 2, 3, 4, 5],
         help='Whether to use the simulated data, and which version. '
         '0: no simulation'
     )
@@ -132,7 +139,7 @@ def parse_args():
         type=int, 
         nargs='+',
         default=None,
-        choices=range(1, 4),
+        choices=range(1, 5),
         help='areas of the sky to cross-correlate. '
         )
     
@@ -146,6 +153,7 @@ def main():
     jackknife = args.jackknife
     
     sims_version = args.sims
+    zbin = args.z_bin
     weight_type = args.weight
     sample_rate_desi = args.sample_rate_desi
     sample_rate_hsc = args.sample_rate_hsc
@@ -178,6 +186,7 @@ def main():
         nproc = max(os.cpu_count()-2, 1)
     
     corrargs = {
+        'use_zbin': zbin,
         'sims_version': sims_version,
         'weight_type': weight_type,
         'sample_rate_desi': sample_rate_desi,

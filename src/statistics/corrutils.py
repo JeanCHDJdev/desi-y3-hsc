@@ -29,6 +29,7 @@ class CorrelationMeta(ABC):
     w_hsc_col = 'weight'
     z_hsc_col = 'dnnz_photoz_best'
     z_hsc_randoms_col = 'redshift'
+    z_bin_hsc_col = 'z_bin'
 
     ra_desi_col = 'RA'
     dec_desi_col = 'DEC'
@@ -91,6 +92,7 @@ class CorrelationMeta(ABC):
             tgt2=None,
             output_dir=None, 
             sims_version=0,
+            use_zbin=False,
             weight_type='nonKP',
             sample_rate_desi=1,
             sample_rate_hsc=1, 
@@ -98,6 +100,9 @@ class CorrelationMeta(ABC):
             ):
         assert logger is not None, 'Logger not provided'
         self.logger = logger
+        
+        # use_zbin is used for HSC only
+        self.use_zbin = use_zbin
         
         # rename the class attributes if using simulations bc not the same class names
         self.sims = sims_version > 0
@@ -268,7 +273,7 @@ class CorrelationMeta(ABC):
                 ra_col=self.ra_hsc_col, 
                 dec_col=self.dec_hsc_col, 
                 weight_col=self.w_hsc_col if not self.sims else None,
-                z_col=self.z_hsc_col, 
+                z_col=self.z_hsc_col if not self.use_zbin else self.z_bin_hsc_col, 
                 moc=self.moc
                 )
             logger.info(f'Read HSC data in {time.time()-tih:.2f} seconds ({len(self.data2)} rows)')
@@ -286,11 +291,14 @@ class CorrelationMeta(ABC):
                 right=True
                 )
         if self.use_hsc:
-            self.zmask_data2 = np.digitize(
-                self.data2[self.z_hsc_col], 
-                bin_redshift2, 
-                right=True
-                )
+            if self.use_zbin:
+                self.zmask_data2 = self.data2[self.z_bin_hsc_col]
+            else:
+                self.zmask_data2 = np.digitize(
+                    self.data2[self.z_hsc_col], 
+                    bin_redshift2, 
+                    right=True
+                    )
             if self.sims:
                 self.zmask_randoms2 = np.digitize(
                     self.randoms2[self.z_hsc_randoms_col], 
@@ -610,14 +618,11 @@ class HSCAutoCorrelation(CorrelationMeta):
 
 ## Generic methods for each class
 def process_random_file(f, ra_col, dec_col, w_col, z_col, moc):
-    if z_col is None:
-        cols = [ra_col, dec_col, w_col]
-    elif w_col is None:
-        cols = [ra_col, dec_col, z_col]
-    elif w_col is not None and z_col is None:
-        cols = [ra_col, dec_col, z_col]
-    else:
-        cols = [ra_col, dec_col, w_col, z_col]
+
+    cols = [
+        c for c in [ra_col, dec_col, w_col, z_col] 
+        if c is not None
+        ]
     
     try:
         with fio.FITS(str(f)) as rand:
