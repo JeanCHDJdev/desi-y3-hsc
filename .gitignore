@@ -4,7 +4,7 @@ data/**
 *parquet
 
 #runs
-src/statistics/crosscorr/**
+src/statistics/crosscorr*/**
 src/statistics/autos/**
 
 # Byte-compiled / optimized / DLL files
