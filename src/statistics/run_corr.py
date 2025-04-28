@@ -113,6 +113,15 @@ def parse_args():
         '0: no simulation'
     )
     parser.add_argument(
+        '-d',
+        '--corr_type',
+        type=str,
+        default='theta',
+        choices=['theta', 'rp'],
+        help='Type of correlation to run. '
+        'Default is 2pt. '
+    )
+    parser.add_argument(
         '-l',
         '--log', 
         type=str,
@@ -157,6 +166,10 @@ def main():
     weight_type = args.weight
     sample_rate_desi = args.sample_rate_desi
     sample_rate_hsc = args.sample_rate_hsc
+    corr_type = args.corr_type
+
+    resolution = args.resolution
+    nsamples = args.nsamples
 
     output_dir = args.output_dir
     nproc = args.nproc
@@ -191,14 +204,15 @@ def main():
         'weight_type': weight_type,
         'sample_rate_desi': sample_rate_desi,
         'sample_rate_hsc': sample_rate_hsc,
+        'corr_type': corr_type,
         'nproc': nproc,
         'logger': logger,
         'output_dir': output_dir,
     }
     if jackknife:
         corrargs.update({
-            'nsamples': args.nsamples,
-            'nside': args.resolution,
+            'nsamples': nsamples,
+            'nside': resolution,
         })
 
     logger.info(f'Running cross-correlation for the following targets: {tgt1}x{tgt2}')
@@ -213,6 +227,7 @@ def main():
     else:
         logger.info('Using simulated data ...')
     logger.info(f'Log file: {log}')
+    logger.info(f'\nCorrargs :\n{corrargs}\n')
 
     if not Path(output_dir).exists():
         Path(output_dir).mkdir(parents=True, exist_ok=True)

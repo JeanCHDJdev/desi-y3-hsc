@@ -47,7 +47,9 @@ class CorrelationMeta(ABC):
         ]
 
     ## Defining fiducial bins here
-    bin_distances = np.linspace(0.001, 2, 41)
+    bins_angular = np.linspace(0.001, 2, 41)
+    bins_rp = np.linspace(0.1, 100, 26)
+    ##
     #np.logspace(
     #    np.log(2), 
     #    np.log(0.001), 
@@ -68,7 +70,8 @@ class CorrelationMeta(ABC):
         'QSO': bins_qso,
         'BGS_ANY': bins_bgs,
         'HSC': bins_hsc,
-        'distances': bin_distances
+        'angular': bins_angular,
+        'rp' : bins_rp
     }
 
     @staticmethod
@@ -96,10 +99,14 @@ class CorrelationMeta(ABC):
             weight_type='nonKP',
             sample_rate_desi=1,
             sample_rate_hsc=1, 
+            corr_type='theta',
             nproc=None
             ):
         assert logger is not None, 'Logger not provided'
         self.logger = logger
+        
+        self.corr_type = corr_type
+        self.pos_type = 'rd' if corr_type == 'theta' else 'rdd'
         
         # use_zbin is used for HSC only
         self.use_zbin = use_zbin
@@ -381,7 +388,7 @@ class CrossCorrelation(CorrelationMeta):
     def run_corr(self):
 
         tpcf = TwoPointCorrelationFunction(
-            edges=self.bin_distances,
+            edges=self.bins_angular if self.corr_type == 'theta' else self.bins_rp,
             data_positions1=[
                 self.data1[self.ra_desi_col][self.z_mask_d1], 
                 self.data1[self.dec_desi_col][self.z_mask_d1]
@@ -428,21 +435,27 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             self.randoms2[self.ra_hsc_randoms_col],
             self.randoms2[self.dec_hsc_randoms_col]
             ]
+        if self.corr_type == 'rp':
+            rp2.append(
+                ct.z2dist(self.randoms2[self.z_hsc_randoms_col])
+                )
+    
         self.logger.info(f'Data2 length {len(self.data2)} and randoms2 length {len(self.randoms2)}')
         self.logger.info('Subsampling data2 with KMeansSubsampler...')
         subsampler = KMeansSubsampler(
-            mode='angular', 
+            mode='angular' if self.corr_type == 'theta' else '3d', 
             # The largest, most complete dataset we have is rp2
             # and no redshift sampling is needed for jackknife
             positions=rp2, 
             nsamples=nsamples,
-            nside=nside,
+            nside=nside if self.corr_type == 'theta' else None,
             random_state=seed, 
-            position_type='rd'
+            position_type='rd' if self.corr_type == 'theta' else 'rdd'
             )
         labels = subsampler.label(rp2)
         self.subsampler = subsampler
         self.subsampler.log_info(f'Labels from {labels.min()} to {labels.max()}.')
+        self.logger.info(f'Labels from {labels.min()} to {labels.max()}.')
 
     def run_corr(self):
         
@@ -472,6 +485,22 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             self.randoms2[self.dec_hsc_randoms_col]
             ]
         
+        if self.corr_type == 'rp':
+            self.logger.info('Using redshift for distance calculation')
+            dp1.append(
+                ct.z2dist(self.data1[self.z_desi_col][self.z_mask_d1])
+                )
+            dp2.append(
+                ct.z2dist(self.data2[self.z_hsc_col][self.z_mask_d2])
+                )
+            rp1.append(
+                ct.z2dist(self.randoms1[self.z_desi_randoms_col][self.z_mask_r1])
+                )
+            rp2.append(
+                ct.z2dist(self.randoms2[self.z_hsc_randoms_col])
+                )
+            
+        
         if self.sims:
             # no weights for simulations
             dw1 = None
@@ -485,13 +514,22 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             rw1 = self.randoms1[self.w_desi_col][self.z_mask_r1]
             rw2 = None
 
+        self.logger.info(f'Finished setting up data and randoms ...')
+
+        # casting to float in case of weird dtypes
+        dp1 = np.array(dp1, dtype=float)
+        dp2 = np.array(dp2, dtype=float)
+        rp1 = np.array(rp1, dtype=float)
+        rp2 = np.array(rp2, dtype=float)
+
+        # subsampling with KMeans for jackknife
         ds1 = self.subsampler.label(dp1)
         ds2 = self.subsampler.label(dp2)
         rs1 = self.subsampler.label(rp1)
         rs2 = self.subsampler.label(rp2)
 
         tpcf = TwoPointCorrelationFunction(
-            edges=self.bin_distances,
+            edges=self.bins_angular if self.corr_type == 'theta' else self.bins_rp,
 
             data_positions1=dp1,
             data_positions2=dp2,
@@ -512,8 +550,8 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             randoms_samples2=rs2,
 
             nthreads=self.nproc,
-            mode='theta',
-            position_type='rd',
+            mode=self.corr_type,
+            position_type=self.pos_type, # 'rd' for RA/Dec, 'rdd' for RA/Dec/Dist
             engine='corrfunc',
             estimator='landyszalay',
         )
@@ -525,8 +563,6 @@ class DESIAutoCorrelation(CorrelationMeta):
             tgt1 : str,
             tgt2 : str, 
             moc : MOC, 
-            sims : bool,
-            pip : bool,
             output_dir :str | Path, 
             nproc:int=None, 
             sample_rate_desi:int=1, 

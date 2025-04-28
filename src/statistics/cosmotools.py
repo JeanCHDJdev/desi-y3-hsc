@@ -1,9 +1,9 @@
 import numpy as np
 from astropy import units as u
-from astropy.cosmology import FlatLambdaCDM
+from astropy.cosmology import Planck18
 
 # Define the cosmology model
-cosmo = FlatLambdaCDM(H0=67.8, Om0=0.308)
+cosmo = Planck18
 
 def arcsec2hMpc(theta, z):
     """
@@ -47,4 +47,7 @@ def z2dist(z):
     z: float | list[float] | np.ndarray[float]
         Redshift
     """
-    return cosmo.comoving_distance(z).value / cosmo.h
+    return np.array(
+        cosmo.comoving_distance(z).value / cosmo.h, 
+        dtype=float
+        )
