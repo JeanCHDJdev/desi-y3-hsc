@@ -3,6 +3,7 @@ This script holds wrapper functions and utilities for
 calculating and plotting correlation matrices.
 '''
 import time 
+import math
 import os
 import fitsio as fio
 import numpy as np
@@ -46,33 +47,37 @@ class CorrelationMeta(ABC):
             for i in range(0, 4)
         ]
 
-    ## Defining fiducial bins here
-    bins_angular = np.linspace(0.001, 2, 41)
+    ## Defining fiducial bins here 
+
+    # from 1 arcmin to 100 arcmin
+    bins_theta = np.logspace(math.log(0.2, 10), math.log(100, 10), 33, base=10)/60
+
+    #np.linspace(0.0001, 2, 41)
     bins_rp = np.linspace(0.1, 100, 26)
-    ##
-    #np.logspace(
-    #    np.log(2), 
-    #    np.log(0.001), 
-    #    51,
-    #    base=np.e
-    #)
+    bins_rppi_s = np.linspace(0., 200., 51)
+    bins_rppi_mu = np.linspace(-100, 100, 21)
 
     bins_bgs = np.arange(0, 0.6, 0.1) # 0 < z < 0.6
     bins_lrg = np.arange(0.4, 1.2, 0.1) # 0.4 < z < 1
     bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
-    bins_qso = np.arange(0.8, 3.4, 0.3) # 0.9 < z < 2.1
+    bins_qso = np.arange(0.9, 3.1, 0.3) # 0.9 < z < 2.1
 
     bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 
 
-    bins_redshift = {
+    bins_tracers = {
         'LRG': bins_lrg,
         'ELGnotqso': bins_elg,
         'QSO': bins_qso,
         'BGS_ANY': bins_bgs,
         'HSC': bins_hsc,
-        'angular': bins_angular,
-        'rp' : bins_rp
     }
+    bins_mode = {
+        'theta': bins_theta,
+        'rp' : bins_rp,
+        'rppi_s' : bins_rppi_s,
+        'rppi_mu' : bins_rppi_mu
+    }
+    bins_all = {**bins_tracers, **bins_mode}
 
     @staticmethod
     def save_bins(root):
@@ -83,8 +88,8 @@ class CorrelationMeta(ABC):
         if not bin_dir.exists():
             bin_dir.mkdir(parents=True)
         np.savez(
-            Path(bin_dir, 'bins_redshift.npz'),
-            **{k: v for k, v in CorrelationMeta.bins_redshift.items()}
+            Path(bin_dir, 'bins_all.npz'),
+            **{k: v for k, v in CorrelationMeta.bins_all.items()}
         )
 
     def __init__(
@@ -104,9 +109,6 @@ class CorrelationMeta(ABC):
             ):
         assert logger is not None, 'Logger not provided'
         self.logger = logger
-        
-        self.corr_type = corr_type
-        self.pos_type = 'rd' if corr_type == 'theta' else 'rdd'
         
         # use_zbin is used for HSC only
         self.use_zbin = use_zbin
@@ -174,8 +176,21 @@ class CorrelationMeta(ABC):
             raise ValueError(f'Unknown targets {tgt1} and {tgt2}')
     
         # once targets are figured out we can call the bins
-        bin_redshift1 = self.bins_redshift[tgt1]
-        bin_redshift2 = self.bins_redshift[tgt2]
+        bin_redshift1 = self.bins_tracers[tgt1]
+        bin_redshift2 = self.bins_tracers[tgt2]
+
+        # which edges and correlation type to use :
+        self.corr_type = corr_type
+        self.pos_type = 'rd' if corr_type == 'theta' else 'rdd'
+
+        if self.corr_type == 'rppi':
+            self.edges = (self.bins_mode['rppi_s'], self.bins_mode['rppi_mu'])
+        else:
+            self.edges = self.bins_mode[self.corr_type]
+
+        self.logger.info(f'mode : {self.corr_type}')
+        self.logger.info(f'edges : {self.edges}') 
+        self.logger.info(f'edges : {self.pos_type}')
 
         # Setup multiprocessing; can do mpi4py later on
         if nproc is None: 
@@ -388,7 +403,7 @@ class CrossCorrelation(CorrelationMeta):
     def run_corr(self):
 
         tpcf = TwoPointCorrelationFunction(
-            edges=self.bins_angular if self.corr_type == 'theta' else self.bins_rp,
+            edges=self.edges,
             data_positions1=[
                 self.data1[self.ra_desi_col][self.z_mask_d1], 
                 self.data1[self.dec_desi_col][self.z_mask_d1]
@@ -514,8 +529,6 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             rw1 = self.randoms1[self.w_desi_col][self.z_mask_r1]
             rw2 = None
 
-        self.logger.info(f'Finished setting up data and randoms ...')
-
         # casting to float in case of weird dtypes
         dp1 = np.array(dp1, dtype=float)
         dp2 = np.array(dp2, dtype=float)
@@ -529,7 +542,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
         rs2 = self.subsampler.label(rp2)
 
         tpcf = TwoPointCorrelationFunction(
-            edges=self.bins_angular if self.corr_type == 'theta' else self.bins_rp,
+            edges=self.edges,
 
             data_positions1=dp1,
             data_positions2=dp2,
@@ -605,7 +618,7 @@ class DESIAutoCorrelation(CorrelationMeta):
         )
         tpcf.save(self.outfile)
 
-class HSCAutoCorrelation(CorrelationMeta):
+class AutoCorrelation(CorrelationMeta):
     def __init__(
             self, 
             moc : MOC, 
@@ -613,31 +626,43 @@ class HSCAutoCorrelation(CorrelationMeta):
             bin_distances : np.ndarray,
             bin_redshift1 : np.ndarray,
             nproc:int=None, 
-            sample_rate_hsc:int=1, 
+            sample_rate_hsc:int=1,
+            sample_rate_desi:int=1, 
             logger:logging.Logger=None
             ):
-        
+        if sample_rate_desi is not None and sample_rate_hsc is not None:
+            assert sample_rate_desi == sample_rate_hsc, (
+                f'sample_rate_desi ({sample_rate_desi}) and '
+                f'sample_rate_hsc ({sample_rate_hsc}) should be equal, if both are set.'
+            )
+        sample_rate = sample_rate_hsc if sample_rate_hsc else sample_rate_desi
+
         super().__init__(
             moc=moc,
             output_dir=output_dir,
             bin_distances=bin_distances,
             bin_redshift1=bin_redshift1,
             nproc=nproc,
-            sample_rate_hsc=sample_rate_hsc,
+            sample_rate_hsc=sample_rate,
+            sample_rate_desi=sample_rate,
             logger=logger
         )
     def run_corr(self):
         tpcf = TwoPointCorrelationFunction(
-            edges=self.bin_distances,
+            edges=self.bins_mode[self.corr_type],
+
             data_positions1=[
                 self.data1[self.ra_hsc_col][self.z_mask_d1], 
                 self.data1[self.dec_hsc_col][self.z_mask_d1]
                 ],
             data_positions2=None,
-            randoms_positions1=[
-                self.randoms1[self.ra_hsc_randoms_col],
-                self.randoms1[self.dec_hsc_randoms_col]
-                ],
+            randoms_positions1=(
+                [
+                    self.randoms1[self.ra_hsc_randoms_col],
+                    self.randoms1[self.dec_hsc_randoms_col]
+                    ]
+                
+                ),
             randoms_positions2=None,
             data_weights1=self.data1[self.w_hsc_col][self.z_mask_d1],
             data_weights2=None,
@@ -833,7 +858,7 @@ def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_v
         logging.error(f"Permission denied accessing DESI files and randoms = {randoms}")
         raise
 
-def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=2):
+def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=0):
     try:
         if sims:
             sims_root = '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/'
@@ -888,10 +913,7 @@ def figure_out_class(tgt1, tgt2=None, jackknife=False):
                     return CrossCorrelation
     else:
         # autocorrelation case
-        if tgt1 in hsc_avb and tgt2 in hsc_avb:
-            return HSCAutoCorrelation
-        if tgt2 in desi_avb and tgt1 in desi_avb:
-            return DESIAutoCorrelation
+        return AutoCorrelation
     raise ValueError('Unknown target combination')
 
 class CorrFileReader():
@@ -902,6 +924,7 @@ class CorrFileReader():
     def __init__(self, ROOT):
         self.ROOT = Path(ROOT)
         assert self.ROOT.exists(), f"Path {self.ROOT} does not exist"
+        self.dndz_file = None
 
     def get_file(self, b1, b2, tgt1, tgt2, moc):
         """
@@ -917,11 +940,45 @@ class CorrFileReader():
         return self.get_file(b1, b1, tgt, tgt, moc)
 
     def get_bins(self, name):
-        bins = np.load(f'{self.ROOT}/bins/bins_redshift.npz')
+        bins = np.load(f'{self.ROOT}/bins/bins_all.npz')
         if name not in bins:
             raise ValueError(f"Unknown bin name {name}. Available bins are {bins.files}")
         else:
             return bins[name]
+        
+    def get_dndz(self, tgt, get='dndz', bin_indice=None):
+        '''
+        Get the dndz for given target.
+        Parameters
+        ----------
+        tgt : str
+            Target name (e.g. 'ELGnotqso', 'LRG', 'QSO', 'BGS_ANY', 'HSC')
+        get : str
+            What to get from the dndz file. Default is 'dndz', can also be 'bin'.
+        bin_indice : int
+            Bin index to get the dndz for. Default is None, which means all bins (returns the array).
+        '''
+        if self.dndz_file is None:
+            raise ValueError(
+                f"Cannot find dndz file for {tgt}. Make it first with `make_dndz()` !"
+                )
+        dndz = np.load(self.dndz_file)
+        if f'{tgt}_{get}' not in dndz:
+            raise ValueError(
+                f"Cannot find dndz for {tgt} in {self.dndz_file}. "
+                f"Available dndz are {dndz.files}"
+                )
+        else:
+            if bin_indice is None:
+                return dndz[f'{tgt}_{get}']
+            else:
+                if bin_indice < 0 or bin_indice >= len(dndz[f'{tgt}_{get}']):
+                    raise ValueError(
+                        f"Bin index {bin_indice} out of range for {tgt} in {self.dndz_file}. "
+                        f"Available bins are {dndz[f'{tgt}_{get}']}"
+                        )
+                else:
+                    return dndz[f'{tgt}_{get}'][bin_indice]
     
     def get_cov_results(self, tgt1, tgt2='HSC'):
         """
@@ -944,5 +1001,58 @@ class CorrFileReader():
             raise FileNotFoundError(f"File {file} does not exist")
         else:
             return file
-            
+
+    def make_dndz(self, sims : int, outfile='dndz.npz'):
+
+        use_sims = True if sims > 0 else False
+        assert sims >= 0, f"Invalid simulations version {sims}"
+        if use_sims:
+            print(f"Using simulations version {sims}")
+        else:
+            print("Using real data")
+
+        out = Path(self.ROOT, 'dndz', outfile).resolve()
+        if not out.parent.exists():
+            out.parent.mkdir(parents=True)
         
+        targets = ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY', 'HSC']
+
+        if use_sims:
+            hsc_z_col = 'Z'
+            desi_z_col = 'z'
+            targets.pop(targets.index('QSO'))
+        else:
+            hsc_z_col = 'dnnz_photoz_best'
+            desi_z_col = 'Z'
+
+        tgts_save = {f'{tgt}_dndz': [] for tgt in targets}
+
+        for tgt in targets:
+
+            print(f'Processing {tgt}...')
+
+            if tgt == 'HSC':
+                file = fetch_hsc_files(
+                    randoms=False, sims=use_sims, sims_version=sims
+                    )
+                ztbl = fio.FITS(Path(file))[1][hsc_z_col].read()
+            else:
+                file = fetch_desi_files(
+                    tgt, randoms=False, sims=use_sims, sims_version=sims
+                    )
+                ztbl = fio.FITS(Path(file))[1][desi_z_col].read()
+            tbl_length = len(ztbl)
+            assert tbl_length > 0, f"Empty table for {tgt} in {file}"
+
+            btgt = self.get_bins(tgt)
+            tgts_save[f'{tgt}_bin'] = btgt
+
+            for b in range(1, len(btgt)):
+                mask = (
+                    (ztbl > btgt[b-1]) & (ztbl <= btgt[b])
+                    )
+                dndz = np.sum(mask)/tbl_length
+                tgts_save[f'{tgt}_dndz'].append(dndz)
+
+        self.dndz_file = out
+        np.savez(self.dndz_file, **tgts_save)

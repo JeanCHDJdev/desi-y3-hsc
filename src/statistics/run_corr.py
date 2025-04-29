@@ -241,7 +241,7 @@ def main():
         )
     logger.info(f'Number of threads: {nproc}\n')
     logger.info(f'Output directory: {output_dir}\n')
-    strbins = '\n'.join(f"{k} : {v}" for k, v in cu.CorrelationMeta.bins_redshift.items())
+    strbins = '\n'.join(f"{k} : {v}" for k, v in cu.CorrelationMeta.bins_all.items())
     logger.info(f'Bins :{strbins}\n')
 
     moc_list = sorted(cu.CorrelationMeta.moc_list)
@@ -267,8 +267,8 @@ def main():
         # tgt1 is always a list of DESI type targets
         for t1, t2 in zip(tgt1, tgt2):
             # for logging purposes, no real use here
-            bin1 = cu.CorrelationMeta.bins_redshift[t1] 
-            bin2 = cu.CorrelationMeta.bins_redshift[t2]
+            bin1 = cu.CorrelationMeta.bins_tracers[t1] 
+            bin2 = cu.CorrelationMeta.bins_tracers[t2]
 
             logger.memory_usage()
             corrclass = cu.figure_out_class(t1, t2, jackknife)
