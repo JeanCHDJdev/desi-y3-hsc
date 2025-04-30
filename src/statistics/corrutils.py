@@ -16,11 +16,16 @@ from mocpy import MOC
 from pathlib import Path
 from astropy import units as u
 from astropy.coordinates import SkyCoord
-
-from src.statistics import cosmotools as ct
 from pycorr import TwoPointCorrelationFunction, KMeansSubsampler
 
+import src.statistics.cosmotools as ct
+from src.statistics.corrfiles import fetch_desi_files, fetch_hsc_files, setup_crosscorr_logging
+
 class CorrelationMeta(ABC):
+    '''
+    Meta class for the cross-correlation analysis, ruling out columns, 
+    redshift bins and other parameters, as well as a few setup and utilities.
+    '''
 
     # Attributes that each cross corr code needs to know about
     ra_hsc_col = 'ra'
@@ -140,14 +145,11 @@ class CorrelationMeta(ABC):
         hsc_tgt = ['HSC']
         # Idea : 
         # get the couple targets. If one is not specified, assume both are equal
-        if tgt1 is None or tgt2 is None:
-            if tgt1 is None and tgt2 is None:
-                raise ValueError('No target provided')
-            else:
-                if tgt1 is None:
-                    tgt1 = tgt2
-                else:
-                    tgt2 = tgt1
+        assert tgt1 is not None and tgt2 is not None, 'tgt1 and tgt2 cannot be None simultaneously'
+        if tgt2 is None:
+            tgt2 = tgt1
+        if tgt1 is None:
+            tgt1 = tgt2
 
         if tgt1 == tgt2:
             self.autocorr = True
@@ -328,14 +330,22 @@ class CorrelationMeta(ABC):
                     right=True
                     )
 
-        if self.use_hsc and self.autocorr:
-            # in the case of autocorrelation with hsc, we move the 2nd dataset to be the first
-            self.randoms1 = self.randoms2
-            del self.randoms2
-            self.data1 = self.data2
-            del self.data2
-            self.zmask_data1 = self.zmask_data2
-            del self.zmask_data2
+        if self.autocorr:
+            # specifying the attributes to None for consistency
+            self.randoms2 = None 
+            self.zmask_randoms2 = None
+            self.zmask_data2 = None
+            self.data2 = None
+            
+            if self.use_hsc:
+                # in the case of autocorrelation with hsc, we move the 2nd dataset to be the first
+                self.randoms1 = self.randoms2
+                del self.randoms2
+                self.data1 = self.data2
+                del self.data2
+                self.zmask_data1 = self.zmask_data2
+                del self.zmask_data2
+
     
     @abstractmethod
     def run_corr(self):
@@ -351,10 +361,7 @@ class CorrelationMeta(ABC):
         '''
         Base method to call when running cross corr.
         '''
-        if self.autocorr:
-            desccorr = self.tgt1
-        else:
-            desccorr = f'{self.tgt1}x{self.tgt2}'
+        desccorr = f'{self.tgt1}x{self.tgt2}'
         outfile = Path(
             self.output_dir, 
             f'{desccorr}_b1x{bin_index1}_b2x{bin_index2}_moc{moc_index}.npy'
@@ -370,7 +377,7 @@ class CorrelationMeta(ABC):
             # DESI randoms need to be redshift masked 
             self.z_mask_r1 = (self.zmask_randoms1 == bin_index1)
         if not self.autocorr:
-            # in the case of crosscorr, we wapply a mask to the randoms
+            # in the case of crosscorr, we apply a mask to the randoms
             self.z_mask_d2 = (self.zmask_data2 == bin_index2)
 
         if self.use_desi:
@@ -446,76 +453,96 @@ class JackknifeCrossCorrelation(CorrelationMeta):
         self.nsamples = nsamples
         self.seed = seed
 
-        rp2 = [
-            self.randoms2[self.ra_hsc_randoms_col],
-            self.randoms2[self.dec_hsc_randoms_col]
-            ]
+        if self.autocorr:
+            if self.use_hsc:
+                rpsamp = [
+                    self.randoms1[self.ra_hsc_col], 
+                    self.randoms1[self.dec_hsc_col]
+                    ]
+            if self.use_desi:
+                rpsamp = [
+                    self.randoms1[self.ra_desi_col], 
+                    self.randoms1[self.dec_desi_col]
+                    ]
+        else:
+            rpsamp = [
+                self.randoms2[self.ra_hsc_randoms_col],
+                self.randoms2[self.dec_hsc_randoms_col]
+                ]
         if self.corr_type == 'rp':
-            rp2.append(
-                ct.z2dist(self.randoms2[self.z_hsc_randoms_col])
+            rpsamp.append(
+                ct.z2dist(
+                    self.randoms2[self.z_hsc_randoms_col]
+                    )
                 )
-    
-        self.logger.info(f'Data2 length {len(self.data2)} and randoms2 length {len(self.randoms2)}')
+        if self.data2 is not None and self.randoms2 is not None:
+            self.logger.info(f'Data2 length {len(self.data2)} and randoms2 length {len(self.randoms2)}')
+
         self.logger.info('Subsampling data2 with KMeansSubsampler...')
         subsampler = KMeansSubsampler(
             mode='angular' if self.corr_type == 'theta' else '3d', 
             # The largest, most complete dataset we have is rp2
             # and no redshift sampling is needed for jackknife
-            positions=rp2, 
+            positions=rpsamp, 
             nsamples=nsamples,
             nside=nside if self.corr_type == 'theta' else None,
             random_state=seed, 
             position_type='rd' if self.corr_type == 'theta' else 'rdd'
             )
-        labels = subsampler.label(rp2)
+        labels = subsampler.label(rpsamp)
+
         self.subsampler = subsampler
-        self.subsampler.log_info(f'Labels from {labels.min()} to {labels.max()}.')
         self.logger.info(f'Labels from {labels.min()} to {labels.max()}.')
 
     def run_corr(self):
         
-        self.logger.info(
-            f'N data1: {np.sum(self.z_mask_d1)}' + 
-            f', N randoms1: {np.sum(self.z_mask_r1)}'
-            )
-        self.logger.info(
-            f'N data2: {np.sum(self.z_mask_d2)}' + 
-            f', N randoms2: {len(self.randoms2)}'
-            )
+        #self.logger.info(
+        #    f'N data1: {np.sum(self.z_mask_d1)}' + 
+        #    f', N randoms1: {np.sum(self.z_mask_r1)}'
+        #    )
+        #self.logger.info(
+        #    f'N data2: {np.sum(self.z_mask_d2)}' + 
+        #    f', N randoms2: {len(self.randoms2)}'
+        #    )
 
         dp1 = [
             self.data1[self.ra_desi_col][self.z_mask_d1], 
             self.data1[self.dec_desi_col][self.z_mask_d1]
             ]
-        dp2 = [
-            self.data2[self.ra_hsc_col][self.z_mask_d2], 
-            self.data2[self.dec_hsc_col][self.z_mask_d2]
-            ]
         rp1 = [
             self.randoms1[self.ra_desi_col][self.z_mask_r1],
             self.randoms1[self.dec_desi_col][self.z_mask_r1]
             ]
-        rp2 = [
-            self.randoms2[self.ra_hsc_randoms_col],
-            self.randoms2[self.dec_hsc_randoms_col]
-            ]
+        # if not doing autocorrelation, we need to add the second dataset
+        if not self.autocorr:
+            dp2 = [
+                self.data2[self.ra_hsc_col][self.z_mask_d2], 
+                self.data2[self.dec_hsc_col][self.z_mask_d2]
+                ]
+            rp2 = [
+                self.randoms2[self.ra_hsc_randoms_col],
+                self.randoms2[self.dec_hsc_randoms_col]
+                ]
+        else:
+            rp2 = None
+            dp2 = None
         
         if self.corr_type == 'rp':
             self.logger.info('Using redshift for distance calculation')
             dp1.append(
                 ct.z2dist(self.data1[self.z_desi_col][self.z_mask_d1])
                 )
-            dp2.append(
-                ct.z2dist(self.data2[self.z_hsc_col][self.z_mask_d2])
-                )
             rp1.append(
                 ct.z2dist(self.randoms1[self.z_desi_randoms_col][self.z_mask_r1])
                 )
-            rp2.append(
-                ct.z2dist(self.randoms2[self.z_hsc_randoms_col])
-                )
+            if self.autocorr:
+                rp2.append(
+                    ct.z2dist(self.randoms2[self.z_hsc_randoms_col])
+                    )
+                dp2.append(
+                    ct.z2dist(self.data2[self.z_hsc_col][self.z_mask_d2])
+                    )
             
-        
         if self.sims:
             # no weights for simulations
             dw1 = None
@@ -524,22 +551,33 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             rw2 = None
         else :
             dw1 = self.data1[self.w_desi_col][self.z_mask_d1]
-            dw2 = self.data2[self.w_hsc_col][self.z_mask_d2]
+            if self.autocorr:
+                dw2 = None
+            else:
+                dw2 = self.data2[self.w_hsc_col][self.z_mask_d2]
 
             rw1 = self.randoms1[self.w_desi_col][self.z_mask_r1]
             rw2 = None
 
         # casting to float in case of weird dtypes
         dp1 = np.array(dp1, dtype=float)
-        dp2 = np.array(dp2, dtype=float)
         rp1 = np.array(rp1, dtype=float)
-        rp2 = np.array(rp2, dtype=float)
+        if not self.autocorr:
+            dp2 = np.array(dp2, dtype=float)
+            rp2 = np.array(rp2, dtype=float)
+        else:
+            dp2 = None
+            rp2 = None
 
         # subsampling with KMeans for jackknife
         ds1 = self.subsampler.label(dp1)
-        ds2 = self.subsampler.label(dp2)
         rs1 = self.subsampler.label(rp1)
-        rs2 = self.subsampler.label(rp2)
+        if not self.autocorr:
+            rs2 = self.subsampler.label(rp2)
+            ds2 = self.subsampler.label(dp2)
+        else:
+            rs2 = None
+            ds2 = None
 
         tpcf = TwoPointCorrelationFunction(
             edges=self.edges,
@@ -613,64 +651,6 @@ class DESIAutoCorrelation(CorrelationMeta):
             nthreads=self.nproc,
             mode='rppi',
             position_type='rdd', 
-            engine='corrfunc',
-            estimator='landyszalay',
-        )
-        tpcf.save(self.outfile)
-
-class AutoCorrelation(CorrelationMeta):
-    def __init__(
-            self, 
-            moc : MOC, 
-            output_dir :str | Path, 
-            bin_distances : np.ndarray,
-            bin_redshift1 : np.ndarray,
-            nproc:int=None, 
-            sample_rate_hsc:int=1,
-            sample_rate_desi:int=1, 
-            logger:logging.Logger=None
-            ):
-        if sample_rate_desi is not None and sample_rate_hsc is not None:
-            assert sample_rate_desi == sample_rate_hsc, (
-                f'sample_rate_desi ({sample_rate_desi}) and '
-                f'sample_rate_hsc ({sample_rate_hsc}) should be equal, if both are set.'
-            )
-        sample_rate = sample_rate_hsc if sample_rate_hsc else sample_rate_desi
-
-        super().__init__(
-            moc=moc,
-            output_dir=output_dir,
-            bin_distances=bin_distances,
-            bin_redshift1=bin_redshift1,
-            nproc=nproc,
-            sample_rate_hsc=sample_rate,
-            sample_rate_desi=sample_rate,
-            logger=logger
-        )
-    def run_corr(self):
-        tpcf = TwoPointCorrelationFunction(
-            edges=self.bins_mode[self.corr_type],
-
-            data_positions1=[
-                self.data1[self.ra_hsc_col][self.z_mask_d1], 
-                self.data1[self.dec_hsc_col][self.z_mask_d1]
-                ],
-            data_positions2=None,
-            randoms_positions1=(
-                [
-                    self.randoms1[self.ra_hsc_randoms_col],
-                    self.randoms1[self.dec_hsc_randoms_col]
-                    ]
-                
-                ),
-            randoms_positions2=None,
-            data_weights1=self.data1[self.w_hsc_col][self.z_mask_d1],
-            data_weights2=None,
-            randoms_weights1=None,
-            randoms_weights2=None,
-            nthreads=self.nproc,
-            mode='theta',
-            position_type='rd', # 'rd' for RA/Dec
             engine='corrfunc',
             estimator='landyszalay',
         )
@@ -768,291 +748,22 @@ def sample_file_on_moc(file, ra_col, dec_col, weight_col=None, z_col=None, moc=N
 
     return np.array(data)
 
-
-def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
-    """
-    Set up logging with both console and file output
-    
-    Args:
-        log_file (str): Path to the log file
-        log_level (int): Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    """
-    log_file = str(Path(log_file).with_suffix(''))
-    log_file += f'_{time.strftime("%Y%m%d_%H%M%S")}.log'
-    print(f"Logging to {log_file}")
-    log_dir = Path(log_file).parent
-    if log_dir:
-        log_dir.mkdir(parents=True, exist_ok=True)
-
-    formatter = logging.Formatter(
-        '%(asctime)s:%(name)s:%(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setFormatter(formatter)
-
-    logger = logging.getLogger(__name__)
-    logger.setLevel(log_level)
-
-    logger.handlers.clear()
-    logger.addHandler(console_handler)
-    logger.addHandler(file_handler)
-
-    def log_memory_usage():
-        """
-        Log current process memory usage
-        """
-        try:
-            process = psutil.Process()
-            memory_usage = process.memory_info().rss / 1e6
-            logger.info(f"Memory Usage: {memory_usage:.2f} MB")
-        except Exception as e:
-            logger.error(f"Could not log memory usage: {e}")
-
-    logger.memory_usage = log_memory_usage
-
-    return logger
-
-def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_version=0):
-    try:
-        if sims:
-            sims_root = '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/'
-            if randoms:
-                return Path(
-                    sims_root,
-                    'randoms',
-                    f'{tgt}_ran_hsc_zcorr.fits'
-                )
-            return Path(
-                sims_root,
-                f'v{sims_version}',
-                f'desi_targets_sim_{tgt}_v{sims_version}.fits'
-                )
-        else:
-            root = Path(
-                '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/'
-                )
-            if weight_type == 'PIP':
-                root = Path(root, 'PIP')
-                path = f'{tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
-            elif weight_type == 'nonKP':
-                root = Path(root, 'nonKP')
-                path = f'{tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
-            elif weight_type == 'base':
-                root = Path(root)
-                path = f'{tgt}{"_[0-9]*_" if randoms else "_"}_full_HPmapcut{".ran" if randoms else ".dat"}.fits'
-            else:
-                raise ValueError(f"Unknown weight type {weight_type}")
-
-            files = list(root.glob(path))
-            if not files:
-                raise FileNotFoundError(f"No files found for path: {path}")
-            if len(files) == 1:
-                files = files[0]
-            return files
-    except PermissionError:
-        logging.error(f"Permission denied accessing DESI files and randoms = {randoms}")
-        raise
-
-def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=0):
-    try:
-        if sims:
-            sims_root = '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/'
-            if randoms:
-                return Path(
-                    sims_root,
-                    'randoms',
-                    f'HSC_randoms_zcorr_v{sims_version}.fits'
-                )
-            return Path(
-                sims_root,
-                f'v{sims_version}',
-                f'hscy3_sim_v{sims_version}.fits'
-                )
-        elif randoms:
-            #WARNING : this path root currently does not contain D/UD randoms as they
-            #were deemed unnecessary for the clustering analysis
-            root = Path(
-                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/randoms'
-                )
-            return list(
-                root.glob(f'edge_sc_cr_hscr{"*" if include_dud else "[0-9]"}.fits')
-                )
-        elif not sims and not randoms:
-            return Path(
-                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits'
-                )
-    except PermissionError:
-        logging.error(f"Permission denied accessing HSC files and randoms = {randoms}")
-        raise
-    except FileNotFoundError:
-        logging.error(f"HSC catalog file not found and randoms = {randoms}") 
-        raise
-
 def figure_out_class(tgt1, tgt2=None, jackknife=False):
     desi_avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
     hsc_avb = ['HSC']
+    avb = desi_avb + hsc_avb
     if tgt1 is None and tgt2 is None:
         raise ValueError('No target provided')
     if tgt2 is None:
         tgt2 = tgt1
     if tgt1 is None:
         tgt1 = tgt2
+    
+    assert tgt1 in avb and tgt2 in avb, f'Unknown target {tgt1} or {tgt2}'
 
-    if tgt1 != tgt2:
-        # cross-correlation case
-        if tgt1 in desi_avb:
-            if tgt2 in hsc_avb:
-                if jackknife:
-                    return JackknifeCrossCorrelation
-                else:
-                    return CrossCorrelation
+    # Jackknife cross correlation now rules them all 
+    if jackknife:
+        return JackknifeCrossCorrelation
     else:
-        # autocorrelation case
-        return AutoCorrelation
-    raise ValueError('Unknown target combination')
-
-class CorrFileReader():
-    '''
-    Utility class to grab correctly formatted file names for the cross-correlation
-    analysis. Provide a ROOT and the directory has to be with the expected shape.
-    '''
-    def __init__(self, ROOT):
-        self.ROOT = Path(ROOT)
-        assert self.ROOT.exists(), f"Path {self.ROOT} does not exist"
-        self.dndz_file = None
-
-    def get_file(self, b1, b2, tgt1, tgt2, moc):
-        """
-        Get the file name for given redshift bins and MOC.
-        """
-        DIR = self.ROOT / f'{tgt1}x{tgt2}'
-        return f'{DIR}/{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{moc}.npy'
-    
-    def get_auto_file(self, b1, tgt, moc):
-        """
-        Get the file name for given redshift bins and MOC.
-        """
-        return self.get_file(b1, b1, tgt, tgt, moc)
-
-    def get_bins(self, name):
-        bins = np.load(f'{self.ROOT}/bins/bins_all.npz')
-        if name not in bins:
-            raise ValueError(f"Unknown bin name {name}. Available bins are {bins.files}")
-        else:
-            return bins[name]
-        
-    def get_dndz(self, tgt, get='dndz', bin_indice=None):
-        '''
-        Get the dndz for given target.
-        Parameters
-        ----------
-        tgt : str
-            Target name (e.g. 'ELGnotqso', 'LRG', 'QSO', 'BGS_ANY', 'HSC')
-        get : str
-            What to get from the dndz file. Default is 'dndz', can also be 'bin'.
-        bin_indice : int
-            Bin index to get the dndz for. Default is None, which means all bins (returns the array).
-        '''
-        if self.dndz_file is None:
-            raise ValueError(
-                f"Cannot find dndz file for {tgt}. Make it first with `make_dndz()` !"
-                )
-        dndz = np.load(self.dndz_file)
-        if f'{tgt}_{get}' not in dndz:
-            raise ValueError(
-                f"Cannot find dndz for {tgt} in {self.dndz_file}. "
-                f"Available dndz are {dndz.files}"
-                )
-        else:
-            if bin_indice is None:
-                return dndz[f'{tgt}_{get}']
-            else:
-                if bin_indice < 0 or bin_indice >= len(dndz[f'{tgt}_{get}']):
-                    raise ValueError(
-                        f"Bin index {bin_indice} out of range for {tgt} in {self.dndz_file}. "
-                        f"Available bins are {dndz[f'{tgt}_{get}']}"
-                        )
-                else:
-                    return dndz[f'{tgt}_{get}'][bin_indice]
-    
-    def get_cov_results(self, tgt1, tgt2='HSC'):
-        """
-        Get the covariance result for given redshift bins and MOC.
-        """
-        covdir = Path(self.ROOT, f'{tgt1}x{tgt2}', 'cov')
-        if not covdir.exists():
-            raise FileNotFoundError(f"Covariance directory {covdir} does not exist")
-        else:
-            files = covdir.glob(f'*.npy')
-            return list(files)
-        
-    def get_cov_file(self, b1, b2, tgt1, tgt2='HSC', moc=0):
-        """
-        Get the covariance file name for given redshift bins and MOC.
-        """
-        covdir = Path(self.ROOT, f'{tgt1}x{tgt2}', 'cov')
-        file = covdir / f'{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{moc}.npy'
-        if not file.exists():
-            raise FileNotFoundError(f"File {file} does not exist")
-        else:
-            return file
-
-    def make_dndz(self, sims : int, outfile='dndz.npz'):
-
-        use_sims = True if sims > 0 else False
-        assert sims >= 0, f"Invalid simulations version {sims}"
-        if use_sims:
-            print(f"Using simulations version {sims}")
-        else:
-            print("Using real data")
-
-        out = Path(self.ROOT, 'dndz', outfile).resolve()
-        if not out.parent.exists():
-            out.parent.mkdir(parents=True)
-        
-        targets = ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY', 'HSC']
-
-        if use_sims:
-            hsc_z_col = 'Z'
-            desi_z_col = 'z'
-            targets.pop(targets.index('QSO'))
-        else:
-            hsc_z_col = 'dnnz_photoz_best'
-            desi_z_col = 'Z'
-
-        tgts_save = {f'{tgt}_dndz': [] for tgt in targets}
-
-        for tgt in targets:
-
-            print(f'Processing {tgt}...')
-
-            if tgt == 'HSC':
-                file = fetch_hsc_files(
-                    randoms=False, sims=use_sims, sims_version=sims
-                    )
-                ztbl = fio.FITS(Path(file))[1][hsc_z_col].read()
-            else:
-                file = fetch_desi_files(
-                    tgt, randoms=False, sims=use_sims, sims_version=sims
-                    )
-                ztbl = fio.FITS(Path(file))[1][desi_z_col].read()
-            tbl_length = len(ztbl)
-            assert tbl_length > 0, f"Empty table for {tgt} in {file}"
-
-            btgt = self.get_bins(tgt)
-            tgts_save[f'{tgt}_bin'] = btgt
-
-            for b in range(1, len(btgt)):
-                mask = (
-                    (ztbl > btgt[b-1]) & (ztbl <= btgt[b])
-                    )
-                dndz = np.sum(mask)/tbl_length
-                tgts_save[f'{tgt}_dndz'].append(dndz)
-
-        self.dndz_file = out
-        np.savez(self.dndz_file, **tgts_save)
+        # could be ruled out later maybe idk
+        return CrossCorrelation

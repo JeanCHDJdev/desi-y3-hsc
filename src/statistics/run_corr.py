@@ -250,14 +250,11 @@ def main():
         logger.info(f'Using areas {areas} ... {[Path(moc_list[p]).stem for p in areas]}\n')
 
     # some more checks on targets
-    if isinstance(tgt2, str): 
-        tgt2 = [tgt2]
-    if isinstance(tgt1, str):
-        tgt1 = [tgt1]
-    if len(tgt1) == 1:
-        tgt1 = [tgt1[0]] * len(tgt2)
-    if len(tgt2) == 1:
-        tgt2 = [tgt2[0]] * len(tgt1)
+    assert not((tgt1 is None) and (tgt2 is None)), 'tgt1 and tgt2 cannot be None simultaneously'
+    if tgt2 is None:
+        tgt2 = tgt1
+    if tgt1 is None:
+        tgt1 = tgt2
 
     for m in range(len(moc_list)):
         mocf = moc_list[m]
