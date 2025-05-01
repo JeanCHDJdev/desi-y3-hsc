@@ -398,7 +398,8 @@ class CorrelationMeta(ABC):
 
         ## assertion safeties :
         assert len(self.data1) == len(self.z_mask_d1)
-        assert len(self.randoms1) == len(self.z_mask_r1)
+        if not self.use_hsc:
+            assert len(self.randoms1) == len(self.z_mask_r1)
 
         self.run_corr()
 
@@ -504,16 +505,27 @@ class JackknifeCrossCorrelation(CorrelationMeta):
         #    f'N data2: {np.sum(self.z_mask_d2)}' + 
         #    f', N randoms2: {len(self.randoms2)}'
         #    )
-
-        dp1 = [
-            self.data1[self.ra_desi_col][self.z_mask_d1], 
-            self.data1[self.dec_desi_col][self.z_mask_d1]
-            ]
-        rp1 = [
-            self.randoms1[self.ra_desi_col][self.z_mask_r1],
-            self.randoms1[self.dec_desi_col][self.z_mask_r1]
-            ]
+        
+        if self.use_desi:
+            dp1 = [
+                self.data1[self.ra_desi_col][self.z_mask_d1], 
+                self.data1[self.dec_desi_col][self.z_mask_d1]
+                ]
+            rp1 = [
+                self.randoms1[self.ra_desi_col][self.z_mask_r1],
+                self.randoms1[self.dec_desi_col][self.z_mask_r1]
+                ]
+        else:
+            dp1 = [
+                self.data1[self.ra_hsc_col][self.z_mask_d1], 
+                self.data1[self.dec_hsc_col][self.z_mask_d1]
+                ]
+            rp1 = [
+                self.randoms1[self.ra_hsc_randoms_col],
+                self.randoms1[self.dec_hsc_randoms_col]
+                ]   
         # if not doing autocorrelation, we need to add the second dataset
+        # (which is always HSC)
         if not self.autocorr:
             dp2 = [
                 self.data2[self.ra_hsc_col][self.z_mask_d2], 
@@ -550,14 +562,19 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             rw1 = None
             rw2 = None
         else :
-            dw1 = self.data1[self.w_desi_col][self.z_mask_d1]
-            if self.autocorr:
-                dw2 = None
+            if self.use_desi:
+                rw1 = self.randoms1[self.w_desi_col][self.z_mask_r1]
             else:
-                dw2 = self.data2[self.w_hsc_col][self.z_mask_d2]
-
-            rw1 = self.randoms1[self.w_desi_col][self.z_mask_r1]
+                rw1 = None
             rw2 = None
+
+            if self.use_hsc and self.autocorr:
+                colw = self.w_hsc_col
+            else: 
+                colw = self.w_desi_col
+            dw1 = self.data1[colw][self.z_mask_d1]
+            if not self.autocorr:
+                dw2 = self.data2[self.w_hsc_col][self.z_mask_d2]
 
         # casting to float in case of weird dtypes
         dp1 = np.array(dp1, dtype=float)
