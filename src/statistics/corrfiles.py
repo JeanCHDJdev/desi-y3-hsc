@@ -91,7 +91,7 @@ class CorrFileReader():
         else:
             return file
 
-    def make_dndz(self, sims : int, outfile='dndz.npz'):
+    def make_dndz(self, sims : int, outfile='dndz.npz', overwrite=False):
 
         use_sims = True if sims > 0 else False
         assert sims >= 0, f"Invalid simulations version {sims}"
@@ -103,6 +103,10 @@ class CorrFileReader():
         out = Path(self.ROOT, 'dndz', outfile).resolve()
         if not out.parent.exists():
             out.parent.mkdir(parents=True)
+        else:
+            if not overwrite:
+                print(f'Output file already exists and overwrite is set to False. ')
+                return
         
         targets = ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY', 'HSC']
 

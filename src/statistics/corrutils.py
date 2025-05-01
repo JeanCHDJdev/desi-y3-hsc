@@ -315,6 +315,12 @@ class CorrelationMeta(ABC):
                 right=True
                 )
         if self.use_hsc:
+            if self.sims:
+                self.zmask_randoms2 = np.digitize(
+                    self.randoms2[self.z_hsc_randoms_col], 
+                    bin_redshift2, 
+                    right=True
+                    )
             if self.use_zbin:
                 self.zmask_data2 = self.data2[self.z_bin_hsc_col]
             else:
@@ -323,20 +329,8 @@ class CorrelationMeta(ABC):
                     bin_redshift2, 
                     right=True
                     )
-            if self.sims:
-                self.zmask_randoms2 = np.digitize(
-                    self.randoms2[self.z_hsc_randoms_col], 
-                    bin_redshift2, 
-                    right=True
-                    )
 
         if self.autocorr:
-            # specifying the attributes to None for consistency
-            self.randoms2 = None 
-            self.zmask_randoms2 = None
-            self.zmask_data2 = None
-            self.data2 = None
-            
             if self.use_hsc:
                 # in the case of autocorrelation with hsc, we move the 2nd dataset to be the first
                 self.randoms1 = self.randoms2
@@ -345,6 +339,12 @@ class CorrelationMeta(ABC):
                 del self.data2
                 self.zmask_data1 = self.zmask_data2
                 del self.zmask_data2
+
+            # specifying the attributes to None for consistency
+            self.randoms2 = None 
+            self.zmask_randoms2 = None
+            self.zmask_data2 = None
+            self.data2 = None
 
     
     @abstractmethod
@@ -456,8 +456,8 @@ class JackknifeCrossCorrelation(CorrelationMeta):
         if self.autocorr:
             if self.use_hsc:
                 rpsamp = [
-                    self.randoms1[self.ra_hsc_col], 
-                    self.randoms1[self.dec_hsc_col]
+                    self.randoms1[self.ra_hsc_randoms_col], 
+                    self.randoms1[self.dec_hsc_randoms_col]
                     ]
             if self.use_desi:
                 rpsamp = [

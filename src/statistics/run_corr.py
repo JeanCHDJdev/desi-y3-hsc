@@ -140,7 +140,7 @@ def parse_args():
         '--use_mpi',
         action='store_true',
         help='Use MPI for parallelization. '
-        'Default is False.'
+        'Default is False. Currently not implemented.'
     )
     parser.add_argument(
         '-a',
