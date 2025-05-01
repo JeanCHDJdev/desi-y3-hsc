@@ -251,10 +251,14 @@ def main():
 
     # some more checks on targets
     assert not((tgt1 is None) and (tgt2 is None)), 'tgt1 and tgt2 cannot be None simultaneously'
-    if tgt2 is None:
+    if tgt2 is None and tgt1 is not None:
         tgt2 = tgt1
-    if tgt1 is None:
+    elif tgt1 is None and tgt2 is not None:
         tgt1 = tgt2
+    if isinstance(tgt1, str):
+        tgt1 = [tgt1]
+    if isinstance(tgt2, str):
+        tgt2 = [tgt2]
 
     for m in range(len(moc_list)):
         mocf = moc_list[m]
@@ -284,6 +288,10 @@ def main():
 
             for b1 in range(1, len(bin1)):
                 for b2 in range(1, len(bin2)):
+                    # autocorr skip
+                    if t1 == t2 and b1 != b2:
+                        continue
+
                     tb1b2 = time.time()
                     cc.run(b1, b2, m)
                     txt = f'Finished {t1}x{t2}, {b1} : {bin1[b1-1]}-{bin1[b1]}, {b2} : {bin2[b2-1]}-{bin2[b2]} in {time.time()-tb1b2:.2f}s'

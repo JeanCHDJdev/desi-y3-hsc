@@ -5,7 +5,8 @@ data/**
 
 #runs
 src/statistics/crosscorr*/**
-src/statistics/autos/**
+src/statistics/auto/**
+src/statistics/old/**
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
