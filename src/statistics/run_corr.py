@@ -278,6 +278,7 @@ def main():
                 tgt1=t1,
                 tgt2=t2,
                 moc=moc,
+                moc_index=m,
                 **corrargs
             )
             logger.memory_usage()

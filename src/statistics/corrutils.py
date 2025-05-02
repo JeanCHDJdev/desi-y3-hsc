@@ -40,6 +40,7 @@ class CorrelationMeta(ABC):
     ra_desi_col = 'RA'
     dec_desi_col = 'DEC'
     w_desi_col = 'WEIGHT'
+    w_fkp_desi_col = 'WEIGHT_FKP'
     z_desi_col = 'Z'
     z_desi_randoms_col = 'Z'
 
@@ -97,10 +98,19 @@ class CorrelationMeta(ABC):
             **{k: v for k, v in CorrelationMeta.bins_all.items()}
         )
 
+    # map MOC to caps
+    capdict = {
+        0 : 'NGC',
+        1 : 'SGC',
+        2 : 'SGC',
+        3 : 'NGC',
+    }
+
     def __init__(
             self, 
             logger : logging.Logger, 
             moc : MOC, 
+            moc_index : int,
             tgt1=None, 
             tgt2=None,
             output_dir=None, 
@@ -134,8 +144,12 @@ class CorrelationMeta(ABC):
             self.ra_desi_col = 'ra'
             self.dec_desi_col = 'dec'
             self.w_desi_col = None
+            self.w_desi_fkp_col = None
             self.z_desi_col = 'z'
             self.z_desi_randoms_col = 'redshift'
+
+        # figure out in which cap we are
+        self.cap = self.capdict[moc_index]
 
         self.autocorr = False
         self.use_hsc = False
@@ -213,10 +227,20 @@ class CorrelationMeta(ABC):
             )
         if self.use_desi:
             fs['catalog1'] = fetch_desi_files(
-                tgt1, randoms=False, weight_type=weight_type, sims=self.sims, sims_version=self.sims_version
+                tgt1, 
+                randoms=False, 
+                weight_type=weight_type, 
+                sims=self.sims, 
+                sims_version=self.sims_version,
+                cap=self.cap
                 )
             fs['randoms1'] = fetch_desi_files(
-                tgt1, randoms=True, weight_type=weight_type, sims=self.sims, sims_version=self.sims_version
+                tgt1, 
+                randoms=True, 
+                weight_type=weight_type, 
+                sims=self.sims, 
+                sims_version=self.sims_version,
+                cap=self.cap,
                 )
 
         if self.use_hsc:
@@ -244,10 +268,11 @@ class CorrelationMeta(ABC):
             self.randoms1 = sample_randoms_on_moc(
                 # use onle the first 5 randoms for now, it's fine... 
                 # could do more but not really worth the hassle
-                self.fs['randoms1'][:5] if not self.sims else self.fs['randoms1'],
+                self.fs['randoms1'][:6] if not self.sims else self.fs['randoms1'],
                 ra_col=self.ra_desi_col,
                 dec_col=self.dec_desi_col,
-                w_col=self.w_desi_col,
+                main_w_col=self.w_desi_col if not self.sims else None,
+                weight_cols_to_mult=[self.w_desi_col, self.w_fkp_desi_col] if not self.sims else None,
                 z_col=self.z_desi_randoms_col,
                 moc=self.moc,
                 )
@@ -266,7 +291,7 @@ class CorrelationMeta(ABC):
                 self.fs['randoms2'], 
                 ra_col=self.ra_hsc_randoms_col,
                 dec_col=self.dec_hsc_randoms_col,
-                w_col=None,
+                main_w_col=None,
                 z_col=None if not self.sims else self.z_hsc_randoms_col,
                 moc=self.moc,
                 )
@@ -285,7 +310,10 @@ class CorrelationMeta(ABC):
                 ra_col=self.ra_desi_col, 
                 dec_col=self.dec_desi_col, 
                 # no weights when cross correlating simulations
-                weight_col=self.w_desi_col if not self.sims else None, 
+                main_weight_col=self.w_desi_col if not self.sims else None,
+                weight_cols_to_mult=[
+                    self.w_desi_col, self.w_fkp_desi_col
+                    ] if not self.sims else None, 
                 z_col=self.z_desi_col,
                 moc=self.moc
                 )
@@ -296,7 +324,7 @@ class CorrelationMeta(ABC):
                 self.fs['catalog2'], 
                 ra_col=self.ra_hsc_col, 
                 dec_col=self.dec_hsc_col, 
-                weight_col=self.w_hsc_col if not self.sims else None,
+                main_weight_col=self.w_hsc_col if not self.sims else None,
                 z_col=self.z_hsc_col if not self.use_zbin else self.z_bin_hsc_col, 
                 moc=self.moc
                 )
@@ -403,6 +431,89 @@ class CorrelationMeta(ABC):
 
         self.run_corr()
 
+    def make_cats(self):
+        if self.use_desi:
+            dp1 = [
+                self.data1[self.ra_desi_col][self.z_mask_d1], 
+                self.data1[self.dec_desi_col][self.z_mask_d1]
+                ]
+            rp1 = [
+                self.randoms1[self.ra_desi_col][self.z_mask_r1],
+                self.randoms1[self.dec_desi_col][self.z_mask_r1]
+                ]
+        else:
+            dp1 = [
+                self.data1[self.ra_hsc_col][self.z_mask_d1], 
+                self.data1[self.dec_hsc_col][self.z_mask_d1]
+                ]
+            rp1 = [
+                self.randoms1[self.ra_hsc_randoms_col],
+                self.randoms1[self.dec_hsc_randoms_col]
+                ]   
+        # if not doing autocorrelation, we need to add the second dataset
+        # (which is always HSC)
+        if not self.autocorr:
+            dp2 = [
+                self.data2[self.ra_hsc_col][self.z_mask_d2], 
+                self.data2[self.dec_hsc_col][self.z_mask_d2]
+                ]
+            rp2 = [
+                self.randoms2[self.ra_hsc_randoms_col],
+                self.randoms2[self.dec_hsc_randoms_col]
+                ]
+        else:
+            rp2 = None
+            dp2 = None
+        
+        if self.corr_type == 'rp':
+            assert not self.use_hsc, 'rp correlation not available for HSC'
+            self.logger.info('Using redshift for distance calculation')
+            dp1.append(
+                ct.z2dist(self.data1[self.z_desi_col][self.z_mask_d1])
+                )
+            rp1.append(
+                ct.z2dist(self.randoms1[self.z_desi_randoms_col][self.z_mask_r1])
+                )
+            if self.autocorr:
+                rp2.append(
+                    ct.z2dist(self.randoms2[self.z_hsc_randoms_col])
+                    )
+                dp2.append(
+                    ct.z2dist(self.data2[self.z_hsc_col][self.z_mask_d2])
+                    )
+            
+        # no weights for simulations
+        dw1 = None
+        dw2 = None
+        rw1 = None
+        rw2 = None
+
+        if not self.sims:
+            if self.use_desi:
+                rw1 = self.randoms1[self.w_desi_col][self.z_mask_r1]
+            else:
+                rw1 = None
+            rw2 = None
+
+            if self.use_hsc and self.autocorr:
+                colw = self.w_hsc_col
+            else: 
+                colw = self.w_desi_col
+            dw1 = self.data1[colw][self.z_mask_d1]
+            if not self.autocorr:
+                dw2 = self.data2[self.w_hsc_col][self.z_mask_d2]
+
+        # casting to float in case of weird dtypes
+        dp1 = np.array(dp1, dtype=float)
+        rp1 = np.array(rp1, dtype=float)
+        if not self.autocorr:
+            dp2 = np.array(dp2, dtype=float)
+            rp2 = np.array(rp2, dtype=float)
+        else:
+            dp2 = None
+            rp2 = None
+
+        return dp1, dp2, rp1, rp2, dw1, dw2, rw1, rw2
 
 class CrossCorrelation(CorrelationMeta):
     def __init__(self, **kwargs):
@@ -410,29 +521,22 @@ class CrossCorrelation(CorrelationMeta):
 
     def run_corr(self):
 
+        dp1, dp2, rp1, rp2, dw1, dw2, rw1, rw2 = self.make_cats()
         tpcf = TwoPointCorrelationFunction(
             edges=self.edges,
-            data_positions1=[
-                self.data1[self.ra_desi_col][self.z_mask_d1], 
-                self.data1[self.dec_desi_col][self.z_mask_d1]
-                ],
-            data_positions2=[
-                self.data2[self.ra_hsc_col][self.z_mask_d2], 
-                self.data2[self.dec_hsc_col][self.z_mask_d2]
-                ],
-            randoms_positions1=[
-                self.randoms1[self.ra_desi_col][self.z_mask_r1],
-                self.randoms1[self.dec_desi_col][self.z_mask_r1]
-                ],
-            # HSC does not need redshift masking on randoms
-            randoms_positions2=[
-                self.randoms2[self.ra_hsc_randoms_col],
-                self.randoms2[self.dec_hsc_randoms_col]
-                ],
-            data_weights1=self.data1[self.w_desi_col][self.z_mask_d1],
-            data_weights2=self.data2[self.w_hsc_col][self.z_mask_d2],
-            randoms_weights1=self.randoms1[self.w_desi_col][self.z_mask_r1] if not self.sims else None,
-            randoms_weights2=None,
+
+            data_positions1=dp1,
+            data_positions2=dp2,
+
+            randoms_positions1=rp1,
+            randoms_positions2=rp2,
+
+            data_weights1=dw1,
+            data_weights2=dw2,
+
+            randoms_weights1=rw1,
+            randoms_weights2=rw2,
+
             nthreads=self.nproc,
             mode='theta',
             position_type='rd', # 'rd' for RA/Dec
@@ -496,95 +600,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
         self.logger.info(f'Labels from {labels.min()} to {labels.max()}.')
 
     def run_corr(self):
-        
-        #self.logger.info(
-        #    f'N data1: {np.sum(self.z_mask_d1)}' + 
-        #    f', N randoms1: {np.sum(self.z_mask_r1)}'
-        #    )
-        #self.logger.info(
-        #    f'N data2: {np.sum(self.z_mask_d2)}' + 
-        #    f', N randoms2: {len(self.randoms2)}'
-        #    )
-        
-        if self.use_desi:
-            dp1 = [
-                self.data1[self.ra_desi_col][self.z_mask_d1], 
-                self.data1[self.dec_desi_col][self.z_mask_d1]
-                ]
-            rp1 = [
-                self.randoms1[self.ra_desi_col][self.z_mask_r1],
-                self.randoms1[self.dec_desi_col][self.z_mask_r1]
-                ]
-        else:
-            dp1 = [
-                self.data1[self.ra_hsc_col][self.z_mask_d1], 
-                self.data1[self.dec_hsc_col][self.z_mask_d1]
-                ]
-            rp1 = [
-                self.randoms1[self.ra_hsc_randoms_col],
-                self.randoms1[self.dec_hsc_randoms_col]
-                ]   
-        # if not doing autocorrelation, we need to add the second dataset
-        # (which is always HSC)
-        if not self.autocorr:
-            dp2 = [
-                self.data2[self.ra_hsc_col][self.z_mask_d2], 
-                self.data2[self.dec_hsc_col][self.z_mask_d2]
-                ]
-            rp2 = [
-                self.randoms2[self.ra_hsc_randoms_col],
-                self.randoms2[self.dec_hsc_randoms_col]
-                ]
-        else:
-            rp2 = None
-            dp2 = None
-        
-        if self.corr_type == 'rp':
-            self.logger.info('Using redshift for distance calculation')
-            dp1.append(
-                ct.z2dist(self.data1[self.z_desi_col][self.z_mask_d1])
-                )
-            rp1.append(
-                ct.z2dist(self.randoms1[self.z_desi_randoms_col][self.z_mask_r1])
-                )
-            if self.autocorr:
-                rp2.append(
-                    ct.z2dist(self.randoms2[self.z_hsc_randoms_col])
-                    )
-                dp2.append(
-                    ct.z2dist(self.data2[self.z_hsc_col][self.z_mask_d2])
-                    )
-            
-        if self.sims:
-            # no weights for simulations
-            dw1 = None
-            dw2 = None
-            rw1 = None
-            rw2 = None
-        else :
-            if self.use_desi:
-                rw1 = self.randoms1[self.w_desi_col][self.z_mask_r1]
-            else:
-                rw1 = None
-            rw2 = None
-
-            if self.use_hsc and self.autocorr:
-                colw = self.w_hsc_col
-            else: 
-                colw = self.w_desi_col
-            dw1 = self.data1[colw][self.z_mask_d1]
-            if not self.autocorr:
-                dw2 = self.data2[self.w_hsc_col][self.z_mask_d2]
-
-        # casting to float in case of weird dtypes
-        dp1 = np.array(dp1, dtype=float)
-        rp1 = np.array(rp1, dtype=float)
-        if not self.autocorr:
-            dp2 = np.array(dp2, dtype=float)
-            rp2 = np.array(rp2, dtype=float)
-        else:
-            dp2 = None
-            rp2 = None
+        dp1, dp2, rp1, rp2, dw1, dw2, rw1, rw2 = self.make_cats()
 
         # subsampling with KMeans for jackknife
         ds1 = self.subsampler.label(dp1)
@@ -675,19 +691,15 @@ class DESIAutoCorrelation(CorrelationMeta):
 
 
 ## Generic methods for each class
-def process_random_file(f, ra_col, dec_col, w_col, z_col, moc):
+def process_random_file(f, ra_col, dec_col, main_weight_col, weight_cols_to_mult, z_col, moc):
 
-    cols = [
-        c for c in [ra_col, dec_col, w_col, z_col] 
-        if c is not None
-        ]
     
     try:
         with fio.FITS(str(f)) as rand:
             tbl = rand[1]
 
+            data = _get_data_to_read(tbl, ra_col, dec_col, main_weight_col, weight_cols_to_mult, z_col)
             nrows = tbl.get_nrows()
-            data = tbl.read(columns=cols)
 
             if moc is not None:
                 print(f"Filtering {nrows} randoms in {f} using MOC")
@@ -709,7 +721,8 @@ def sample_randoms_on_moc(
         random_files, 
         ra_col, 
         dec_col, 
-        w_col=None, 
+        main_w_col=None, 
+        weight_cols_to_mult=None,
         z_col=None, 
         moc=None, 
         num_processes=None
@@ -727,7 +740,7 @@ def sample_randoms_on_moc(
     tp = time.time()
     with mp.Pool(processes=num_processes) as pool:
         results = pool.starmap(process_random_file, [
-            (f, ra_col, dec_col, w_col, z_col, moc) 
+            (f, ra_col, dec_col, main_w_col, weight_cols_to_mult, z_col, moc) 
             for f in random_files
         ])
     print(f"Processed {len(random_files)} random files in {time.time()-tp:.2f} seconds")
@@ -742,18 +755,17 @@ def sample_randoms_on_moc(
     
     return np.concatenate(randoms)
 
-def sample_file_on_moc(file, ra_col, dec_col, weight_col=None, z_col=None, moc=None):
-
+def sample_file_on_moc(file, ra_col, dec_col, main_weight_col, weight_cols_to_mult=None, z_col=None, moc=None):
+    '''
+    Read a file and filter it using a MOC. Multiply the weights if needed.
+    '''
+    # this function is messy but it works (also kind of does multiple things at once)
     with fio.FITS(str(file)) as f:
         tbl = f[1]
-        cols_to_read = [ra_col, dec_col, weight_col, z_col]
-        if weight_col is None:
-            cols_to_read = [ra_col, dec_col, z_col]
-        if z_col is None:
-            cols_to_read = [ra_col, dec_col, weight_col]
-        if weight_col is None and z_col is None:
-            cols_to_read = [ra_col, dec_col]
-        data = tbl.read(columns=cols_to_read)
+        data = _get_data_to_read(
+            tbl, ra_col, dec_col, main_weight_col, weight_cols_to_mult, z_col
+        )
+
         if moc is not None:
             print(f"Filtering {tbl.get_nrows()} {len(data)} rows in {Path(file).stem} using MOC")
             coords = SkyCoord(data[ra_col] * u.deg, data[dec_col] * u.deg, frame='icrs')
@@ -765,6 +777,36 @@ def sample_file_on_moc(file, ra_col, dec_col, weight_col=None, z_col=None, moc=N
 
     return np.array(data)
 
+def _get_data_to_read(tbl, ra_col, dec_col, main_weight_col, weight_cols_to_mult, z_col):
+    base_cols = [col for col in [ra_col, dec_col, main_weight_col, z_col] if col is not None]
+    cols_to_read = base_cols.copy()
+
+    if len(base_cols) == 0:
+        raise ValueError(f"No columns to read in {tbl}")
+    if main_weight_col in base_cols:
+        if weight_cols_to_mult is not None:
+            cols_to_read.remove(main_weight_col)
+            cols_to_read += weight_cols_to_mult
+
+    assert all(c in tbl.get_colnames() for c in cols_to_read), f"Columns {cols_to_read} not in {tbl}"
+    data = tbl.read(columns=cols_to_read)
+
+    if main_weight_col is not None:
+        if weight_cols_to_mult is not None:
+            w_col = np.ones_like(data[ra_col])
+            for col in weight_cols_to_mult:
+                w_col *= data[col]
+        else:
+            w_col = data[main_weight_col]
+        data[main_weight_col] = w_col
+
+    #if main_weight_col is not None:
+    #    print(data[main_weight_col][:5])
+    #    for c in weight_cols_to_mult:
+    #        print(data[c][:5])
+    
+    return data
+    
 def figure_out_class(tgt1, tgt2=None, jackknife=False):
     desi_avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
     hsc_avb = ['HSC']

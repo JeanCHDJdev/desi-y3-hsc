@@ -198,10 +198,16 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
 
     return logger
 
-def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_version=0):
+def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_version=0, cap=None):
+    if cap is None:
+        raise ValueError("cap cannot be None. Please provide a value.")
+    assert cap in ['NGC', 'SGC'], f"cap should be either NGC or SGC, not {cap}"
+    assert tgt in ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY'], f"Unknown target {tgt}"
+    assert weight_type in ['PIP', 'nonKP', 'base'], f"Unknown weight type {weight_type}"
+
     try:
         if sims:
-            sims_root = '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/'
+            sims_root = '/global/cfs/projectdirs/d esi/users/jchdj/desi-y3-hsc/data/sims/'
             if randoms:
                 return Path(
                     sims_root,
@@ -219,10 +225,10 @@ def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_v
                 )
             if weight_type == 'PIP':
                 root = Path(root, 'PIP')
-                path = f'{tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
+                path = f'{tgt}_{cap}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
             elif weight_type == 'nonKP':
                 root = Path(root, 'nonKP')
-                path = f'{tgt}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
+                path = f'{tgt}_{cap}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
             elif weight_type == 'base':
                 root = Path(root)
                 path = f'{tgt}{"_[0-9]*_" if randoms else "_"}full_HPmapcut{".ran" if randoms else ".dat"}.fits'
