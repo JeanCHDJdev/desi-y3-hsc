@@ -41,6 +41,7 @@ class CorrelationMeta(ABC):
     dec_desi_col = 'DEC'
     w_desi_col = 'WEIGHT'
     w_fkp_desi_col = 'WEIGHT_FKP'
+    w_comp_desi_col = 'WEIGHT_COMP'
     z_desi_col = 'Z'
     z_desi_randoms_col = 'Z'
 
@@ -145,6 +146,7 @@ class CorrelationMeta(ABC):
             self.dec_desi_col = 'dec'
             self.w_desi_col = None
             self.w_desi_fkp_col = None
+            self.w_comp_desi_col = None
             self.z_desi_col = 'z'
             self.z_desi_randoms_col = 'redshift'
 
@@ -198,6 +200,13 @@ class CorrelationMeta(ABC):
         # which edges and correlation type to use :
         self.corr_type = corr_type
         self.pos_type = 'rd' if corr_type == 'theta' else 'rdd'
+
+        # weights : here base (nonKP or PIP) + FKP + ...
+        self.w_cols_to_mult = [
+            self.w_desi_col, 
+            #self.w_fkp_desi_col,
+            self.w_comp_desi_col
+            ]
 
         if self.corr_type == 'rppi':
             self.edges = (self.bins_mode['rppi_s'], self.bins_mode['rppi_mu'])
@@ -272,7 +281,7 @@ class CorrelationMeta(ABC):
                 ra_col=self.ra_desi_col,
                 dec_col=self.dec_desi_col,
                 main_w_col=self.w_desi_col if not self.sims else None,
-                weight_cols_to_mult=[self.w_desi_col, self.w_fkp_desi_col] if not self.sims else None,
+                weight_cols_to_mult=self.w_cols_to_mult if not self.sims else None,
                 z_col=self.z_desi_randoms_col,
                 moc=self.moc,
                 )
@@ -311,9 +320,7 @@ class CorrelationMeta(ABC):
                 dec_col=self.dec_desi_col, 
                 # no weights when cross correlating simulations
                 main_weight_col=self.w_desi_col if not self.sims else None,
-                weight_cols_to_mult=[
-                    self.w_desi_col, self.w_fkp_desi_col
-                    ] if not self.sims else None, 
+                weight_cols_to_mult=self.w_cols_to_mult if not self.sims else None, 
                 z_col=self.z_desi_col,
                 moc=self.moc
                 )
@@ -799,11 +806,6 @@ def _get_data_to_read(tbl, ra_col, dec_col, main_weight_col, weight_cols_to_mult
         else:
             w_col = data[main_weight_col]
         data[main_weight_col] = w_col
-
-    #if main_weight_col is not None:
-    #    print(data[main_weight_col][:5])
-    #    for c in weight_cols_to_mult:
-    #        print(data[c][:5])
     
     return data
     

@@ -1,21 +1,17 @@
+'''
+Convenience script to run cross-correlation between DESI and HSC.
+Can also do autocorrelation and jackknife estimates.
+'''
 import time 
 import matplotlib.pyplot as plt
 import os
-import fitsio as fio
 import numpy as np
-import logging
-import psutil
-import multiprocessing as mp
 
 from mocpy import MOC
 from pathlib import Path
-from astropy import units as u
-from astropy.coordinates import SkyCoord
 from argparse import ArgumentParser
 
-from pycorr import (
-    TwoPointCorrelationFunction, setup_logging
-)
+from pycorr import setup_logging
 
 import corrutils as cu
 
@@ -246,8 +242,8 @@ def main():
 
     moc_list = sorted(cu.CorrelationMeta.moc_list)
     if areas is not None:
-        moc_list = [moc_list[p] for p in areas]
-        logger.info(f'Using areas {areas} ... {[Path(moc_list[p]).stem for p in areas]}\n')
+        moc_list = [moc_list[p-1] for p in areas]
+        logger.info(f'Using areas {areas} ... {[Path(moc_list[p-1]).stem for p in areas]}\n')
 
     # some more checks on targets
     assert not((tgt1 is None) and (tgt2 is None)), 'tgt1 and tgt2 cannot be None simultaneously'

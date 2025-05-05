@@ -1,9 +1,14 @@
+'''
+Utils to grab and fetch files for the cross-correlation analysis
+and to set up logging.
+'''
 import numpy as np
 import fitsio as fio
 import logging
 import time
 import psutil
 from pathlib import Path
+import src.statistics.cosmotools as ct
 
 class CorrFileReader():
     '''
@@ -43,7 +48,7 @@ class CorrFileReader():
         tgt : str
             Target name (e.g. 'ELGnotqso', 'LRG', 'QSO', 'BGS_ANY', 'HSC')
         get : str
-            What to get from the dndz file. Default is 'dndz', can also be 'bin'.
+            What to get from the dndz file. Default is 'dndz', can also be 'bin' or 'wDM'.
         bin_indice : int
             Bin index to get the dndz for. Default is None, which means all bins (returns the array).
         '''
@@ -91,7 +96,7 @@ class CorrFileReader():
         else:
             return file
 
-    def make_dndz(self, sims : int, outfile='dndz.npz', overwrite=False):
+    def make_dndz(self, sims : int, outfile='dndz.npz', overwrite=False, z_dens_resolution=np.linspace(0, 5, 500)):
 
         use_sims = True if sims > 0 else False
         assert sims >= 0, f"Invalid simulations version {sims}"
@@ -118,7 +123,10 @@ class CorrFileReader():
             hsc_z_col = 'dnnz_photoz_best'
             desi_z_col = 'Z'
 
-        tgts_save = {f'{tgt}_dndz': [] for tgt in targets}
+        tgts_save = {
+            **{f'{tgt}_dndz': [] for tgt in targets},
+            **{f'{tgt}_wDM': [] for tgt in targets}
+        }
 
         for tgt in targets:
 
@@ -131,7 +139,8 @@ class CorrFileReader():
                 ztbl = fio.FITS(Path(file))[1][hsc_z_col].read()
             else:
                 file = fetch_desi_files(
-                    tgt, randoms=False, sims=use_sims, sims_version=sims
+                    #cap does not really for dndz
+                    tgt, randoms=False, sims=use_sims, sims_version=sims, cap='NGC' 
                     )
                 ztbl = fio.FITS(Path(file))[1][desi_z_col].read()
             tbl_length = len(ztbl)
@@ -140,10 +149,21 @@ class CorrFileReader():
             btgt = self.get_bins(tgt)
             tgts_save[f'{tgt}_bin'] = btgt
 
+            angular_bins=self.get_bins('theta')
+
             for b in range(1, len(btgt)):
                 mask = (
                     (ztbl > btgt[b-1]) & (ztbl <= btgt[b])
                     )
+                counts, edges = np.histogram(
+                    ztbl[mask], bins=z_dens_resolution
+                    )
+                wDM = ct.get_wCM(
+                    angular_bins=angular_bins,
+                    zbin_edges=edges,
+                    zbin_counts=counts
+                    )
+                tgts_save[f'{tgt}_wDM'].append(wDM)
                 dndz = np.sum(mask)/tbl_length
                 tgts_save[f'{tgt}_dndz'].append(dndz)
 
@@ -207,7 +227,7 @@ def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_v
 
     try:
         if sims:
-            sims_root = '/global/cfs/projectdirs/d esi/users/jchdj/desi-y3-hsc/data/sims/'
+            sims_root = '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/sims/'
             if randoms:
                 return Path(
                     sims_root,
