@@ -82,12 +82,17 @@ def get_wCM(angular_bins, zbin_edges, zbin_counts):
     halofit model for the non-linear power spectrum.
     '''
     # instaniate tracer
-    dndz_z = 0.5 * (zbin_edges[:-1] + zbin_edges[1:])
+    dndz_zbins = 0.5 * (zbin_edges[:-1] + zbin_edges[1:])
+    #if bias_with_growthfactor:
+        # bias with growth factor (0.95/D(z) growth factor)
+        #bias = (dndz_zbins, 0.95 / (1 / (1 + dndz_zbins)))
+    #else:
+    bias = (dndz_zbins, np.ones_like(dndz_zbins))
     tracer = ccl.NumberCountsTracer(
         COSMO_ccl,
         has_rsd=False,
-        dndz=(dndz_z, zbin_counts / np.trapz(zbin_counts, dndz_z)),  # normalized PDF
-        bias=(dndz_z, np.ones_like(dndz_z))
+        dndz=(dndz_zbins, zbin_counts / np.trapz(zbin_counts, dndz_zbins)),  # normalized PDF
+        bias=bias
     )
 
     # angular power spectrum from C_ells
@@ -99,7 +104,7 @@ def get_wCM(angular_bins, zbin_edges, zbin_counts):
         COSMO_ccl, 
         ell=ell, 
         C_ell=cl, 
-        theta=np.deg2rad(angular_bins)
+        theta=angular_bins
         )
 
     return wtheta

@@ -69,7 +69,7 @@ class CorrelationMeta(ABC):
     bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
     bins_qso = np.arange(0.9, 3.1, 0.3) # 0.9 < z < 2.1
 
-    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 
+    bins_hsc = np.arange(0.3, 1.6, 0.1) # 0.3 < z <= 1.5 
 
     bins_tracers = {
         'LRG': bins_lrg,

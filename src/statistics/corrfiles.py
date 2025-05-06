@@ -96,7 +96,7 @@ class CorrFileReader():
         else:
             return file
 
-    def make_dndz(self, sims : int, outfile='dndz.npz', overwrite=False, z_dens_resolution=np.linspace(0, 5, 500)):
+    def make_dndz(self, sims : int, outfile='dndz.npz', overwrite=False, z_dens_resolution=np.linspace(0, 5, 250), oversample_rate=100):
 
         use_sims = True if sims > 0 else False
         assert sims >= 0, f"Invalid simulations version {sims}"
@@ -150,6 +150,10 @@ class CorrFileReader():
             tgts_save[f'{tgt}_bin'] = btgt
 
             angular_bins=self.get_bins('theta')
+            # let's oversample the angular bins to get a better resolution
+            angular_bins = np.linspace(
+                angular_bins[0], angular_bins[-1], oversample_rate*len(angular_bins)
+                )
 
             for b in range(1, len(btgt)):
                 mask = (
