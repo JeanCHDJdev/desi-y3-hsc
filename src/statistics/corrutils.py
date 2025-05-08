@@ -402,9 +402,9 @@ class CorrelationMeta(ABC):
         assert bin_redshift2 is not None, 'bin_redshift2 cannot be None'
 
         if self.use_desi:
-            cat, ran, zmask_cat, zmask_ran = self.set_desi_tracer(bin_redshift2)
+            cat, ran, zmask_cat, zmask_ran = self.set_desi_tracer(self.tgt1, bin_redshift2)
         if self.double_desi:
-            cat2, ran2, zmask_cat2, zmask_ran2 = self.set_desi_tracer(bin_redshift2)
+            cat2, ran2, zmask_cat2, zmask_ran2 = self.set_desi_tracer(self.tgt2, bin_redshift2)
         if self.use_hsc and not self.double_desi: # flags should be incompatible, but just in case
             if self.autocorr:
                 cat, ran, zmask_cat, zmask_ran = self.set_hsc_tracer(bin_redshift1)
@@ -421,32 +421,20 @@ class CorrelationMeta(ABC):
         self.zmask_randoms2 = zmask_ran2
     
     def set_current_redshift_masks(self, bin1, bin2):
-        masks = [
-            self.zmask_data1,
-            self.zmask_randoms1,
-            self.zmask_data2,
-            self.zmask_randoms2
-            ]
         self.z_bool_d1 = None
         self.z_bool_r1 = None
         self.z_bool_d2 = None
         self.z_bool_r2 = None
-        bool_masks = [
-            self.z_bool_d1,
-            self.z_bool_r1,
-            self.z_bool_d2,
-            self.z_bool_r2
-            ]
         
-        for i, mask in enumerate(masks):
-            if mask is not None:
-                if i == 0 or i == 1:
-                    # data1 or randoms1
-                    bool_masks[i] = mask == bin1
-                elif i == 2 or i == 3:
-                    # data2 or randoms2
-                    bool_masks[i] = mask == bin2
-    
+        if self.zmask_data1 is not None:
+            self.z_bool_d1 = self.zmask_data1 == bin1
+        if self.zmask_randoms1 is not None:
+            self.z_bool_r1 = self.zmask_randoms1 == bin1
+        if self.zmask_data2 is not None:
+            self.z_bool_d2 = self.zmask_data2 == bin2
+        if self.zmask_randoms2 is not None:
+            self.z_bool_r2 = self.zmask_randoms2 == bin2
+
     @abstractmethod
     def run_corr(self):
         ''' 
@@ -472,8 +460,8 @@ class CorrelationMeta(ABC):
         self.outfile = outfile
         
         self.set_current_redshift_masks(
-            bin_index1=bin_index1, 
-            bin_index2=bin_index2
+            bin1=bin_index1, 
+            bin2=bin_index2
             )
 
         self.logger.info(
@@ -549,20 +537,28 @@ class CorrelationMeta(ABC):
             rp1.append(
                 ct.z2dist(self.randoms1[self.z_desi_randoms_col][self.z_bool_r1])
                 )
-            if self.autocorr:
-                rp2.append(
-                    ct.z2dist(self.randoms2[self.z_hsc_randoms_col])
-                    )
-                dp2.append(
-                    ct.z2dist(self.data2[self.z_hsc_col][self.z_bool_d2])
-                    )
+            if not self.autocorr:
+                if self.use_hsc:
+                    rp2.append(
+                        ct.z2dist(self.randoms2[self.z_hsc_randoms_col])
+                        )
+                    dp2.append(
+                        ct.z2dist(self.data2[self.z_hsc_col][self.z_bool_d2])
+                        )
+                elif self.double_desi:
+                    rp2.append(
+                        ct.z2dist(self.randoms2[self.z_desi_randoms_col][self.z_bool_r2])
+                        )
+                    dp2.append(
+                        ct.z2dist(self.data2[self.z_desi_col][self.z_bool_d2])
+                        )   
             
-        # no weights for simulations
         dw1 = None
         dw2 = None
         rw1 = None
         rw2 = None
 
+        # no weights for simulations
         if not self.sims:
             if self.use_desi:
                 rw1 = self.randoms1[self.w_desi_col][self.z_bool_r1]
@@ -574,9 +570,11 @@ class CorrelationMeta(ABC):
                 colw = self.w_hsc_col
             else: 
                 colw = self.w_desi_col
-            dw1 = self.data1[colw][self.z_bool_d1]
-            if not self.autocorr:
-                dw2 = self.data2[self.w_hsc_col][self.z_bool_d2]
+                dw1 = self.data1[colw][self.z_bool_d1]
+            
+            if self.double_desi:
+                dw2 = self.data2[self.w_desi_col][self.z_bool_d2]
+                rw2 = self.randoms2[self.w_desi_col][self.z_bool_r2]
 
         # casting to float in case of weird dtypes
         dp1 = np.array(dp1, dtype=float)
@@ -645,16 +643,29 @@ class JackknifeCrossCorrelation(CorrelationMeta):
                     self.randoms1[self.dec_desi_col]
                     ]
         else:
-            rpsamp = [
-                self.randoms2[self.ra_hsc_randoms_col],
-                self.randoms2[self.dec_hsc_randoms_col]
-                ]
+            if self.double_desi:
+                rpsamp = [
+                    self.randoms1[self.ra_desi_col], 
+                    self.randoms1[self.dec_desi_col]
+                    ]
+            else:
+                rpsamp = [
+                    self.randoms2[self.ra_hsc_randoms_col],
+                    self.randoms2[self.dec_hsc_randoms_col]
+                    ]
         if self.corr_type == 'rp':
-            rpsamp.append(
-                ct.z2dist(
-                    self.randoms2[self.z_hsc_randoms_col]
+            if self.double_desi:
+                rpsamp.append(
+                    ct.z2dist(
+                        self.randoms2[self.z_desi_randoms_col]
+                        )
                     )
-                )
+            else:
+                rpsamp.append(
+                    ct.z2dist(
+                        self.randoms2[self.z_hsc_randoms_col]
+                        )
+                    )
         if self.data2 is not None and self.randoms2 is not None:
             self.logger.info(f'Data2 length {len(self.data2)} and randoms2 length {len(self.randoms2)}')
 
@@ -898,16 +909,12 @@ def figure_out_class(tgt1, tgt2=None, jackknife=False):
         return CrossCorrelation
     
 def get_target_couple(tgt1, tgt2=None):
-    desi_avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
-    hsc_avb = ['HSC']
-    avb = desi_avb + hsc_avb
-
+    avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'HSC']
     assert not((tgt1 is None) and (tgt2 is None)), 'tgt1 and tgt2 cannot be None simultaneously'
     if tgt2 is None and tgt1 is not None:
         tgt2 = tgt1
     elif tgt1 is None and tgt2 is not None:
         tgt1 = tgt2
-    assert tgt1 in avb and tgt2 in avb, f'Unknown target {tgt1} or {tgt2}'
 
     if isinstance(tgt1, str):
         tgt1 = [tgt1]
@@ -915,5 +922,7 @@ def get_target_couple(tgt1, tgt2=None):
         tgt2 = [tgt2]
 
     assert len(tgt1) == len(tgt2), 'tgt1 and tgt2 must have the same length'
+    assert all(t1 in avb for t1 in tgt1), f'Unknown targets {tgt1}'
+    assert all(t2 in avb for t2 in tgt2), f'Unknown targets {tgt2}'
     
     return tgt1, tgt2
