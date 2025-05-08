@@ -62,7 +62,7 @@ def parse_args():
         '-t2',
         '--tgt2',
         type=str,
-        choices=['HSC'],
+        choices=['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'HSC'],
         default=None,
         help='Target 2. '
         'Default is None. Only current option is HSC.'
@@ -246,15 +246,7 @@ def main():
         logger.info(f'Using areas {areas} ... {[Path(moc_list[p-1]).stem for p in areas]}\n')
 
     # some more checks on targets
-    assert not((tgt1 is None) and (tgt2 is None)), 'tgt1 and tgt2 cannot be None simultaneously'
-    if tgt2 is None and tgt1 is not None:
-        tgt2 = tgt1
-    elif tgt1 is None and tgt2 is not None:
-        tgt1 = tgt2
-    if isinstance(tgt1, str):
-        tgt1 = [tgt1]
-    if isinstance(tgt2, str):
-        tgt2 = [tgt2]
+    tgt1, tgt2 = cu.get_target_couple(tgt1, tgt2)
 
     for m in range(len(moc_list)):
         mocf = moc_list[m]

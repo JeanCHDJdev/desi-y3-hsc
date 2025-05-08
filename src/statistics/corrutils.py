@@ -167,6 +167,7 @@ class CorrelationMeta(ABC):
         if tgt1 is None:
             tgt1 = tgt2
 
+        # same target for both : this is autocorrelation
         if tgt1 == tgt2:
             self.autocorr = True
             if tgt1 in desi_tgt:
@@ -186,6 +187,9 @@ class CorrelationMeta(ABC):
             if tgt1 in hsc_tgt and tgt2 in desi_tgt:
                 # switch targets; useful for later
                 tgt1, tgt2 = tgt2, tgt1
+            if tgt1 in desi_tgt and tgt2 in desi_tgt:
+                # case of cross correlation between two different DESI tracers
+                self.double_desi = True
 
         self.tgt1 = tgt1
         self.tgt2 = tgt2
@@ -204,9 +208,11 @@ class CorrelationMeta(ABC):
         # weights : here base (nonKP or PIP) + FKP + ...
         self.w_cols_to_mult = [
             self.w_desi_col, 
-            #self.w_fkp_desi_col,
-            self.w_comp_desi_col
+            self.w_fkp_desi_col,
+            #self.w_comp_desi_col
             ]
+        # usually PIP, nonKP...
+        self.weight_type = weight_type
 
         if self.corr_type == 'rppi':
             self.edges = (self.bins_mode['rppi_s'], self.bins_mode['rppi_mu'])
@@ -223,164 +229,223 @@ class CorrelationMeta(ABC):
         self.nproc = nproc
 
         # Filesystem setup
-        fs = {}
         self.output_dir = Path(output_dir, f'{tgt1}x{tgt2}')
         if not self.output_dir.exists():
             self.output_dir.mkdir(parents=True)
-        fs['outdir'] = Path(self.output_dir)
 
         # Grabbing the catalogs on initialisation
         logger.info(
             f'Grabbing catalogs for {tgt1} and {tgt2} ... ' 
             f'weight_type={weight_type}, sims={self.sims}, '
             )
-        if self.use_desi:
-            fs['catalog1'] = fetch_desi_files(
-                tgt1, 
-                randoms=False, 
-                weight_type=weight_type, 
-                sims=self.sims, 
-                sims_version=self.sims_version,
-                cap=self.cap
-                )
-            fs['randoms1'] = fetch_desi_files(
-                tgt1, 
-                randoms=True, 
-                weight_type=weight_type, 
-                sims=self.sims, 
-                sims_version=self.sims_version,
-                cap=self.cap,
-                )
-
-        if self.use_hsc:
-            fs['catalog2'] = fetch_hsc_files(
-                randoms=False, sims=self.sims, include_dud=False, sims_version=self.sims_version
-                )
-            fs['randoms2'] = fetch_hsc_files(
-                randoms=True, sims=self.sims, include_dud=False, sims_version=self.sims_version
-                )
-        logger.info(fs)
 
         # Loading the MOC footprint
         self.moc = moc
-
-        # Keep the filesystem
-        self.fs = fs 
 
         # Sample rate for randoms
         self.sample_rate_desi = sample_rate_desi
         self.sample_rate_hsc = sample_rate_hsc
 
-        logger.info(f'Collating randoms ...')
-        if 'randoms1' in self.fs:
-            trd = time.time()
-            self.randoms1 = sample_randoms_on_moc(
-                # use onle the first 5 randoms for now, it's fine... 
-                # could do more but not really worth the hassle
-                self.fs['randoms1'][:6] if not self.sims else self.fs['randoms1'],
-                ra_col=self.ra_desi_col,
-                dec_col=self.dec_desi_col,
-                main_w_col=self.w_desi_col if not self.sims else None,
-                weight_cols_to_mult=self.w_cols_to_mult if not self.sims else None,
-                z_col=self.z_desi_randoms_col,
-                moc=self.moc,
-                )
-            all_r_length = len(self.randoms1)
-            self.randoms1 = self.randoms1[::self.sample_rate_desi]
-            samp_r_length = len(self.randoms1)
+        self.make_cats(
+            bin_redshift1=bin_redshift1, 
+            bin_redshift2=bin_redshift2
+        )
+
+    def set_desi_tracer(self, tgt, bin_redshift):
+        '''
+        Returns cat, ran, zmask_cat, zmask_ran
+        for a specific DESI tracer (tgt).
+
+        Parameters
+        ----------
+        tgt : str
+            Target name (e.g. LRG, ELGnotqso, QSO, BGS_ANY)
+        bin_redshift : array
+            Redshift binning for the target. Will digitize the redshift column
+            and make the masks.
+        '''
+        catf = fetch_desi_files(
+            tgt, 
+            randoms=False, 
+            weight_type=self.weight_type, 
+            sims=self.sims, 
+            sims_version=self.sims_version,
+            cap=self.cap
+            )
+        ranf = fetch_desi_files(
+            tgt, 
+            randoms=True, 
+            weight_type=self.weight_type, 
+            sims=self.sims, 
+            sims_version=self.sims_version,
+            cap=self.cap,
+            )
+        if not self.sims:
+            # use onle the first 6 random files for now, it's fine... 
+            # could do more but not really worth the hassle
+            ranf = ranf[:6]
+
+        tid = time.time()
+        cat = sample_file_on_moc(
+            catf, 
+            ra_col=self.ra_desi_col, 
+            dec_col=self.dec_desi_col, 
+            # no weights when cross correlating simulations
+            main_weight_col=self.w_desi_col if not self.sims else None,
+            weight_cols_to_mult=self.w_cols_to_mult if not self.sims else None, 
+            z_col=self.z_desi_col,
+            moc=self.moc
+            )
+        self.logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds ({len(cat)} rows)')
         
-            logger.info(
-                f'Collated DESI randoms in {time.time()-trd:.2f}s. ' 
-                f'Reduction : {samp_r_length/all_r_length*100:.2f}% ({all_r_length} -> {samp_r_length})'
-                )
+        trd = time.time()
+        ran = sample_randoms_on_moc(
+            ranf,
+            ra_col=self.ra_desi_col,
+            dec_col=self.dec_desi_col,
+            main_w_col=self.w_desi_col if not self.sims else None,
+            weight_cols_to_mult=self.w_cols_to_mult if not self.sims else None,
+            z_col=self.z_desi_randoms_col,
+            moc=self.moc,
+            )
+        all_r_length = len(ran)
+        ran = ran[::self.sample_rate_desi]
+        samp_r_length = len(ran)
+    
+        self.logger.info(
+            f'Collated DESI randoms in {time.time()-trd:.2f}s. ' 
+            f'Reduction : {samp_r_length/all_r_length*100:.2f}% ({all_r_length} -> {samp_r_length})'
+            )
+        zmask_dat = np.digitize(
+            cat[self.z_desi_col], 
+            bin_redshift, 
+            right=True
+            )
+        zmask_ran = np.digitize(
+            ran[self.z_desi_randoms_col], 
+            bin_redshift, 
+            right=True
+            )
 
-        if 'randoms2' in self.fs:
-            trh = time.time()
-            self.randoms2 = sample_randoms_on_moc(
-                self.fs['randoms2'], 
-                ra_col=self.ra_hsc_randoms_col,
-                dec_col=self.dec_hsc_randoms_col,
-                main_w_col=None,
-                z_col=None if not self.sims else self.z_hsc_randoms_col,
-                moc=self.moc,
-                )
-            all_r_length = len(self.randoms2)
-            self.randoms2 = self.randoms2[::self.sample_rate_hsc]
-            samp_r_length = len(self.randoms2)
-            logger.info(
-                f'Collated HSC randoms in {time.time()-trh:.2f}s. ' 
-                f'Reduction : {samp_r_length/all_r_length*100:.2f}% ({all_r_length} -> {samp_r_length})'
-                )
+        return cat, ran, zmask_dat, zmask_ran
+    
+    def set_hsc_tracer(self, bin_redshift):
+        '''
+        Returns cat, ran, zmask_cat, zmask_ran for HSC.
+        '''
+        catf = fetch_hsc_files(
+            randoms=False,
+            include_dud=False,
+            sims=self.sims,
+            sims_version=self.sims_version
+        )
+        ranf = fetch_hsc_files(
+            randoms=True,
+            include_dud=False,
+            sims=self.sims,
+            sims_version=self.sims_version
+        )
+        trh = time.time()
+        ran = sample_randoms_on_moc(
+            ranf, 
+            ra_col=self.ra_hsc_randoms_col,
+            dec_col=self.dec_hsc_randoms_col,
+            main_w_col=None,
+            z_col=None if not self.sims else self.z_hsc_randoms_col,
+            moc=self.moc,
+            )
+        all_r_length = len(ran)
+        ran = ran[::self.sample_rate_hsc]
+        samp_r_length = len(ran)
+        self.logger.info(
+            f'Collated HSC randoms in {time.time()-trh:.2f}s. ' 
+            f'Reduction : {samp_r_length/all_r_length*100:.2f}% ({all_r_length} -> {samp_r_length})'
+            )
+        
+        tih = time.time()
+        cat = sample_file_on_moc(
+            catf, 
+            ra_col=self.ra_hsc_col, 
+            dec_col=self.dec_hsc_col, 
+            main_weight_col=self.w_hsc_col if not self.sims else None,
+            z_col=self.z_hsc_col if not self.use_zbin else self.z_bin_hsc_col, 
+            moc=self.moc
+            )
+        self.logger.info(f'Read HSC data in {time.time()-tih:.2f} seconds ({len(cat)} rows)')
 
-        if self.use_desi:
-            tid = time.time()
-            self.data1 = sample_file_on_moc(
-                self.fs['catalog1'], 
-                ra_col=self.ra_desi_col, 
-                dec_col=self.dec_desi_col, 
-                # no weights when cross correlating simulations
-                main_weight_col=self.w_desi_col if not self.sims else None,
-                weight_cols_to_mult=self.w_cols_to_mult if not self.sims else None, 
-                z_col=self.z_desi_col,
-                moc=self.moc
-                )
-            logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds ({len(self.data1)} rows)')
-        if self.use_hsc:
-            tih = time.time()
-            self.data2 = sample_file_on_moc(
-                self.fs['catalog2'], 
-                ra_col=self.ra_hsc_col, 
-                dec_col=self.dec_hsc_col, 
-                main_weight_col=self.w_hsc_col if not self.sims else None,
-                z_col=self.z_hsc_col if not self.use_zbin else self.z_bin_hsc_col, 
-                moc=self.moc
-                )
-            logger.info(f'Read HSC data in {time.time()-tih:.2f} seconds ({len(self.data2)} rows)')
-
-        # Setup redshift masks
-        if self.use_desi:
-            self.zmask_data1 = np.digitize(
-                self.data1[self.z_desi_col], 
-                bin_redshift1, 
+        if self.sims:
+            zmask_ran = np.digitize(
+                self.randoms2[self.z_hsc_randoms_col], 
+                bin_redshift, 
                 right=True
                 )
-            self.zmask_randoms1 = np.digitize(
-                self.randoms1[self.z_desi_randoms_col], 
-                bin_redshift1, 
+        else:
+            # no z masking on HSC randoms for real HSC data
+            zmask_ran = None
+        if self.use_zbin:
+            zmask_data = self.data2[self.z_bin_hsc_col]
+        else:
+            zmask_data = np.digitize(
+                self.data2[self.z_hsc_col], 
+                bin_redshift, 
                 right=True
                 )
-        if self.use_hsc:
-            if self.sims:
-                self.zmask_randoms2 = np.digitize(
-                    self.randoms2[self.z_hsc_randoms_col], 
-                    bin_redshift2, 
-                    right=True
-                    )
-            if self.use_zbin:
-                self.zmask_data2 = self.data2[self.z_bin_hsc_col]
+        
+        return cat, ran, zmask_data, zmask_ran
+    
+    def make_cats(self, bin_redshift1=None, bin_redshift2=None):
+        '''
+        Based on settings, makes self.data1, self.data2, self.randoms1, self.randoms2
+        and self.z_bool_d1, self.z_bool_d2, self.z_bool_r1, self.z_bool_r2
+        '''
+        assert bin_redshift1 is not None, 'bin_redshift1 cannot be None'
+        assert bin_redshift2 is not None, 'bin_redshift2 cannot be None'
+
+        if self.use_desi:
+            cat, ran, zmask_cat, zmask_ran = self.set_desi_tracer(bin_redshift2)
+        if self.double_desi:
+            cat2, ran2, zmask_cat2, zmask_ran2 = self.set_desi_tracer(bin_redshift2)
+        if self.use_hsc and not self.double_desi: # flags should be incompatible, but just in case
+            if self.autocorr:
+                cat, ran, zmask_cat, zmask_ran = self.set_hsc_tracer(bin_redshift1)
             else:
-                self.zmask_data2 = np.digitize(
-                    self.data2[self.z_hsc_col], 
-                    bin_redshift2, 
-                    right=True
-                    )
-
-        if self.autocorr:
-            if self.use_hsc:
-                # in the case of autocorrelation with hsc, we move the 2nd dataset to be the first
-                self.randoms1 = self.randoms2
-                del self.randoms2
-                self.data1 = self.data2
-                del self.data2
-                self.zmask_data1 = self.zmask_data2
-                del self.zmask_data2
-
-            # specifying the attributes to None for consistency
-            self.randoms2 = None 
-            self.zmask_randoms2 = None
-            self.zmask_data2 = None
-            self.data2 = None
-
+                cat2, ran2, zmask_cat2, zmask_ran2 = self.set_hsc_tracer(bin_redshift2)
+        
+        self.data1 = cat
+        self.randoms1 = ran
+        self.zmask_data1 = zmask_cat
+        self.zmask_randoms1 = zmask_ran
+        self.data2 = cat2
+        self.randoms2 = ran2
+        self.zmask_data2 = zmask_cat2
+        self.zmask_randoms2 = zmask_ran2
+    
+    def set_current_redshift_masks(self, bin1, bin2):
+        masks = [
+            self.zmask_data1,
+            self.zmask_randoms1,
+            self.zmask_data2,
+            self.zmask_randoms2
+            ]
+        self.z_bool_d1 = None
+        self.z_bool_r1 = None
+        self.z_bool_d2 = None
+        self.z_bool_r2 = None
+        bool_masks = [
+            self.z_bool_d1,
+            self.z_bool_r1,
+            self.z_bool_d2,
+            self.z_bool_r2
+            ]
+        
+        for i, mask in enumerate(masks):
+            if mask is not None:
+                if i == 0 or i == 1:
+                    # data1 or randoms1
+                    bool_masks[i] = mask == bin1
+                elif i == 2 or i == 3:
+                    # data2 or randoms2
+                    bool_masks[i] = mask == bin2
     
     @abstractmethod
     def run_corr(self):
@@ -406,69 +471,72 @@ class CorrelationMeta(ABC):
             return
         self.outfile = outfile
         
-        # Setup redshift masking
-        self.z_mask_d1 = (self.zmask_data1 == bin_index1)
-        if self.use_desi:
-            # DESI randoms need to be redshift masked 
-            self.z_mask_r1 = (self.zmask_randoms1 == bin_index1)
-        if not self.autocorr:
-            # in the case of crosscorr, we apply a mask to the randoms
-            self.z_mask_d2 = (self.zmask_data2 == bin_index2)
+        self.set_current_redshift_masks(
+            bin_index1=bin_index1, 
+            bin_index2=bin_index2
+            )
 
-        if self.use_desi:
-            self.logger.info(
-                f'N data {self.tgt1}: {np.sum(self.z_mask_d1)}' + 
-                f', N randoms {self.tgt1}: {np.sum(self.z_mask_r1)}'
-                )
-        if self.use_hsc and not self.autocorr:
-            self.logger.info(
-                f'N data {self.tgt2}: {np.sum(self.z_mask_d2)}' + 
-                f', N randoms {self.tgt2}: {len(self.randoms2)}'
-                )
-        if self.use_hsc and self.autocorr:
-            self.logger.info(
-                f'N data {self.tgt1}: {np.sum(self.z_mask_d1)}' + 
-                f', N randoms {self.tgt1}: {len(self.randoms1)}'
-                )
+        self.logger.info(
+            f'N data {self.tgt1}: {np.sum(self.z_bool_d1) if self.z_bool_d1 is not None else "None"}' + 
+            f', N randoms {self.tgt1}: {np.sum(self.z_bool_r1) if self.z_bool_r1 is not None else "None"}'
+            f', N data {self.tgt2}: {np.sum(self.z_bool_d2) if self.z_bool_d2 is not None else "None"}' +
+            f', N randoms {self.tgt2}: {np.sum(self.z_bool_r2) if self.z_bool_r2 is not None else "None"}'
+            )
 
         ## assertion safeties :
-        assert len(self.data1) == len(self.z_mask_d1)
+        assert len(self.data1) == len(self.z_bool_d1)
         if not self.use_hsc:
-            assert len(self.randoms1) == len(self.z_mask_r1)
+            assert len(self.randoms1) == len(self.z_bool_r1)
 
         self.run_corr()
 
-    def make_cats(self):
+    def make_corr_data(self):
+        '''
+        Once data1, data2, randoms1, randoms2 are set up, we can make the data
+        with the ra, dec, z columns and the weights. make_corr_data does exactly that.
+        '''
         if self.use_desi:
             dp1 = [
-                self.data1[self.ra_desi_col][self.z_mask_d1], 
-                self.data1[self.dec_desi_col][self.z_mask_d1]
+                self.data1[self.ra_desi_col][self.z_bool_d1], 
+                self.data1[self.dec_desi_col][self.z_bool_d1]
                 ]
             rp1 = [
-                self.randoms1[self.ra_desi_col][self.z_mask_r1],
-                self.randoms1[self.dec_desi_col][self.z_mask_r1]
+                self.randoms1[self.ra_desi_col][self.z_bool_r1],
+                self.randoms1[self.dec_desi_col][self.z_bool_r1]
                 ]
         else:
             dp1 = [
-                self.data1[self.ra_hsc_col][self.z_mask_d1], 
-                self.data1[self.dec_hsc_col][self.z_mask_d1]
+                self.data1[self.ra_hsc_col][self.z_bool_d1], 
+                self.data1[self.dec_hsc_col][self.z_bool_d1]
                 ]
             rp1 = [
                 self.randoms1[self.ra_hsc_randoms_col],
                 self.randoms1[self.dec_hsc_randoms_col]
                 ]   
         # if not doing autocorrelation, we need to add the second dataset
-        # (which is always HSC)
         if not self.autocorr:
-            dp2 = [
-                self.data2[self.ra_hsc_col][self.z_mask_d2], 
-                self.data2[self.dec_hsc_col][self.z_mask_d2]
-                ]
-            rp2 = [
-                self.randoms2[self.ra_hsc_randoms_col],
-                self.randoms2[self.dec_hsc_randoms_col]
-                ]
+            if self.double_desi:
+                # cross correlation between two different DESI tracers
+                dp2 = [
+                    self.data2[self.ra_desi_col][self.z_bool_d2], 
+                    self.data2[self.dec_desi_col][self.z_bool_d2]
+                    ]
+                rp2 = [
+                    self.randoms2[self.ra_desi_col][self.z_bool_r2],
+                    self.randoms2[self.dec_desi_col][self.z_bool_r2]
+                    ]
+            else:
+                # cross correlation with HSC
+                dp2 = [
+                    self.data2[self.ra_hsc_col][self.z_bool_d2], 
+                    self.data2[self.dec_hsc_col][self.z_bool_d2]
+                    ]
+                rp2 = [
+                    self.randoms2[self.ra_hsc_randoms_col],
+                    self.randoms2[self.dec_hsc_randoms_col]
+                    ]
         else:
+            # autocorrelation case : rp2, dp2 are not used
             rp2 = None
             dp2 = None
         
@@ -476,17 +544,17 @@ class CorrelationMeta(ABC):
             assert not self.use_hsc, 'rp correlation not available for HSC'
             self.logger.info('Using redshift for distance calculation')
             dp1.append(
-                ct.z2dist(self.data1[self.z_desi_col][self.z_mask_d1])
+                ct.z2dist(self.data1[self.z_desi_col][self.z_bool_d1])
                 )
             rp1.append(
-                ct.z2dist(self.randoms1[self.z_desi_randoms_col][self.z_mask_r1])
+                ct.z2dist(self.randoms1[self.z_desi_randoms_col][self.z_bool_r1])
                 )
             if self.autocorr:
                 rp2.append(
                     ct.z2dist(self.randoms2[self.z_hsc_randoms_col])
                     )
                 dp2.append(
-                    ct.z2dist(self.data2[self.z_hsc_col][self.z_mask_d2])
+                    ct.z2dist(self.data2[self.z_hsc_col][self.z_bool_d2])
                     )
             
         # no weights for simulations
@@ -497,7 +565,7 @@ class CorrelationMeta(ABC):
 
         if not self.sims:
             if self.use_desi:
-                rw1 = self.randoms1[self.w_desi_col][self.z_mask_r1]
+                rw1 = self.randoms1[self.w_desi_col][self.z_bool_r1]
             else:
                 rw1 = None
             rw2 = None
@@ -506,9 +574,9 @@ class CorrelationMeta(ABC):
                 colw = self.w_hsc_col
             else: 
                 colw = self.w_desi_col
-            dw1 = self.data1[colw][self.z_mask_d1]
+            dw1 = self.data1[colw][self.z_bool_d1]
             if not self.autocorr:
-                dw2 = self.data2[self.w_hsc_col][self.z_mask_d2]
+                dw2 = self.data2[self.w_hsc_col][self.z_bool_d2]
 
         # casting to float in case of weird dtypes
         dp1 = np.array(dp1, dtype=float)
@@ -528,7 +596,7 @@ class CrossCorrelation(CorrelationMeta):
 
     def run_corr(self):
 
-        dp1, dp2, rp1, rp2, dw1, dw2, rw1, rw2 = self.make_cats()
+        dp1, dp2, rp1, rp2, dw1, dw2, rw1, rw2 = self.make_corr_data()
         tpcf = TwoPointCorrelationFunction(
             edges=self.edges,
 
@@ -607,7 +675,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
         self.logger.info(f'Labels from {labels.min()} to {labels.max()}.')
 
     def run_corr(self):
-        dp1, dp2, rp1, rp2, dw1, dw2, rw1, rw2 = self.make_cats()
+        dp1, dp2, rp1, rp2, dw1, dw2, rw1, rw2 = self.make_corr_data()
 
         # subsampling with KMeans for jackknife
         ds1 = self.subsampler.label(dp1)
@@ -677,17 +745,17 @@ class DESIAutoCorrelation(CorrelationMeta):
         tpcf = TwoPointCorrelationFunction(
             edges=(np.linspace(0., 200., 51), np.linspace(-40, 40, 81)),
             data_positions1=[
-                self.data1[self.ra_desi_col][self.z_mask_d1], 
-                self.data1[self.dec_desi_col][self.z_mask_d1],
-                ct.z2dist(self.data1[self.z_desi_col][self.z_mask_d1])
+                self.data1[self.ra_desi_col][self.z_bool_d1], 
+                self.data1[self.dec_desi_col][self.z_bool_d1],
+                ct.z2dist(self.data1[self.z_desi_col][self.z_bool_d1])
                 ],
             randoms_positions1=[
-                self.randoms1[self.ra_desi_col][self.z_mask_r1],
-                self.randoms1[self.dec_desi_col][self.z_mask_r1],
-                ct.z2dist(self.randoms1[self.z_desi_randoms_col][self.z_mask_r1]),
+                self.randoms1[self.ra_desi_col][self.z_bool_r1],
+                self.randoms1[self.dec_desi_col][self.z_bool_r1],
+                ct.z2dist(self.randoms1[self.z_desi_randoms_col][self.z_bool_r1]),
                 ],
-            data_weights1=self.data1[self.w_desi_col][self.z_mask_d1],
-            randoms_weights1=self.randoms1[self.w_desi_col][self.z_mask_r1],
+            data_weights1=self.data1[self.w_desi_col][self.z_bool_d1],
+            randoms_weights1=self.randoms1[self.w_desi_col][self.z_bool_r1],
             nthreads=self.nproc,
             mode='rppi',
             position_type='rdd', 
@@ -828,3 +896,24 @@ def figure_out_class(tgt1, tgt2=None, jackknife=False):
     else:
         # could be ruled out later maybe idk
         return CrossCorrelation
+    
+def get_target_couple(tgt1, tgt2=None):
+    desi_avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
+    hsc_avb = ['HSC']
+    avb = desi_avb + hsc_avb
+
+    assert not((tgt1 is None) and (tgt2 is None)), 'tgt1 and tgt2 cannot be None simultaneously'
+    if tgt2 is None and tgt1 is not None:
+        tgt2 = tgt1
+    elif tgt1 is None and tgt2 is not None:
+        tgt1 = tgt2
+    assert tgt1 in avb and tgt2 in avb, f'Unknown target {tgt1} or {tgt2}'
+
+    if isinstance(tgt1, str):
+        tgt1 = [tgt1]
+    if isinstance(tgt2, str):
+        tgt2 = [tgt2]
+
+    assert len(tgt1) == len(tgt2), 'tgt1 and tgt2 must have the same length'
+    
+    return tgt1, tgt2
