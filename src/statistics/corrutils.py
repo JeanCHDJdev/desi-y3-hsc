@@ -8,7 +8,6 @@ import os
 import fitsio as fio
 import numpy as np
 import logging
-import psutil
 import multiprocessing as mp
 
 from abc import ABC, abstractmethod
@@ -46,17 +45,16 @@ class CorrelationMeta(ABC):
     z_desi_randoms_col = 'Z'
 
     ## MOC list 
-    moc_list = [
+    moc_list = sorted([
             Path(
                 '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/mocs/', 
                 f'hsc_moc{i+1}.fits'
             )
             for i in range(0, 4)
-        ]
+        ])
 
-    ## Defining fiducial bins here 
-
-    # from 1 arcmin to 100 arcmin
+    # ----------Defining fiducial bins here---------- 
+    # from .2 arcmin to 100 arcmin
     bins_theta = np.logspace(math.log(0.2, 10), math.log(100, 10), 33, base=10)/60
 
     #np.linspace(0.0001, 2, 41)
@@ -69,7 +67,8 @@ class CorrelationMeta(ABC):
     bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
     bins_qso = np.arange(0.9, 3.1, 0.3) # 0.9 < z < 2.1
 
-    bins_hsc = np.arange(0.3, 1.6, 0.1) # 0.3 < z <= 1.5 
+    # use_zbin will override this choice
+    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
 
     bins_tracers = {
         'LRG': bins_lrg,
@@ -129,26 +128,7 @@ class CorrelationMeta(ABC):
         # use_zbin is used for HSC only
         self.use_zbin = use_zbin
         
-        # rename the class attributes if using simulations bc not the same class names
-        self.sims = sims_version > 0
-        self.sims_version = sims_version
-        # override the columns if using simulations because they have different names and it's annoying
-        if self.sims:
-            self.ra_hsc_col = 'RA'
-            self.dec_hsc_col = 'DEC'
-            self.ra_hsc_randoms_col = 'ra'
-            self.dec_hsc_randoms_col = 'dec'
-            self.w_hsc_col = None
-            self.z_hsc_col = 'Z'
-            self.z_hsc_randoms_col = 'redshift'
-
-            self.ra_desi_col = 'ra'
-            self.dec_desi_col = 'dec'
-            self.w_desi_col = None
-            self.w_desi_fkp_col = None
-            self.w_comp_desi_col = None
-            self.z_desi_col = 'z'
-            self.z_desi_randoms_col = 'redshift'
+        self.set_simulation_status(sims_version=sims_version)
 
         # figure out in which cap we are
         self.cap = self.capdict[moc_index]
@@ -194,6 +174,13 @@ class CorrelationMeta(ABC):
         self.tgt1 = tgt1
         self.tgt2 = tgt2
 
+        self.logger.info(
+            f'Using targets {self.tgt1} and {self.tgt2} '
+            f'for cross correlation. '
+            f'Autocorr={self.autocorr}, double_desi={self.double_desi}'
+            f'using_hsc={self.use_hsc}, using_desi={self.use_desi}'
+            )
+
         if not self.use_desi and not self.use_hsc:
             raise ValueError(f'Unknown targets {tgt1} and {tgt2}')
     
@@ -220,8 +207,8 @@ class CorrelationMeta(ABC):
             self.edges = self.bins_mode[self.corr_type]
 
         self.logger.info(f'mode : {self.corr_type}')
-        self.logger.info(f'edges : {self.edges}') 
-        self.logger.info(f'edges : {self.pos_type}')
+        self.logger.info(f'edges : {self.edges}')
+        self.logger.info(f'pos type : {self.pos_type}')
 
         # Setup multiprocessing; can do mpi4py later on
         if nproc is None: 
@@ -250,6 +237,28 @@ class CorrelationMeta(ABC):
             bin_redshift1=bin_redshift1, 
             bin_redshift2=bin_redshift2
         )
+
+    def set_simulation_status(self, sims_version=0):
+        # rename the class attributes if using simulations bc not the same class names
+        self.sims = sims_version > 0
+        self.sims_version = sims_version
+        # override the columns if using simulations because they have different names and it's annoying
+        if self.sims:
+            self.ra_hsc_col = 'RA'
+            self.dec_hsc_col = 'DEC'
+            self.ra_hsc_randoms_col = 'ra'
+            self.dec_hsc_randoms_col = 'dec'
+            self.w_hsc_col = None
+            self.z_hsc_col = 'Z'
+            self.z_hsc_randoms_col = 'redshift'
+
+            self.ra_desi_col = 'ra'
+            self.dec_desi_col = 'dec'
+            self.w_desi_col = None
+            self.w_desi_fkp_col = None
+            self.w_comp_desi_col = None
+            self.z_desi_col = 'z'
+            self.z_desi_randoms_col = 'redshift'
 
     def set_desi_tracer(self, tgt, bin_redshift):
         '''
@@ -326,7 +335,9 @@ class CorrelationMeta(ABC):
             bin_redshift, 
             right=True
             )
-
+        assert len(cat) == len(zmask_dat), 'cat and zmask_dat have different lengths'
+        assert len(ran) == len(zmask_ran), 'ran and zmask_ran have different lengths'
+        
         return cat, ran, zmask_dat, zmask_ran
     
     def set_hsc_tracer(self, bin_redshift):
@@ -402,7 +413,7 @@ class CorrelationMeta(ABC):
         assert bin_redshift2 is not None, 'bin_redshift2 cannot be None'
 
         if self.use_desi:
-            cat, ran, zmask_cat, zmask_ran = self.set_desi_tracer(self.tgt1, bin_redshift2)
+            cat, ran, zmask_cat, zmask_ran = self.set_desi_tracer(self.tgt1, bin_redshift1)
         if self.double_desi:
             cat2, ran2, zmask_cat2, zmask_ran2 = self.set_desi_tracer(self.tgt2, bin_redshift2)
         if self.use_hsc and not self.double_desi: # flags should be incompatible, but just in case

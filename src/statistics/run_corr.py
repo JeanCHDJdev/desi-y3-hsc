@@ -115,7 +115,7 @@ def parse_args():
         default='theta',
         choices=['theta', 'rp'],
         help='Type of correlation to run. '
-        'Default is 2pt. '
+        'Default is theta, can also be rp. '
     )
     parser.add_argument(
         '-l',
