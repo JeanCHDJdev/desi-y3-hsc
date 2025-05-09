@@ -133,15 +133,16 @@ class CorrelationMeta(ABC):
 
         # figure out in which cap we are
         self.cap = self.capdict[moc_index]
-
         self.skip_moc = skip_moc
 
         self.autocorr = False
+        self.double_desi = False
         self.use_hsc = False
         self.use_desi = False
 
         desi_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
         hsc_tgt = ['HSC']
+
         # Idea : 
         # get the couple targets. If one is not specified, assume both are equal
         assert tgt1 is not None and tgt2 is not None, 'tgt1 and tgt2 cannot be None simultaneously'
@@ -196,11 +197,12 @@ class CorrelationMeta(ABC):
         self.pos_type = 'rd' if corr_type == 'theta' else 'rdd'
 
         # weights : here base (nonKP or PIP) + FKP + ...
-        self.w_cols_to_mult = [
+        self.w_cols_to_operate = [
             self.w_desi_col, 
             self.w_fkp_desi_col,
             #self.w_comp_desi_col
             ]
+        self.w_operator = '+'
         # usually PIP, nonKP...
         self.weight_type = weight_type
 
@@ -304,9 +306,10 @@ class CorrelationMeta(ABC):
             dec_col=self.dec_desi_col, 
             # no weights when cross correlating simulations
             main_weight_col=self.w_desi_col if not self.sims else None,
-            weight_cols_to_mult=self.w_cols_to_mult if not self.sims else None, 
+            weight_cols_to_operate=self.w_cols_to_operate if not self.sims else None, 
             z_col=self.z_desi_col,
             moc=self.moc if not self.skip_moc else None,
+            operator=self.w_operator,
             )
         self.logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds ({len(cat)} rows)')
         
@@ -316,9 +319,10 @@ class CorrelationMeta(ABC):
             ra_col=self.ra_desi_col,
             dec_col=self.dec_desi_col,
             main_w_col=self.w_desi_col if not self.sims else None,
-            weight_cols_to_mult=self.w_cols_to_mult if not self.sims else None,
+            weight_cols_to_operate=self.w_cols_to_operate if not self.sims else None,
             z_col=self.z_desi_randoms_col,
             moc=self.moc if not self.skip_moc else None,
+            operator=self.w_operator,
             )
         all_r_length = len(ran)
         ran = ran[::self.sample_rate_1]
@@ -367,6 +371,7 @@ class CorrelationMeta(ABC):
             main_w_col=None,
             z_col=None if not self.sims else self.z_hsc_randoms_col,
             moc=self.moc if not self.skip_moc else None,
+            operator=self.w_operator,
             )
         all_r_length = len(ran)
         ran = ran[::self.sample_rate_2]
@@ -384,6 +389,7 @@ class CorrelationMeta(ABC):
             main_weight_col=self.w_hsc_col if not self.sims else None,
             z_col=self.z_hsc_col if not self.use_zbin else self.z_bin_hsc_col, 
             moc=self.moc if not self.skip_moc else None,
+            operator=self.w_operator
             )
         self.logger.info(f'Read HSC data in {time.time()-tih:.2f} seconds ({len(cat)} rows)')
 
@@ -424,6 +430,11 @@ class CorrelationMeta(ABC):
                 cat, ran, zmask_cat, zmask_ran = self.set_hsc_tracer(bin_redshift1)
             else:
                 cat2, ran2, zmask_cat2, zmask_ran2 = self.set_hsc_tracer(bin_redshift2)
+        if self.autocorr:
+            cat2 = None
+            ran2 = None
+            zmask_cat2 = None
+            zmask_ran2 = None
         
         self.data1 = cat
         self.randoms1 = ran
@@ -791,14 +802,22 @@ class DESIAutoCorrelation(CorrelationMeta):
 
 
 ## Generic methods for each class
-def process_random_file(f, ra_col, dec_col, main_weight_col, weight_cols_to_mult, z_col, moc):
+def _process_random_file(f, ra_col, dec_col, main_weight_col, weight_cols_to_operate, z_col, moc, operator=None):
 
     
     try:
         with fio.FITS(str(f)) as rand:
             tbl = rand[1]
 
-            data = _get_data_to_read(tbl, ra_col, dec_col, main_weight_col, weight_cols_to_mult, z_col)
+            data = _get_data_to_read(
+                tbl=tbl, 
+                ra_col=ra_col, 
+                dec_col=dec_col, 
+                main_weight_col=main_weight_col, 
+                weight_cols_to_operate=weight_cols_to_operate, 
+                z_col=z_col, 
+                operator=operator
+                )
             nrows = tbl.get_nrows()
 
             if moc is not None:
@@ -822,14 +841,17 @@ def sample_randoms_on_moc(
         ra_col, 
         dec_col, 
         main_w_col=None, 
-        weight_cols_to_mult=None,
+        weight_cols_to_operate=None,
         z_col=None, 
         moc=None, 
+        operator=None,
         num_processes=None
         ):
     """
     Multiprocessed random sampling with optional MOC filtering
     """
+    assert operator is not None, f"Operator not provided for weight columns"
+
     if isinstance(random_files, (str, Path)):
         random_files = [random_files]
     assert len(random_files) > 0, f"No random files "
@@ -839,8 +861,8 @@ def sample_randoms_on_moc(
     
     tp = time.time()
     with mp.Pool(processes=num_processes) as pool:
-        results = pool.starmap(process_random_file, [
-            (f, ra_col, dec_col, main_w_col, weight_cols_to_mult, z_col, moc) 
+        results = pool.starmap(_process_random_file, [
+            (f, ra_col, dec_col, main_w_col, weight_cols_to_operate, z_col, moc, operator) 
             for f in random_files
         ])
     print(f"Processed {len(random_files)} random files in {time.time()-tp:.2f} seconds")
@@ -855,7 +877,7 @@ def sample_randoms_on_moc(
     
     return np.concatenate(randoms)
 
-def sample_file_on_moc(file, ra_col, dec_col, main_weight_col, weight_cols_to_mult=None, z_col=None, moc=None):
+def sample_file_on_moc(file, ra_col, dec_col, main_weight_col, weight_cols_to_operate=None, z_col=None, moc=None, operator=None):
     '''
     Read a file and filter it using a MOC. Multiply the weights if needed.
     '''
@@ -863,7 +885,13 @@ def sample_file_on_moc(file, ra_col, dec_col, main_weight_col, weight_cols_to_mu
     with fio.FITS(str(file)) as f:
         tbl = f[1]
         data = _get_data_to_read(
-            tbl, ra_col, dec_col, main_weight_col, weight_cols_to_mult, z_col
+            tbl=tbl, 
+            ra_col=ra_col, 
+            dec_col=dec_col, 
+            main_weight_col=main_weight_col, 
+            weight_cols_to_operate=weight_cols_to_operate, 
+            z_col=z_col, 
+            operator=operator
         )
 
         if moc is not None:
@@ -877,28 +905,39 @@ def sample_file_on_moc(file, ra_col, dec_col, main_weight_col, weight_cols_to_mu
 
     return np.array(data)
 
-def _get_data_to_read(tbl, ra_col, dec_col, main_weight_col, weight_cols_to_mult, z_col):
+def _get_data_to_read(tbl, ra_col, dec_col, main_weight_col, weight_cols_to_operate, z_col, operator=None):
     base_cols = [col for col in [ra_col, dec_col, main_weight_col, z_col] if col is not None]
     cols_to_read = base_cols.copy()
 
     if len(base_cols) == 0:
         raise ValueError(f"No columns to read in {tbl}")
     if main_weight_col in base_cols:
-        if weight_cols_to_mult is not None:
+        if weight_cols_to_operate is not None:
             cols_to_read.remove(main_weight_col)
-            cols_to_read += weight_cols_to_mult
+            cols_to_read += weight_cols_to_operate
 
     assert all(c in tbl.get_colnames() for c in cols_to_read), f"Columns {cols_to_read} not in {tbl}"
     data = tbl.read(columns=cols_to_read)
 
     if main_weight_col is not None:
-        if weight_cols_to_mult is not None:
-            w_col = np.ones_like(data[ra_col])
-            for col in weight_cols_to_mult:
-                w_col *= data[col]
+        if weight_cols_to_operate is not None:
+            if operator is None:
+                raise ValueError("Operator not provided for weight columns")
+            if operator in ['*', 'multiply']:
+                w_col = np.ones_like(data[ra_col])
+                for col in weight_cols_to_operate:
+                    w_col *= data[col]
+            elif operator in ['+', 'add']:
+                w_col = np.zeros_like(data[ra_col])
+                for col in weight_cols_to_operate:
+                    w_col += data[col]
         else:
             w_col = data[main_weight_col]
         data[main_weight_col] = w_col
+        logging.info(
+            f"Weight column {main_weight_col} set to {w_col}, "
+            f"with {len(data)} rows, range : {data[main_weight_col].min()} to {data[main_weight_col].max()}"
+            )
     
     return data
     

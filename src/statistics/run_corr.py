@@ -92,7 +92,7 @@ def parse_args():
     )
     parser.add_argument(
         '-k',
-        '--skip-moc',
+        '--skip_moc',
         action='store_true',
         default=False,
     )
