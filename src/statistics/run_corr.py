@@ -3,14 +3,12 @@ Convenience script to run cross-correlation between DESI and HSC.
 Can also do autocorrelation and jackknife estimates.
 '''
 import time 
-import matplotlib.pyplot as plt
 import os
 import numpy as np
 
 from mocpy import MOC
 from pathlib import Path
 from argparse import ArgumentParser
-
 from pycorr import setup_logging
 
 import corrutils as cu
@@ -68,16 +66,16 @@ def parse_args():
         'Default is None. Only current option is HSC.'
         )
     parser.add_argument(
-        '-rd',
-        '--sample_rate_desi', 
+        '-r1',
+        '--sample_rate_1', 
         type=int,
         default=1,
         help='Sampling rate for DESI randoms. '
         'Defaults to 1.'
     )
     parser.add_argument(
-        '-rh',
-        '--sample_rate_hsc', 
+        '-r2',
+        '--sample_rate_2', 
         type=int,
         default=1,
         help='Sampling rate for HSC randoms catalog. '
@@ -91,6 +89,12 @@ def parse_args():
         choices=['nonKP', 'PIP', 'base'],
         help='Weighting scheme to use. '
         'Default is nonKP. '
+    )
+    parser.add_argument(
+        '-k',
+        '--skip-moc',
+        action='store_true',
+        default=False,
     )
     parser.add_argument(
         '-z',
@@ -156,12 +160,13 @@ def main():
     tgt1 = args.tgt1
     tgt2 = args.tgt2
     jackknife = args.jackknife
+    skip_moc = args.skip_moc
     
     sims_version = args.sims
     zbin = args.z_bin
     weight_type = args.weight
-    sample_rate_desi = args.sample_rate_desi
-    sample_rate_hsc = args.sample_rate_hsc
+    sample_rate_1 = args.sample_rate_1
+    sample_rate_2 = args.sample_rate_2
     corr_type = args.corr_type
 
     resolution = args.resolution
@@ -198,12 +203,13 @@ def main():
         'use_zbin': zbin,
         'sims_version': sims_version,
         'weight_type': weight_type,
-        'sample_rate_desi': sample_rate_desi,
-        'sample_rate_hsc': sample_rate_hsc,
+        'sample_rate_1': sample_rate_1,
+        'sample_rate_2': sample_rate_2,
         'corr_type': corr_type,
         'nproc': nproc,
         'logger': logger,
         'output_dir': output_dir,
+        'skip_moc': skip_moc,
     }
     if jackknife:
         corrargs.update({
@@ -214,8 +220,8 @@ def main():
     logger.info(f'Running cross-correlation for the following targets: {tgt1}x{tgt2}')
     logger.info(f'Output directory: {output_dir}')
     logger.info(
-        f'Sample rate on HSC randoms: {sample_rate_hsc}, '
-        f'on DESI randoms: {sample_rate_desi}'
+        f'Sample rate on HSC randoms: {sample_rate_2}, '
+        f'on DESI randoms: {sample_rate_1}'
         )
     logger.info(f'Number of threads: {nproc}')
     if not sims_version > 0:
@@ -233,7 +239,7 @@ def main():
     logger.info('=' * 80)
     
     logger.info(
-        f'Sample rate on DESI randoms: {sample_rate_desi} and on HSC randoms: {sample_rate_hsc}\n'
+        f'Sample rate on DESI randoms: {sample_rate_1} and on HSC randoms: {sample_rate_2}\n'
         )
     logger.info(f'Number of threads: {nproc}\n')
     logger.info(f'Output directory: {output_dir}\n')
@@ -242,14 +248,15 @@ def main():
 
     moc_list = sorted(cu.CorrelationMeta.moc_list)
     if areas is not None:
-        moc_list = [moc_list[p-1] for p in areas]
         logger.info(f'Using areas {areas} ... {[Path(moc_list[p-1]).stem for p in areas]}\n')
+    else:
+        areas = np.arange(1, len(moc_list))
 
     # some more checks on targets
     tgt1, tgt2 = cu.get_target_couple(tgt1, tgt2)
 
-    for m in range(len(moc_list)):
-        mocf = moc_list[m]
+    for m in areas:
+        mocf = moc_list[m-1]
         moc = MOC.from_fits(mocf)
         logger.info(f'MOC {m} : {mocf} ...\n')
 

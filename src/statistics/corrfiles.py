@@ -255,7 +255,7 @@ def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_v
                 path = f'{tgt}_{cap}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
             elif weight_type == 'base':
                 root = Path(root)
-                path = f'{tgt}{"_[0-9]*_" if randoms else "_"}full_HPmapcut{".ran" if randoms else ".dat"}.fits'
+                path = f'{tgt}_{cap}{"_[0-9]*_" if randoms else "_"}full_HPmapcut{".ran" if randoms else ".dat"}.fits'
             else:
                 raise ValueError(f"Unknown weight type {weight_type}")
 

@@ -111,14 +111,15 @@ class CorrelationMeta(ABC):
             logger : logging.Logger, 
             moc : MOC, 
             moc_index : int,
+            skip_moc : bool = False,
             tgt1=None, 
             tgt2=None,
             output_dir=None, 
             sims_version=0,
             use_zbin=False,
             weight_type='nonKP',
-            sample_rate_desi=1,
-            sample_rate_hsc=1, 
+            sample_rate_1=1,
+            sample_rate_2=1, 
             corr_type='theta',
             nproc=None
             ):
@@ -132,6 +133,8 @@ class CorrelationMeta(ABC):
 
         # figure out in which cap we are
         self.cap = self.capdict[moc_index]
+
+        self.skip_moc = skip_moc
 
         self.autocorr = False
         self.use_hsc = False
@@ -185,8 +188,8 @@ class CorrelationMeta(ABC):
             raise ValueError(f'Unknown targets {tgt1} and {tgt2}')
     
         # once targets are figured out we can call the bins
-        bin_redshift1 = self.bins_tracers[tgt1]
-        bin_redshift2 = self.bins_tracers[tgt2]
+        self.bin_redshift1 = self.bins_tracers[tgt1]
+        self.bin_redshift2 = self.bins_tracers[tgt2]
 
         # which edges and correlation type to use :
         self.corr_type = corr_type
@@ -230,12 +233,12 @@ class CorrelationMeta(ABC):
         self.moc = moc
 
         # Sample rate for randoms
-        self.sample_rate_desi = sample_rate_desi
-        self.sample_rate_hsc = sample_rate_hsc
+        self.sample_rate_1 = sample_rate_1
+        self.sample_rate_2 = sample_rate_2
 
         self.make_cats(
-            bin_redshift1=bin_redshift1, 
-            bin_redshift2=bin_redshift2
+            bin_redshift1=self.bin_redshift1, 
+            bin_redshift2=self.bin_redshift2
         )
 
     def set_simulation_status(self, sims_version=0):
@@ -292,7 +295,7 @@ class CorrelationMeta(ABC):
         if not self.sims:
             # use onle the first 6 random files for now, it's fine... 
             # could do more but not really worth the hassle
-            ranf = ranf[:6]
+            ranf = ranf[:5]
 
         tid = time.time()
         cat = sample_file_on_moc(
@@ -303,7 +306,7 @@ class CorrelationMeta(ABC):
             main_weight_col=self.w_desi_col if not self.sims else None,
             weight_cols_to_mult=self.w_cols_to_mult if not self.sims else None, 
             z_col=self.z_desi_col,
-            moc=self.moc
+            moc=self.moc if not self.skip_moc else None,
             )
         self.logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds ({len(cat)} rows)')
         
@@ -315,10 +318,10 @@ class CorrelationMeta(ABC):
             main_w_col=self.w_desi_col if not self.sims else None,
             weight_cols_to_mult=self.w_cols_to_mult if not self.sims else None,
             z_col=self.z_desi_randoms_col,
-            moc=self.moc,
+            moc=self.moc if not self.skip_moc else None,
             )
         all_r_length = len(ran)
-        ran = ran[::self.sample_rate_desi]
+        ran = ran[::self.sample_rate_1]
         samp_r_length = len(ran)
     
         self.logger.info(
@@ -363,10 +366,10 @@ class CorrelationMeta(ABC):
             dec_col=self.dec_hsc_randoms_col,
             main_w_col=None,
             z_col=None if not self.sims else self.z_hsc_randoms_col,
-            moc=self.moc,
+            moc=self.moc if not self.skip_moc else None,
             )
         all_r_length = len(ran)
-        ran = ran[::self.sample_rate_hsc]
+        ran = ran[::self.sample_rate_2]
         samp_r_length = len(ran)
         self.logger.info(
             f'Collated HSC randoms in {time.time()-trh:.2f}s. ' 
@@ -380,7 +383,7 @@ class CorrelationMeta(ABC):
             dec_col=self.dec_hsc_col, 
             main_weight_col=self.w_hsc_col if not self.sims else None,
             z_col=self.z_hsc_col if not self.use_zbin else self.z_bin_hsc_col, 
-            moc=self.moc
+            moc=self.moc if not self.skip_moc else None,
             )
         self.logger.info(f'Read HSC data in {time.time()-tih:.2f} seconds ({len(cat)} rows)')
 
@@ -746,7 +749,7 @@ class DESIAutoCorrelation(CorrelationMeta):
             moc : MOC, 
             output_dir :str | Path, 
             nproc:int=None, 
-            sample_rate_desi:int=1, 
+            sample_rate_1:int=1, 
             logger:logging.Logger=None
         ):
         assert tgt1==tgt2, f'Auto correlation only for {tgt1} and {tgt2} equal'
@@ -758,7 +761,7 @@ class DESIAutoCorrelation(CorrelationMeta):
             pip=False,
             output_dir=output_dir,
             nproc=nproc,
-            sample_rate_desi=sample_rate_desi,
+            sample_rate_1=sample_rate_1,
             logger=logger
         )
         
