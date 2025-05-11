@@ -9,7 +9,9 @@ import fitsio as fio
 import numpy as np
 import logging
 import multiprocessing as mp
+import pandas as pd
 
+from astropy.table import Table
 from abc import ABC, abstractmethod
 from mocpy import MOC
 from pathlib import Path
@@ -44,6 +46,9 @@ class CorrelationMeta(ABC):
     z_desi_col = 'Z'
     z_desi_randoms_col = 'Z'
 
+    # use redshift column to go to the h-1Mpc distance
+    distance_col = 'dist'
+
     ## MOC list 
     moc_list = sorted([
             Path(
@@ -58,14 +63,15 @@ class CorrelationMeta(ABC):
     bins_theta = np.logspace(math.log(0.2, 10), math.log(100, 10), 33, base=10)/60
 
     #np.linspace(0.0001, 2, 41)
-    bins_rp = np.linspace(0.1, 100, 26)
+    bins_rp = np.linspace(0.1, 120, 26)
     bins_rppi_s = np.linspace(0., 200., 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
-    bins_bgs = np.arange(0, 0.6, 0.1) # 0 < z < 0.6
-    bins_lrg = np.arange(0.4, 1.2, 0.1) # 0.4 < z < 1
-    bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
-    bins_qso = np.arange(0.9, 3.1, 0.3) # 0.9 < z < 2.1
+    bins_bgs = np.arange(0, 0.525, 0.025) # 0 < z < 0.6
+    bins_lrg = np.arange(0.4, 1.125, 0.025) # 0.4 < z < 1
+    bins_elg = np.arange(0.8, 1.625, 0.025) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
+    #bins_elg = np.array([0.8, 0.9, 1.0, 1.1]) # for now reduce bin for compute power
+    bins_qso = np.arange(0.9, 2.95, 0.15) # 0.9 < z < 2.1
 
     # use_zbin will override this choice
     bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
@@ -194,15 +200,21 @@ class CorrelationMeta(ABC):
 
         # which edges and correlation type to use :
         self.corr_type = corr_type
+        if self.corr_type not in self.bins_mode:
+            raise ValueError(
+                f'corr_type {self.corr_type} not in {self.bins_mode.keys()}'
+                )
+        if self.corr_type == 'theta':
+            self.distance_col = None
         self.pos_type = 'rd' if corr_type == 'theta' else 'rdd'
 
         # weights : here base (nonKP or PIP) + FKP + ...
         self.w_cols_to_operate = [
             self.w_desi_col, 
-            self.w_fkp_desi_col,
+            #self.w_fkp_desi_col,
             #self.w_comp_desi_col
             ]
-        self.w_operator = '+'
+        self.w_operator = '*'
         # usually PIP, nonKP...
         self.weight_type = weight_type
 
@@ -309,6 +321,7 @@ class CorrelationMeta(ABC):
             weight_cols_to_operate=self.w_cols_to_operate if not self.sims else None, 
             z_col=self.z_desi_col,
             moc=self.moc if not self.skip_moc else None,
+            distance_col=self.distance_col,
             operator=self.w_operator,
             )
         self.logger.info(f'Read DESI data in {time.time()-tid:.2f} seconds ({len(cat)} rows)')
@@ -322,6 +335,7 @@ class CorrelationMeta(ABC):
             weight_cols_to_operate=self.w_cols_to_operate if not self.sims else None,
             z_col=self.z_desi_randoms_col,
             moc=self.moc if not self.skip_moc else None,
+            distance_col=self.distance_col,
             operator=self.w_operator,
             )
         all_r_length = len(ran)
@@ -371,6 +385,7 @@ class CorrelationMeta(ABC):
             main_w_col=None,
             z_col=None if not self.sims else self.z_hsc_randoms_col,
             moc=self.moc if not self.skip_moc else None,
+            distance_col=self.distance_col,
             operator=self.w_operator,
             )
         all_r_length = len(ran)
@@ -389,13 +404,14 @@ class CorrelationMeta(ABC):
             main_weight_col=self.w_hsc_col if not self.sims else None,
             z_col=self.z_hsc_col if not self.use_zbin else self.z_bin_hsc_col, 
             moc=self.moc if not self.skip_moc else None,
+            distance_col=self.distance_col,
             operator=self.w_operator
             )
         self.logger.info(f'Read HSC data in {time.time()-tih:.2f} seconds ({len(cat)} rows)')
 
         if self.sims:
             zmask_ran = np.digitize(
-                self.randoms2[self.z_hsc_randoms_col], 
+                ran[self.z_hsc_randoms_col], 
                 bin_redshift, 
                 right=True
                 )
@@ -403,10 +419,10 @@ class CorrelationMeta(ABC):
             # no z masking on HSC randoms for real HSC data
             zmask_ran = None
         if self.use_zbin:
-            zmask_data = self.data2[self.z_bin_hsc_col]
+            zmask_data = cat[self.z_bin_hsc_col]
         else:
             zmask_data = np.digitize(
-                self.data2[self.z_hsc_col], 
+                cat[self.z_hsc_col], 
                 bin_redshift, 
                 right=True
                 )
@@ -444,6 +460,14 @@ class CorrelationMeta(ABC):
         self.randoms2 = ran2
         self.zmask_data2 = zmask_cat2
         self.zmask_randoms2 = zmask_ran2
+        #import ipdb; ipdb.set_trace()
+        logging.info(
+            'MAKE CATS : ' +
+            f'N data {self.tgt1}: {len(self.data1)}' +
+            f', N randoms {self.tgt1}: {len(self.randoms1)}' +
+            f', N data {self.tgt2}: {len(self.data2) if self.data2 is not None else "None"}' +
+            f', N randoms {self.tgt2}: {len(self.randoms2) if self.randoms2 is not None else "None"}'
+            )
     
     def set_current_redshift_masks(self, bin1, bin2):
         self.z_bool_d1 = None
@@ -501,6 +525,13 @@ class CorrelationMeta(ABC):
         if not self.use_hsc:
             assert len(self.randoms1) == len(self.z_bool_r1)
 
+        # assert we don't have empty data because what the heck
+        assert len(self.randoms1) > 0
+        assert len(self.data1) > 0
+        if not self.autocorr:
+            assert len(self.randoms2) > 0
+            assert len(self.data2) > 0
+
         self.run_corr()
 
     def make_corr_data(self):
@@ -517,6 +548,14 @@ class CorrelationMeta(ABC):
                 self.randoms1[self.ra_desi_col][self.z_bool_r1],
                 self.randoms1[self.dec_desi_col][self.z_bool_r1]
                 ]
+            if self.corr_type == 'rp' or self.corr_type == 'rppi':
+                # autocorrelation case : rp1, dp1 are not used
+                dp1.append(
+                    self.data1[self.z_desi_col][self.z_bool_d1]
+                    )
+                rp1.append(
+                    self.randoms1[self.z_desi_randoms_col]
+                    )
         else:
             dp1 = [
                 self.data1[self.ra_hsc_col][self.z_bool_d1], 
@@ -526,6 +565,14 @@ class CorrelationMeta(ABC):
                 self.randoms1[self.ra_hsc_randoms_col],
                 self.randoms1[self.dec_hsc_randoms_col]
                 ]   
+            if self.corr_type == 'rp' or self.corr_type == 'rppi':
+                # autocorrelation case : rp1, dp1 are not used
+                dp1.append(
+                    self.data1[self.z_hsc_col][self.z_bool_d1]
+                    )
+                rp1.append(
+                    self.randoms1[self.z_hsc_randoms_col]
+                    )
         # if not doing autocorrelation, we need to add the second dataset
         if not self.autocorr:
             if self.double_desi:
@@ -538,6 +585,14 @@ class CorrelationMeta(ABC):
                     self.randoms2[self.ra_desi_col][self.z_bool_r2],
                     self.randoms2[self.dec_desi_col][self.z_bool_r2]
                     ]
+                if self.corr_type == 'rp' or self.corr_type == 'rppi':
+                    # autocorrelation case : rp2, dp2 are not used
+                    dp2.append(
+                        self.data2[self.z_desi_col][self.z_bool_d2]
+                        )
+                    rp2.append(
+                        self.randoms2[self.z_desi_randoms_col]
+                        )
             else:
                 # cross correlation with HSC
                 dp2 = [
@@ -548,35 +603,18 @@ class CorrelationMeta(ABC):
                     self.randoms2[self.ra_hsc_randoms_col],
                     self.randoms2[self.dec_hsc_randoms_col]
                     ]
+                if self.corr_type == 'rp' or self.corr_type == 'rppi':
+                    # autocorrelation case : rp2, dp2 are not used
+                    dp2.append(
+                        self.data2[self.z_hsc_col][self.z_bool_d2]
+                        )
+                    rp2.append(
+                        self.randoms2[self.z_hsc_randoms_col]
+                        )
         else:
             # autocorrelation case : rp2, dp2 are not used
             rp2 = None
-            dp2 = None
-        
-        if self.corr_type == 'rp':
-            assert not self.use_hsc, 'rp correlation not available for HSC'
-            self.logger.info('Using redshift for distance calculation')
-            dp1.append(
-                ct.z2dist(self.data1[self.z_desi_col][self.z_bool_d1])
-                )
-            rp1.append(
-                ct.z2dist(self.randoms1[self.z_desi_randoms_col][self.z_bool_r1])
-                )
-            if not self.autocorr:
-                if self.use_hsc:
-                    rp2.append(
-                        ct.z2dist(self.randoms2[self.z_hsc_randoms_col])
-                        )
-                    dp2.append(
-                        ct.z2dist(self.data2[self.z_hsc_col][self.z_bool_d2])
-                        )
-                elif self.double_desi:
-                    rp2.append(
-                        ct.z2dist(self.randoms2[self.z_desi_randoms_col][self.z_bool_r2])
-                        )
-                    dp2.append(
-                        ct.z2dist(self.data2[self.z_desi_col][self.z_bool_d2])
-                        )   
+            dp2 = None 
             
         dw1 = None
         dw2 = None
@@ -635,9 +673,10 @@ class CrossCorrelation(CorrelationMeta):
             randoms_weights1=rw1,
             randoms_weights2=rw2,
 
+            # other settings n things
             nthreads=self.nproc,
-            mode='theta',
-            position_type='rd', # 'rd' for RA/Dec
+            mode=self.corr_type,
+            position_type=self.pos_type, # 'rd' for RA/Dec
             engine='corrfunc',
             estimator='landyszalay',
         )
@@ -678,6 +717,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
                     self.randoms2[self.ra_hsc_randoms_col],
                     self.randoms2[self.dec_hsc_randoms_col]
                     ]
+        
         if self.corr_type == 'rp':
             if self.double_desi:
                 rpsamp.append(
@@ -686,11 +726,18 @@ class JackknifeCrossCorrelation(CorrelationMeta):
                         )
                     )
             else:
-                rpsamp.append(
-                    ct.z2dist(
-                        self.randoms2[self.z_hsc_randoms_col]
+                if self.autocorr:
+                    rpsamp.append(
+                        ct.z2dist(
+                            self.randoms1[self.z_desi_randoms_col]
+                            )
                         )
-                    )
+                else:
+                    rpsamp.append(
+                        ct.z2dist(
+                            self.randoms2[self.z_hsc_randoms_col]
+                            )
+                        )
         if self.data2 is not None and self.randoms2 is not None:
             self.logger.info(f'Data2 length {len(self.data2)} and randoms2 length {len(self.randoms2)}')
 
@@ -703,7 +750,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             nsamples=nsamples,
             nside=nside if self.corr_type == 'theta' else None,
             random_state=seed, 
-            position_type='rd' if self.corr_type == 'theta' else 'rdd'
+            position_type=self.pos_type,
             )
         labels = subsampler.label(rpsamp)
 
@@ -802,8 +849,17 @@ class DESIAutoCorrelation(CorrelationMeta):
 
 
 ## Generic methods for each class
-def _process_random_file(f, ra_col, dec_col, main_weight_col, weight_cols_to_operate, z_col, moc, operator=None):
-
+def _process_random_file(
+        f, 
+        ra_col, 
+        dec_col, 
+        main_weight_col, 
+        weight_cols_to_operate, 
+        z_col, 
+        moc, 
+        distance_col=None,
+        operator=None
+    ):
     
     try:
         with fio.FITS(str(f)) as rand:
@@ -845,8 +901,9 @@ def sample_randoms_on_moc(
         z_col=None, 
         moc=None, 
         operator=None,
+        distance_col=None,
         num_processes=None
-        ):
+    ):
     """
     Multiprocessed random sampling with optional MOC filtering
     """
@@ -861,8 +918,9 @@ def sample_randoms_on_moc(
     
     tp = time.time()
     with mp.Pool(processes=num_processes) as pool:
-        results = pool.starmap(_process_random_file, [
-            (f, ra_col, dec_col, main_w_col, weight_cols_to_operate, z_col, moc, operator) 
+        results = pool.starmap(
+            _process_random_file, [
+            (f, ra_col, dec_col, main_w_col, weight_cols_to_operate, z_col, moc, distance_col, operator) 
             for f in random_files
         ])
     print(f"Processed {len(random_files)} random files in {time.time()-tp:.2f} seconds")
@@ -877,7 +935,17 @@ def sample_randoms_on_moc(
     
     return np.concatenate(randoms)
 
-def sample_file_on_moc(file, ra_col, dec_col, main_weight_col, weight_cols_to_operate=None, z_col=None, moc=None, operator=None):
+def sample_file_on_moc(
+        file, 
+        ra_col, 
+        dec_col, 
+        main_weight_col, 
+        weight_cols_to_operate=None, 
+        z_col=None, 
+        moc=None, 
+        operator=None,
+        distance_col=None
+        ):
     '''
     Read a file and filter it using a MOC. Multiply the weights if needed.
     '''
@@ -891,7 +959,8 @@ def sample_file_on_moc(file, ra_col, dec_col, main_weight_col, weight_cols_to_op
             main_weight_col=main_weight_col, 
             weight_cols_to_operate=weight_cols_to_operate, 
             z_col=z_col, 
-            operator=operator
+            operator=operator,
+            distance_col=distance_col
         )
 
         if moc is not None:
@@ -905,7 +974,16 @@ def sample_file_on_moc(file, ra_col, dec_col, main_weight_col, weight_cols_to_op
 
     return np.array(data)
 
-def _get_data_to_read(tbl, ra_col, dec_col, main_weight_col, weight_cols_to_operate, z_col, operator=None):
+def _get_data_to_read(
+        tbl, 
+        ra_col, 
+        dec_col, 
+        main_weight_col, 
+        weight_cols_to_operate, 
+        z_col, 
+        operator=None, 
+        distance_col=None
+    ):
     base_cols = [col for col in [ra_col, dec_col, main_weight_col, z_col] if col is not None]
     cols_to_read = base_cols.copy()
 
@@ -917,27 +995,40 @@ def _get_data_to_read(tbl, ra_col, dec_col, main_weight_col, weight_cols_to_oper
             cols_to_read += weight_cols_to_operate
 
     assert all(c in tbl.get_colnames() for c in cols_to_read), f"Columns {cols_to_read} not in {tbl}"
-    data = tbl.read(columns=cols_to_read)
+    data = Table(tbl.read(columns=cols_to_read))
 
     if main_weight_col is not None:
         if weight_cols_to_operate is not None:
             if operator is None:
                 raise ValueError("Operator not provided for weight columns")
-            if operator in ['*', 'multiply']:
+            if operator in ['*', 'multiply', 'times', 'product']:
                 w_col = np.ones_like(data[ra_col])
                 for col in weight_cols_to_operate:
                     w_col *= data[col]
-            elif operator in ['+', 'add']:
+            elif operator in ['+', 'add', 'plus', 'sum']:
                 w_col = np.zeros_like(data[ra_col])
                 for col in weight_cols_to_operate:
                     w_col += data[col]
         else:
             w_col = data[main_weight_col]
         data[main_weight_col] = w_col
-        logging.info(
-            f"Weight column {main_weight_col} set to {w_col}, "
-            f"with {len(data)} rows, range : {data[main_weight_col].min()} to {data[main_weight_col].max()}"
+
+    if distance_col is not None:
+        if z_col is not None:
+            data[distance_col] = ct.z2dist(data[z_col])
+        else:
+            raise ValueError("Distance column provided but no redshift column")
+
+    logging.info(
+        (
+            f"Weight column {main_weight_col} set to {data[main_weight_col][:3]}\n" 
+            if main_weight_col is not None else ""
+            ) +
+        (
+            f"Distance column {distance_col} set to {data[distance_col][:3]}" 
+            if distance_col is not None else ""
             )
+        )
     
     return data
     

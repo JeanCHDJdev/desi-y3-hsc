@@ -40,7 +40,7 @@ def parse_args():
         'Default is 64. '
     )
     parser.add_argument(
-        '-r',
+        '-re',
         '--resolution',
         type=int,
         default=256,
@@ -95,6 +95,8 @@ def parse_args():
         '--skip_moc',
         action='store_true',
         default=False,
+        help='Wether to skip the MOC masking. '
+        'Default is False. '
     )
     parser.add_argument(
         '-z',
