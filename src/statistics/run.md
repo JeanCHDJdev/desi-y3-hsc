@@ -67,5 +67,5 @@ setcc && python run_corr.py -o results/autos_j64_ns256_zbin -s 0 -c 200 -t1 HSC 
 Same bins as previous settings. 
 Command :
 ```bash
-setcc && python run_corr.py -o results/cross_j64_ns256_zbin -s 0 -c 200 -t1 HSC -t2 ELGnotqso -ns 64 -re 256 -r2 10 -r2 2 -z -w PIP && python run_corr.py -o results/cross_j64_ns256_zbin -s 0 -c 200 -t1 HSC -t2 LRG -ns 64 -re 256 -r2 10 -r2 2 -z -w PIP 
+setcc && python run_corr.py -o results/cross_j64_ns256_zbin -s 0 -c 200 -t1 HSC -t2 ELGnotqso -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j && python run_corr.py -o results/cross_j64_ns256_zbin -s 0 -c 200 -t1 HSC -t2 LRG -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j
 ```

@@ -419,6 +419,7 @@ class CorrelationMeta(ABC):
             # no z masking on HSC randoms for real HSC data
             zmask_ran = None
         if self.use_zbin:
+            # zbins in HSC are 1-indexed. 0 = outside of the binning scheme
             zmask_data = cat[self.z_bin_hsc_col]
         else:
             zmask_data = np.digitize(
@@ -526,6 +527,7 @@ class CorrelationMeta(ABC):
             assert len(self.randoms1) == len(self.z_bool_r1)
 
         # assert we don't have empty data because what the heck
+        #import ipdb; ipdb.set_trace()
         assert len(self.randoms1[self.z_bool_r1]) > 0
         assert len(self.data1[self.z_bool_d1]) > 0
         if not self.autocorr:
@@ -533,8 +535,8 @@ class CorrelationMeta(ABC):
                 assert len(self.randoms2[self.z_bool_r2]) > 0
             else:
                 assert len(self.randoms2) > 0
-            assert len(self.data2[self.z_bool_d2]) > 0
-
+            if self.z_bool_d2 is not None:
+                assert len(self.data2[self.z_bool_d2]) > 0
         self.run_corr()
 
     def make_corr_data(self):
