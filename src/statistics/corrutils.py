@@ -107,7 +107,7 @@ class CorrelationMeta(ABC):
     # map MOC to caps
     capdict = {
         0 : 'NGC',
-        1 : 'SGC',
+        1 : 'NGC',
         2 : 'SGC',
         3 : 'NGC',
     }
@@ -526,11 +526,14 @@ class CorrelationMeta(ABC):
             assert len(self.randoms1) == len(self.z_bool_r1)
 
         # assert we don't have empty data because what the heck
-        assert len(self.randoms1) > 0
-        assert len(self.data1) > 0
+        assert len(self.randoms1[self.z_bool_r1]) > 0
+        assert len(self.data1[self.z_bool_d1]) > 0
         if not self.autocorr:
-            assert len(self.randoms2) > 0
-            assert len(self.data2) > 0
+            if self.z_bool_r1 is not None:
+                assert len(self.randoms2[self.z_bool_r2]) > 0
+            else:
+                assert len(self.randoms2) > 0
+            assert len(self.data2[self.z_bool_d2]) > 0
 
         self.run_corr()
 
