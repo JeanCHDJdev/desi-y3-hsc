@@ -69,3 +69,7 @@ Command :
 ```bash
 setcc && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 200 -t1 ELGnotqso -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j
 ```
+
+```bash
+setcc && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 200 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 200 -t1 QSO -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j
+```

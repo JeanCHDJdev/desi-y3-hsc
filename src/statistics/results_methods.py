@@ -14,7 +14,7 @@ import src.statistics.corrutils as cu
 import src.statistics.cosmotools as ct
 
 # scale cut in Mpc/h
-scale_cuts = [3, 10]
+scale_cuts = [0.1, 2]
 
 def get_desi_ns(tracer, cap=None, **fetch_desi_kw):
     '''
@@ -141,6 +141,8 @@ def single_bin_corr(
         z:float = 0.1, 
         method='landy-szalay',
         integration='single-bin',
+        skipped_ids=None,
+        ratios=None,
         ):
     #! todo : assert this is correct implementation
     '''
@@ -153,9 +155,23 @@ def single_bin_corr(
     if isinstance(estimators, TwoPointEstimator):
         estimators = [estimators]
     if len(estimators) == 0:
-        # temporary fix 
-        raise
-    sep = estimators[0].sep
+        raise ValueError('No estimators provided.')
+
+    sep, corr, cov = combine_estimators(estimators, ratios=ratios, skipped_ids=skipped_ids)
+
+    # debug plot to compare with the first estimator and check consistency
+    '''
+    sep_compare = estimators[0].sep
+    corr_compare = estimators[0].corr
+    import matplotlib.pyplot as plt
+    plt.figure()
+    plt.plot(sep_compare, corr_compare, label='compare')
+    plt.plot(sep, corr, label='combined')
+    plt.grid()
+    plt.xscale('log')
+    plt.legend()
+    plt.show()
+    '''
 
     comovsep = ct.arcsec2hMpc(sep*3600, z)
     scale_mask = (comovsep > scale_cuts[0]) & (comovsep < scale_cuts[1])
@@ -168,7 +184,8 @@ def single_bin_corr(
     weights /= simpson(weights, x=comovsep)
     
     if integration == 'single-bin':
-        return simpson(np.multiply(weights, estimators[0].corr[scale_mask]), x=comovsep)
+        #return simpson(np.multiply(weights, estimators[0].corr[scale_mask]), x=comovsep)
+        return simpson(np.multiply(weights, corr[scale_mask]), x=comovsep)
         
     elif integration == 'euclid':
         
@@ -280,7 +297,7 @@ def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None):
         raise ValueError('No estimators found for the provided paths.')
 
     estimators = [est for est in [estimatorSGC, estimatorNGC] if est is not None]
-    return single_bin_corr(estimators, beta=-1, z=0.1, method='landy-szalay')
+    return single_bin_corr(estimators, beta=-1, z=0.1, method='landy-szalay', ratios=get_desi_ratios(tracer))
             
 def wpp(path, bin_index=None):
     '''
@@ -295,6 +312,7 @@ def wpp(path, bin_index=None):
     bins_hsc = fr.get_bins('HSC')
     moc_list = cu.CorrelationMeta.moc_list
 
+    skipped_ids = []
     for i in range(len(moc_list)):
         try:
             estimators.append(
@@ -303,9 +321,10 @@ def wpp(path, bin_index=None):
                 )
             )
         except FileNotFoundError:
+            skipped_ids.append(i)
             continue
     z = (bins_hsc[bin_index-1] + bins_hsc[bin_index])/2
-    return single_bin_corr(estimators, z=z, beta=-1, method='landy-szalay')
+    return single_bin_corr(estimators, z=z, beta=-1, method='landy-szalay', skipped_ids=skipped_ids)
     
 def wsp(path, tracer, tomo_bin, fine_bin):
     '''
@@ -320,6 +339,7 @@ def wsp(path, tracer, tomo_bin, fine_bin):
     estimators = []
     bins_tracer = fr.get_bins(tracer)
     moc_list = cu.CorrelationMeta.moc_list
+    skipped_ids = []
 
     for i in range(len(moc_list)):
         try:
@@ -329,9 +349,10 @@ def wsp(path, tracer, tomo_bin, fine_bin):
                 )
             )
         except FileNotFoundError:
+            skipped_ids.append(i)
             continue
     z = (bins_tracer[fine_bin-1] + bins_tracer[fine_bin])/2
-    return single_bin_corr(estimators, z=z, beta=-1, method='landy-szalay')
+    return single_bin_corr(estimators, z=z, beta=-1, method='landy-szalay', skipped_ids=skipped_ids)
 
 def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False):
     '''
@@ -392,15 +413,14 @@ def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False
     )
     hsc_bias = hsc_bias_evolution(z=zloc, b=0.95)
     desi_bias = desi_bias_evolution(z=zloc, tracer=tracer)
+    print(
+        f'B : {hsc_bias:.4f}, {desi_bias:.4f}, diff : {hsc_bias - 1:.4f}, {desi_bias - 1:.4f}, ' 
+        f'num : {np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)):.4f}, num_no_b : {np.sqrt((wpp_meas) * (wss_meas)):.4f}')
 
-    # temporary
-    #hsc_bias = 1.0
-    #desi_bias = 1.0
-    
     result = wsp_meas / (deltaz * np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)))
     if return_chunks:
         return wsp_meas, wpp_meas, wss_meas, hsc_bias, desi_bias, deltaz, zloc, result
-    print(wpp_meas, wss_meas, wsp_meas, zloc)
+    #print(wpp_meas, wss_meas, wsp_meas, zloc)
     return result
 
 def full_npz_tomo(path_dictionary, tracer, tomo_bin):
@@ -443,46 +463,43 @@ def full_npz_tomo(path_dictionary, tracer, tomo_bin):
         )
     return np.array(nz)
 
-def combine_pp(path):
+def combine_estimators(estimators, ratios=None, skipped_ids=None):
     '''
-    From the provided path, collate the wpp measurements on each of the MOCs
-    and return a dictionary of the results. Currently unused as we moved towards
-    scale averaged wpp measurements.
+    From the provided path, collate the measurements on each of the MOCs
+    and return a dictionary of the results.
     '''
-    moc_list = cu.CorrelationMeta.moc_list
-    fr = corrf.CorrFileReader(path)
+    if ratios is None:
+        # hardcoded MOC ratios by source counts in HSC
+        ratios = [
+            0.584270,
+            0.075393,
+            0.232669,
+            0.107665,
+        ]
+    if skipped_ids is None:
+        skipped_ids = []
+    else:
+        ratios = [ratios[i] for i in range(len(ratios)) if i not in skipped_ids]
+        ratios = ratios / np.sum(ratios)
 
-    combine_ratios = get_hsc_ratios(path)
-    print(f'Combine ratios per MOC: {combine_ratios}')
-    bins_hsc = fr.get_bins('HSC')
+    #print(f'ratios : {ratios}')
 
-    allcorr = []
-    allcov = []
-    allsep = []
+    sep = estimators[0].sep
+    allsep = np.zeros_like(sep)
+    allcorr = np.zeros_like(sep)
+    allcov = np.zeros((len(sep), len(sep)))
 
-    for j in range(1, len(bins_hsc)):
-        for i in range(len(moc_list)):
-            result = TwoPointEstimator.load(
-                fr.get_file(j, j, 'HSC', 'HSC', i)
-            )
-            sep = result.sep
-            corr = result.corr
-            if i==0:
-                mocsep = np.zeros_like(sep)
-                moccorr = np.zeros_like(corr)
-                moccov = np.zeros((len(sep), len(sep)))
-            if hasattr(result, 'cov'):
-                cov = result.cov()
-            else:
-                cov = np.zeros((len(sep), len(sep)))
+    for i, est in enumerate(estimators):
+        sep = est.sep
+        corr = est.corr
+        if hasattr(est, 'cov'):
+            cov = est.cov()
+        else:
+            cov = np.zeros((len(sep), len(sep)))
 
-            mocsep += sep * combine_ratios[i]
-            moccorr += corr * combine_ratios[i]
-            moccov += cov * combine_ratios[i]
-
-        allcorr.append(moccorr)
-        allcov.append(moccov)
-        allsep.append(mocsep)
+        allsep += sep * ratios[i]
+        allcorr += corr * ratios[i]
+        allcov += cov * ratios[i]
 
     return allsep, allcorr, allcov
     
