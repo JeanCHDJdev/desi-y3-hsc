@@ -40,7 +40,7 @@ setcc && python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 ELGno
 ```
 
 ```bash
-setcc && python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 QSO -w PIP -k -ns 64 -re 256 -a 1 && python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 BGS_ANY -w PIP -k -ns 64 -re 256 -a 1
+setcc && python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 QSO -w PIP -k -ns 64 -re 256 -a 1 && python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 BGS_ANY -w PIP -k -ns 64 -re 256 -a 1 -j
 ```
 
 #### HSC autocorrelation settings
@@ -53,11 +53,11 @@ setcc && python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 QSO -
 For HSC compute time, we don't skip MOC. We downsample randoms by 5 (density : 20 gal/arcmin)
 Commands
 ```bash
-setcc && python run_corr.py -o results/autos_j64_ns256 -s 0 -c 200 -t1 HSC -ns 64 -re 256 -r2 5
+setcc && python run_corr.py -o outputs/results/autos_j64_ns256 -s 0 -c 200 -t1 HSC -ns 64 -re 256 -r2 5 -j
 ```
 with z-bins : 
 ```bash
-setcc && python run_corr.py -o results/autos_j64_ns256_zbin -s 0 -c 200 -t1 HSC -ns 64 -re 256 -r2 5 -z
+setcc && python run_corr.py -o outputs/results/autos_j64_ns256_zbin -s 0 -c 200 -t1 HSC -ns 64 -re 256 -r2 5 -z -j
 ```
 
 ##### HSC-DESI cross-correlation
@@ -67,5 +67,5 @@ setcc && python run_corr.py -o results/autos_j64_ns256_zbin -s 0 -c 200 -t1 HSC 
 Same bins as previous settings. 
 Command :
 ```bash
-setcc && python run_corr.py -o results/cross_j64_ns256_zbin -s 0 -c 200 -t1 HSC -t2 ELGnotqso -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j && python run_corr.py -o results/cross_j64_ns256_zbin -s 0 -c 200 -t1 HSC -t2 LRG -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j
+setcc && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 200 -t1 ELGnotqso -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j
 ```

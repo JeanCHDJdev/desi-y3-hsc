@@ -6,6 +6,7 @@ from pathlib import Path
 from pycorr import TwoPointEstimator
 from astropy.coordinates import SkyCoord
 from mocpy import MOC
+from scipy.stats import multivariate_normal
 from scipy.integrate import simpson
 
 import src.statistics.corrfiles as corrf
@@ -13,7 +14,7 @@ import src.statistics.corrutils as cu
 import src.statistics.cosmotools as ct
 
 # scale cut in Mpc/h
-scale_cuts = [0.5, 8]
+scale_cuts = [3, 10]
 
 def get_desi_ns(tracer, cap=None, **fetch_desi_kw):
     '''
@@ -121,6 +122,9 @@ def desi_bias_evolution(z, tracer='QSO'):
     elif tracer == 'ELGnotqso': 
         alpha = 0.153
         beta = 1.541
+    elif tracer == 'BGS_ANY':
+        #! WARNING: Not too sure what to do here just yet, no model provided
+        return 1.0
     else:
         raise NotImplementedError(f'{tracer} not implemented.')
     return alpha * ((1+z)**2 - 6.565) + beta
@@ -135,7 +139,8 @@ def single_bin_corr(
         estimators : list[TwoPointEstimator], 
         beta:float = -1, 
         z:float = 0.1, 
-        method='landy-szalay'
+        method='landy-szalay',
+        integration='single-bin',
         ):
     #! todo : assert this is correct implementation
     '''
@@ -145,34 +150,12 @@ def single_bin_corr(
     ## single bin integration
     # for now assume all estimators have the same binning
     # as estimator.sep
-
     if isinstance(estimators, TwoPointEstimator):
         estimators = [estimators]
-
+    if len(estimators) == 0:
+        # temporary fix 
+        raise
     sep = estimators[0].sep
-    
-    Nd1 = 0
-    Nd2 = 0
-    Nr1 = 0
-    Nr2 = 0
-    for est in estimators:
-        if not isinstance(est, TwoPointEstimator):
-            raise ValueError('Estimator must be a TwoPointEstimator object.')
-        Nd1 += est.D1D2.size1
-        Nd2 += est.D1D2.size2
-        Nr1 += est.R1R2.size1
-        Nr2 += est.R1R2.size2
-    
-    d1d2_counts = np.zeros_like(sep)
-    r1d2_counts = np.zeros_like(sep)
-    d1r2_counts = np.zeros_like(sep)
-    r1r2_counts = np.zeros_like(sep)
-
-    for est in estimators:
-        d1d2_counts += est.D1D2.ncounts
-        r1d2_counts += est.R1D2.ncounts
-        d1r2_counts += est.D1R2.ncounts
-        r1r2_counts += est.R1R2.ncounts
 
     comovsep = ct.arcsec2hMpc(sep*3600, z)
     scale_mask = (comovsep > scale_cuts[0]) & (comovsep < scale_cuts[1])
@@ -181,28 +164,59 @@ def single_bin_corr(
     # now do the single bin integration with $W(r)\propto r^{\beta} (default \beta = -1)$
     weights = np.zeros_like(comovsep)
     weights= comovsep**(beta)
+    ## normalize the weights with it's integral
+    weights /= simpson(weights, x=comovsep)
     
-    rr = _integrate_over_pairs(
-        weights, r1r2_counts[scale_mask], comovsep
-    ) / (Nr1 + Nr2)
-    dd = _integrate_over_pairs(
-        weights, d1d2_counts[scale_mask], comovsep
-    ) / (Nd1 + Nd2)
-    rd = _integrate_over_pairs(
-        weights, r1d2_counts[scale_mask], comovsep
-    ) / (Nr1 + Nd2)
-    dr = _integrate_over_pairs(
-        weights, d1r2_counts[scale_mask], comovsep
-    ) / (Nd1 + Nr2)
+    if integration == 'single-bin':
+        return simpson(np.multiply(weights, estimators[0].corr[scale_mask]), x=comovsep)
+        
+    elif integration == 'euclid':
+        
+        Nd1 = 0
+        Nd2 = 0
+        Nr1 = 0
+        Nr2 = 0
+        for est in estimators:
+            Nd1 += est.D1D2.size1
+            Nd2 += est.D1D2.size2
+            Nr1 += est.R1R2.size1
+            Nr2 += est.R1R2.size2
+        
+        d1d2_counts = np.zeros_like(sep)
+        r1d2_counts = np.zeros_like(sep)
+        d1r2_counts = np.zeros_like(sep)
+        r1r2_counts = np.zeros_like(sep)
 
-    if method=='landy-szalay':
-        w_avg = 1/rr * (dd - rd - dr) + 1
-    if method=='davis-peebles':
-        w_avg = dd / (dr + rd) - 1
-    if method=='peebles-hauser':
-        w_avg = dd / rr - 1
+        for est in estimators:
+            d1d2_counts += est.D1D2.ncounts
+            r1d2_counts += est.R1D2.ncounts
+            d1r2_counts += est.D1R2.ncounts
+            r1r2_counts += est.R1R2.ncounts
+        
+        rr = _integrate_over_pairs(
+            weights, r1r2_counts[scale_mask], comovsep
+        ) / (Nr1 + Nr2)
+        dd = _integrate_over_pairs(
+            weights, d1d2_counts[scale_mask], comovsep
+        ) / (Nd1 + Nd2)
+        rd = _integrate_over_pairs(
+            weights, r1d2_counts[scale_mask], comovsep
+        ) / (Nr1 + Nd2)
+        dr = _integrate_over_pairs(
+            weights, d1r2_counts[scale_mask], comovsep
+        ) / (Nd1 + Nr2)
 
-    return w_avg
+        if method=='landy-szalay':
+            w_avg = 1/rr * (dd - rd - dr) + 1
+        if method=='davis-peebles':
+            w_avg = dd / (dr + rd) - 1
+        if method=='peebles-hauser':
+            w_avg = dd / rr - 1
+
+        return w_avg
+    
+    else:
+        raise NotImplementedError(f'integration method {integration} not implemented.')
 
 def _integrate_over_pairs(weights, ncounts, sep):
     #! todo : maybe interpolate to acccount for border effects due to the scale cut ?
@@ -214,6 +228,7 @@ def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None):
     '''
     From the provided path, collate the wss measurements for DESI
     and return an array for the results.
+    s : spectroscopic
     '''
 
     assert bin_index is not None, 'bin_index must be provided'
@@ -249,7 +264,7 @@ def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None):
         for moc_id in mocngc:
             try:
                 estimatorNGC = TwoPointEstimator.load(
-                    frNGC.get_file(bin_index, bin_index, tracer, tracer, 0)
+                    frNGC.get_file(bin_index, bin_index, tracer, tracer, moc_id)
                 )
             except FileNotFoundError:
                 continue
@@ -257,7 +272,7 @@ def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None):
         for moc_id in mocsgc:
             try:
                 estimatorSGC = TwoPointEstimator.load(
-                    frSGC.get_file(bin_index, bin_index, tracer, tracer, 0)
+                    frSGC.get_file(bin_index, bin_index, tracer, tracer, moc_id)
                 )
             except FileNotFoundError:
                 continue
@@ -270,7 +285,8 @@ def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None):
 def wpp(path, bin_index=None):
     '''
     From the provided path, collate the wpp measurements for HSC over
-    the MOCs and 
+    the MOCs and return an array for the results.
+    p : photometric
     '''
     assert bin_index is not None, 'bin_index must be provided'
 
@@ -280,19 +296,42 @@ def wpp(path, bin_index=None):
     moc_list = cu.CorrelationMeta.moc_list
 
     for i in range(len(moc_list)):
-        estimators.append(
-            TwoPointEstimator.load(
-                fr.get_file(bin_index, bin_index, 'HSC', 'HSC', i)
+        try:
+            estimators.append(
+                TwoPointEstimator.load(
+                    fr.get_file(bin_index, bin_index, 'HSC', 'HSC', i)
+                )
             )
-        )
+        except FileNotFoundError:
+            continue
     z = (bins_hsc[bin_index-1] + bins_hsc[bin_index])/2
     return single_bin_corr(estimators, z=z, beta=-1, method='landy-szalay')
     
-def wsp(path):
+def wsp(path, tracer, tomo_bin, fine_bin):
     '''
     From the provided path, collate the wsp measurements for HSC and DESI
     cross-correlations and return the measurement.
+    s : spectroscopic
+    p : photometric
     '''
+    assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer} not a DESI tracer.'
+
+    fr = corrf.CorrFileReader(path)
+    estimators = []
+    bins_tracer = fr.get_bins(tracer)
+    moc_list = cu.CorrelationMeta.moc_list
+
+    for i in range(len(moc_list)):
+        try:
+            estimators.append(
+                TwoPointEstimator.load(
+                    fr.get_file(fine_bin, tomo_bin, tracer, 'HSC', i)
+                )
+            )
+        except FileNotFoundError:
+            continue
+    z = (bins_tracer[fine_bin-1] + bins_tracer[fine_bin])/2
+    return single_bin_corr(estimators, z=z, beta=-1, method='landy-szalay')
 
 def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False):
     '''
@@ -325,7 +364,7 @@ def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False
         in order : `wsp_meas, wpp_meas, wss_meas, hsc_bias, desi_bias, deltaz, zloc`
     '''
     assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer} not a DESI tracer.'
-    assert tomo_bin in [1, 2, 3, 4], f'fine_bin {fine_bin} not a valid bin.'
+    assert tomo_bin in [1, 2, 3, 4], f'fine_bin {tomo_bin} not a valid bin.'
     
     # let's grab the binning scheme that we are using
     fr = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
@@ -347,14 +386,22 @@ def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False
     )
     wsp_meas = wsp(
         path_dictionary['DESIxHSC'], 
-        bin_index=fine_bin
+        tracer=tracer,
+        fine_bin=fine_bin,
+        tomo_bin=tomo_bin
     )
     hsc_bias = hsc_bias_evolution(z=zloc, b=0.95)
     desi_bias = desi_bias_evolution(z=zloc, tracer=tracer)
+
+    # temporary
+    #hsc_bias = 1.0
+    #desi_bias = 1.0
     
+    result = wsp_meas / (deltaz * np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)))
     if return_chunks:
-        return wsp_meas, wpp_meas, wss_meas, hsc_bias, desi_bias, deltaz, zloc
-    return wsp_meas / (deltaz * np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)))
+        return wsp_meas, wpp_meas, wss_meas, hsc_bias, desi_bias, deltaz, zloc, result
+    print(wpp_meas, wss_meas, wsp_meas, zloc)
+    return result
 
 def full_npz_tomo(path_dictionary, tracer, tomo_bin):
     '''
@@ -389,7 +436,7 @@ def full_npz_tomo(path_dictionary, tracer, tomo_bin):
         nz.append(
             compute_npz(
                 path_dictionary, 
-                tracer=tracer, 
+                tracer=tracer,  
                 fine_bin=i, 
                 tomo_bin=tomo_bin
             )
@@ -440,4 +487,24 @@ def combine_pp(path):
     return allsep, allcorr, allcov
     
 
+def hsc_dnnz_error(expect, mids, num_samples=1000): 
+    '''
+    Compute the error on the n(z) using a log-normal distribution.
     
+    Parameters
+    ----------
+
+    expect : array-like
+        The expected n(z) values.
+    mids : array-like
+        The midpoints of the bins.
+    num_samples : int
+        The number of samples to draw from the log-normal distribution.
+    '''
+    var = (0.15 * expect)**2
+    mu = np.log(expect**2/np.sqrt(var + expect**2))
+    sig_2 = np.log(var/expect**2 + 1.0)
+    samples = multivariate_normal.rvs(mu, np.diag(sig_2), size=num_samples)
+    pz = np.exp(samples)
+    pz = np.array([el/np.trapz(el, mids) for el in pz])
+    return pz, mu, np.diag(sig_2)
