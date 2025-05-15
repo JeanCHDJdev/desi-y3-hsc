@@ -74,7 +74,9 @@ class CorrelationMeta(ABC):
     bins_qso = np.arange(0.9, 2.95, 0.15) # 0.9 < z < 2.1
 
     # use_zbin will override this choice
-    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    #bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    # if nano_bins : 
+    bins_hsc = np.arange(0.3, 1.501, 0.01) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
 
     bins_tracers = {
         'LRG': bins_lrg,
@@ -1031,7 +1033,9 @@ def _get_data_to_read(
 
     logging.info(
         (
-            f"Weight column {main_weight_col} set to {data[main_weight_col][:3]}\n" 
+            f"Weight column {main_weight_col} set to {data[main_weight_col][:3]}\n"
+            f" after applying operator {operator} to "
+            f"columns {weight_cols_to_operate} " 
             if main_weight_col is not None else ""
             ) +
         (
@@ -1039,6 +1043,8 @@ def _get_data_to_read(
             if distance_col is not None else ""
             )
         )
+    if weight_cols_to_operate is not None:
+        logging.info(data[:3], Table(tbl.read(columns=weight_cols_to_operate))[:3])
     
     return data
     

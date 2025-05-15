@@ -13,9 +13,6 @@ import src.statistics.corrfiles as corrf
 import src.statistics.corrutils as cu
 import src.statistics.cosmotools as ct
 
-# scale cut in Mpc/h (COMOVING !!)
-scale_cuts = [1, 6]
-
 def get_desi_ns(tracer, cap=None, **fetch_desi_kw):
     '''
     Get the number of sources per cap, per tracer. If cap is None,
@@ -137,6 +134,7 @@ def hsc_bias_evolution(z, b):
 
 def single_bin_corr(
         estimators : list[TwoPointEstimator], 
+        scale_cuts:list,
         beta:float = -1, 
         z:float = 0.1, 
         method='landy-szalay',
@@ -188,6 +186,7 @@ def single_bin_corr(
         return simpson(np.multiply(weights, corr[scale_mask]), x=comovsep)
         
     elif integration == 'euclid':
+        # weird integration scheme I can't really get to work
         
         Nd1 = 0
         Nd2 = 0
@@ -241,13 +240,14 @@ def _integrate_over_pairs(weights, ncounts, sep):
     # outside of the scale cut
     return simpson(np.multiply(weights, ncounts), x=sep)
 
-def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None):
+def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None, scale_cuts=[]):
     '''
     From the provided path, collate the wss measurements for DESI
     and return an array for the results.
     s : spectroscopic
     '''
 
+    assert len(scale_cuts) == 2, 'scale_cuts must be a list of length 2'
     assert bin_index is not None, 'bin_index must be provided'
 
     assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer} not a DESI tracer.'
@@ -297,9 +297,16 @@ def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None):
         raise ValueError('No estimators found for the provided paths.')
 
     estimators = [est for est in [estimatorSGC, estimatorNGC] if est is not None]
-    return single_bin_corr(estimators, beta=-1, z=0.1, method='landy-szalay', ratios=get_desi_ratios(tracer))
+    return single_bin_corr(
+        estimators, 
+        beta=-1, 
+        z=0.1, 
+        method='landy-szalay', 
+        ratios=get_desi_ratios(tracer), 
+        scale_cuts=scale_cuts
+        )
             
-def wpp(path, bin_index=None):
+def wpp(path:str | Path, bin_index:int, scale_cuts:list):
     '''
     From the provided path, collate the wpp measurements for HSC over
     the MOCs and return an array for the results.
@@ -324,9 +331,16 @@ def wpp(path, bin_index=None):
             skipped_ids.append(i)
             continue
     z = (bins_hsc[bin_index-1] + bins_hsc[bin_index])/2
-    return single_bin_corr(estimators, z=z, beta=-1, method='landy-szalay', skipped_ids=skipped_ids)
+    return single_bin_corr(
+        estimators, 
+        z=z, 
+        beta=-1, 
+        method='landy-szalay', 
+        skipped_ids=skipped_ids,
+        scale_cuts=scale_cuts
+        )
     
-def wsp(path, tracer, tomo_bin, fine_bin):
+def wsp(path:str | Path, tracer:str, tomo_bin:int, fine_bin:int, scale_cuts:list):
     '''
     From the provided path, collate the wsp measurements for HSC and DESI
     cross-correlations and return the measurement.
@@ -352,9 +366,9 @@ def wsp(path, tracer, tomo_bin, fine_bin):
             skipped_ids.append(i)
             continue
     z = (bins_tracer[fine_bin-1] + bins_tracer[fine_bin])/2
-    return single_bin_corr(estimators, z=z, beta=-1, method='landy-szalay', skipped_ids=skipped_ids)
+    return single_bin_corr(estimators, z=z, beta=-1, method='landy-szalay', skipped_ids=skipped_ids, scale_cuts=scale_cuts)
 
-def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False, verbose=False):
+def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, scale_cuts, return_chunks=False, verbose=False):
     '''
     Computes n(z) for the provided tracer and binning.
     
@@ -399,19 +413,22 @@ def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False
 
     wpp_meas = wpp(
         path_dictionary['HSC'], 
-        bin_index=tomo_bin
+        bin_index=tomo_bin,
+        scale_cuts=scale_cuts
         )
     wss_meas = wss(
         path_dictionary['DESI_NGC'], 
         path_dictionary['DESI_SGC'], 
         tracer=tracer, 
-        bin_index=fine_bin
+        bin_index=fine_bin,
+        scale_cuts=scale_cuts
     )
     wsp_meas = wsp(
         path_dictionary['DESIxHSC'], 
         tracer=tracer,
         fine_bin=fine_bin,
-        tomo_bin=tomo_bin
+        tomo_bin=tomo_bin,
+        scale_cuts=scale_cuts
     )
     hsc_bias = hsc_bias_evolution(z=zloc, b=0.95)
     desi_bias = desi_bias_evolution(z=zloc, tracer=tracer)
@@ -420,17 +437,17 @@ def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False
             f'B : {hsc_bias:.4f}, {desi_bias:.4f}, prodsqrt : {np.sqrt(hsc_bias) * desi_bias:.4f}, ' 
             f'num : {np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)):.4f}, num_no_b : {np.sqrt((wpp_meas) * (wss_meas)):.4f}'
             )
-    hsc_bias = 1
-    desi_bias = 1
+    #hsc_bias = 1
+    #desi_bias = 1
 
-    #result = wsp_meas / (deltaz * np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)))
-    result = wsp_meas / (deltaz * np.sqrt((desi_bias * wss_meas)))
+    result = wsp_meas / (deltaz * np.sqrt((wpp_meas) * (wss_meas)))
+    #result = wsp_meas / (deltaz * desi_bias * np.sqrt((wss_meas)))
     if return_chunks:
         return wsp_meas, wpp_meas, wss_meas, hsc_bias, desi_bias, deltaz, zloc, result
     #print(wpp_meas, wss_meas, wsp_meas, zloc)
     return result
 
-def full_npz_tomo(path_dictionary, tracer, tomo_bin, verbose=False):
+def full_npz_tomo(path_dictionary, tracer, tomo_bin, scale_cuts, verbose=False):
     '''
     Computes n(z) for the provided tracer and specific tomographic. Returns the array of n(z) values
     for that tomographic bin and tracer.
@@ -454,6 +471,11 @@ def full_npz_tomo(path_dictionary, tracer, tomo_bin, verbose=False):
     tomo_bin : int
         The bin index for the tomographic binning. This bin is specific to the HSC tracer used to track
         down the dN/dz. This can be from 1 to 4. Convention being that all bins are 1-indexed.
+    scale_cuts : list
+        The scale cuts to apply to the measurements. This is a list of two values, the lower and upper
+        bounds of the scale cuts, in comoving Mpc/h.
+    verbose : bool
+        If verbose is True, will print the values used to compute the n(z) for the tracer.
     '''
     # let's grab the binning scheme that we are using
     fr = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
@@ -466,7 +488,8 @@ def full_npz_tomo(path_dictionary, tracer, tomo_bin, verbose=False):
                 tracer=tracer,  
                 fine_bin=i, 
                 tomo_bin=tomo_bin,
-                verbose=verbose
+                verbose=verbose,
+                scale_cuts=scale_cuts
             )
         )
     return np.array(nz)

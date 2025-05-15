@@ -4,9 +4,7 @@ data/**
 *parquet
 
 #runs
-src/statistics/crosscorr*/**
-src/statistics/auto/**
-src/statistics/old/**
+src/statistics/outputs/**
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

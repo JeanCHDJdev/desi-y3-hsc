@@ -11,7 +11,7 @@ from pathlib import Path
 from argparse import ArgumentParser
 from pycorr import setup_logging
 
-import corrutils as cu
+import src.statistics.corrutils as cu
 
 def parse_args():
     parser = ArgumentParser()
