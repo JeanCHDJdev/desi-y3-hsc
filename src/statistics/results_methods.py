@@ -14,7 +14,7 @@ import src.statistics.corrutils as cu
 import src.statistics.cosmotools as ct
 
 # scale cut in Mpc/h
-scale_cuts = [0.1, 2]
+scale_cuts = [0.3, 4]
 
 def get_desi_ns(tracer, cap=None, **fetch_desi_kw):
     '''
@@ -124,7 +124,7 @@ def desi_bias_evolution(z, tracer='QSO'):
         beta = 1.541
     elif tracer == 'BGS_ANY':
         #! WARNING: Not too sure what to do here just yet, no model provided
-        return 1.0
+        return 1.0 * np.ones_like(z)
     else:
         raise NotImplementedError(f'{tracer} not implemented.')
     return alpha * ((1+z)**2 - 6.565) + beta
@@ -133,7 +133,7 @@ def hsc_bias_evolution(z, b):
     '''
     Assume it's a ~constant bias of b*growth factor D(z)~1/(1+z)
     '''
-    return b / (1 + z)
+    return b / (1 / (1 + z))
 
 def single_bin_corr(
         estimators : list[TwoPointEstimator], 
@@ -414,8 +414,10 @@ def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False
     hsc_bias = hsc_bias_evolution(z=zloc, b=0.95)
     desi_bias = desi_bias_evolution(z=zloc, tracer=tracer)
     print(
-        f'B : {hsc_bias:.4f}, {desi_bias:.4f}, diff : {hsc_bias - 1:.4f}, {desi_bias - 1:.4f}, ' 
-        f'num : {np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)):.4f}, num_no_b : {np.sqrt((wpp_meas) * (wss_meas)):.4f}')
+        f'B : {hsc_bias:.4f}, {desi_bias:.4f}, prodsqrt : {np.sqrt(hsc_bias) * desi_bias:.4f}, ' 
+        f'num : {np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)):.4f}, num_no_b : {np.sqrt((wpp_meas) * (wss_meas)):.4f}'
+        )
+    #hsc_bias = 1
 
     result = wsp_meas / (deltaz * np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)))
     if return_chunks:

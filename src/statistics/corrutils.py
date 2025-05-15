@@ -69,7 +69,7 @@ class CorrelationMeta(ABC):
 
     bins_bgs = np.arange(0, 0.525, 0.025) # 0 < z < 0.6
     bins_lrg = np.arange(0.4, 1.125, 0.025) # 0.4 < z < 1
-    bins_elg = np.arange(0.8, 1.625, 0.025) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
+    bins_elg = np.arange(0.8, 1.604, 0.04) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
     #bins_elg = np.array([0.8, 0.9, 1.0, 1.1]) # for now reduce bin for compute power
     bins_qso = np.arange(0.9, 2.95, 0.15) # 0.9 < z < 2.1
 
@@ -109,7 +109,7 @@ class CorrelationMeta(ABC):
         0 : 'NGC',
         1 : 'NGC',
         2 : 'SGC',
-        3 : 'NGC',
+        3 : 'SGC',
     }
 
     def __init__(

@@ -36,7 +36,7 @@ Number of random files used for DESI : 5
    - python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 BGS_ANY -w PIP -k
 Commands
 ```bash
-setcc && python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 ELGnotqso -w PIP -k -ns 64 -re 256 -a 1 && python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 LRG -w PIP -k  -ns 64 -re 256 -a 1
+setcc && python run_corr.py -o outputs/results/autos_j64_ns256_NGC -s 0 -c 200 -t1 ELGnotqso -w PIP -k -ns 64 -re 256 -a 1 && python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 LRG -w PIP -k  -ns 64 -re 256 -a 1
 ```
 
 ```bash
@@ -67,7 +67,7 @@ setcc && python run_corr.py -o outputs/results/autos_j64_ns256_zbin -s 0 -c 200 
 Same bins as previous settings. 
 Command :
 ```bash
-setcc && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 200 -t1 ELGnotqso -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j
+setcc && python run_corr.py -o outputs/results_2/cross_j64_ns256_zbin -s 0 -c 200 -t1 ELGnotqso -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j
 ```
 
 ```bash

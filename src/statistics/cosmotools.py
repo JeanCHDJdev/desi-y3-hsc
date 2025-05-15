@@ -22,7 +22,7 @@ COSMO_ccl = ccl.Cosmology(
     Omega_c=omega_c, Omega_b=omega_b, h=h, sigma8=sigma8, n_s=n_s
 )
 # from astropy.cosmology
-COSMO_astropy = FlatLambdaCDM(
+cosmo = FlatLambdaCDM(
     H0=H0,
     Om0=omega_m,
     Ob0=omega_b,
@@ -40,9 +40,9 @@ def arcsec2hMpc(theta, z):
        Redshift
     """
     theta = theta * u.arcsec
-    d_A = COSMO_astropy.angular_diameter_distance(z) 
-    x = (theta * d_A).to(u.Mpc, u.dimensionless_angles()) 
-    x /= COSMO_astropy.h 
+    d_pm = cosmo.comoving_transverse_distance(z) 
+    x = (theta * d_pm).to(u.Mpc, u.dimensionless_angles()) 
+    x /= cosmo.h 
     return x.value
 
 def hMpc2arcsec(x, z):
@@ -56,9 +56,9 @@ def hMpc2arcsec(x, z):
     z: float
         Redshift
     """
-    d_A = COSMO_astropy.angular_diameter_distance(z) 
-    theta = (x * u.Mpc * COSMO_astropy.h / d_A).to(u.arcsec, u.dimensionless_angles())
-    return theta.value
+    d_pm = cosmo.comoving_transverse_distance(z)
+    theta = ((x / (1+z)) * u.Mpc * cosmo.h / d_pm).to(u.arcsec, u.dimensionless_angles())
+    return theta.value # angular separation in arcseconds
 
 def z2dist(z):
     """
@@ -71,7 +71,7 @@ def z2dist(z):
         Redshift
     """
     return np.array(
-        COSMO_astropy.comoving_distance(z).value / COSMO_astropy.h, 
+        cosmo.comoving_distance(z).value / cosmo.h, 
         dtype=float
         )
 
