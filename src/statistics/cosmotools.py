@@ -57,7 +57,8 @@ def hMpc2arcsec(x, z):
         Redshift
     """
     d_pm = cosmo.comoving_transverse_distance(z)
-    theta = ((x / (1+z)) * u.Mpc * cosmo.h / d_pm).to(u.arcsec, u.dimensionless_angles())
+    theta = (x * u.Mpc / d_pm).to(u.arcsec, u.dimensionless_angles())
+    theta = theta * cosmo.h 
     return theta.value # angular separation in arcseconds
 
 def z2dist(z):

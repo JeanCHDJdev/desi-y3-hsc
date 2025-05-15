@@ -91,6 +91,8 @@ class CorrelationMeta(ABC):
     }
     bins_all = {**bins_tracers, **bins_mode}
 
+    estimator_type = 'landyszalay' # 'davispeebles'
+
     @staticmethod
     def save_bins(root):
         """
@@ -211,7 +213,7 @@ class CorrelationMeta(ABC):
         # weights : here base (nonKP or PIP) + FKP + ...
         self.w_cols_to_operate = [
             self.w_desi_col, 
-            #self.w_fkp_desi_col,
+            self.w_fkp_desi_col,
             #self.w_comp_desi_col
             ]
         self.w_operator = '*'
@@ -670,20 +672,20 @@ class CrossCorrelation(CorrelationMeta):
             data_positions2=dp2,
 
             randoms_positions1=rp1,
-            randoms_positions2=rp2,
+            randoms_positions2=rp2  if self.estimator_type == 'landyszalay' else None,
 
             data_weights1=dw1,
             data_weights2=dw2,
 
             randoms_weights1=rw1,
-            randoms_weights2=rw2,
+            randoms_weights2=rw2 if self.estimator_type == 'landyszalay' else None,
 
             # other settings n things
             nthreads=self.nproc,
             mode=self.corr_type,
             position_type=self.pos_type, # 'rd' for RA/Dec
             engine='corrfunc',
-            estimator='landyszalay',
+            estimator=self.estimator_type,
         )
         tpcf.save(self.outfile)
 
@@ -782,13 +784,13 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             data_positions2=dp2,
 
             randoms_positions1=rp1,
-            randoms_positions2=rp2,
+            randoms_positions2=rp2 if self.estimator_type == 'landyszalay' else None,
 
             data_weights1=dw1,
             data_weights2=dw2,
 
             randoms_weights1=rw1,
-            randoms_weights2=rw2,
+            randoms_weights2=rw2 if self.estimator_type == 'landyszalay' else None,
 
             data_samples1=ds1,
             data_samples2=ds2,
@@ -800,7 +802,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             mode=self.corr_type,
             position_type=self.pos_type, # 'rd' for RA/Dec, 'rdd' for RA/Dec/Dist
             engine='corrfunc',
-            estimator='landyszalay',
+            estimator=self.estimator_type,
         )
         tpcf.save(self.outfile)
 
@@ -1010,6 +1012,9 @@ def _get_data_to_read(
                 w_col = np.ones_like(data[ra_col])
                 for col in weight_cols_to_operate:
                     w_col *= data[col]
+                    logging.info(
+                        f"Multiplying {col} to {main_weight_col} : {data[col][:3]} * {w_col[:3]}"
+                        )
             elif operator in ['+', 'add', 'plus', 'sum']:
                 w_col = np.zeros_like(data[ra_col])
                 for col in weight_cols_to_operate:

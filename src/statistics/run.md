@@ -36,7 +36,7 @@ Number of random files used for DESI : 5
    - python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 BGS_ANY -w PIP -k
 Commands
 ```bash
-setcc && python run_corr.py -o outputs/results/autos_j64_ns256_NGC -s 0 -c 200 -t1 ELGnotqso -w PIP -k -ns 64 -re 256 -a 1 && python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 LRG -w PIP -k  -ns 64 -re 256 -a 1
+setcc && python run_corr.py -o outputs/results_nonKP_FKP/autos_j64_ns256_NGC -s 0 -c 200 -t1 ELGnotqso -w nonKP -k -ns 64 -re 256 -a 1 && python run_corr.py -o outputs/results_nonKP_FKP/autos_j64_ns256_NGC -s 0 -c 200 -t1 LRG -w nonKP -k  -ns 64 -re 256 -a 1 && python run_corr.py -o outputs/results_nonKP_FKP/autos_j64_ns256_NGC -s 0 -c 200 -t1 BGS_ANY -w nonKP -k  -ns 64 -re 256 -a 1 && python run_corr.py -o outputs/results_nonKP_FKP/autos_j64_ns256_NGC -s 0 -c 200 -t1 QSO -w nonKP -k  -ns 64 -re 256 -a 1 
 ```
 
 ```bash
@@ -57,8 +57,12 @@ setcc && python run_corr.py -o outputs/results/autos_j64_ns256 -s 0 -c 200 -t1 H
 ```
 with z-bins : 
 ```bash
-setcc && python run_corr.py -o outputs/results/autos_j64_ns256_zbin -s 0 -c 200 -t1 HSC -ns 64 -re 256 -r2 5 -z -j
+setcc && python run_corr.py -o outputs/results/autos_j64_ns256_zbin -s 0 -c 200 -t1 HSC -ns 64 -re 256 -r1 5 -z -j
 ```
+
+setcc && python run_corr.py -o outputs/results_sims/autos_j64_ns256_zbin -s 5 -c 200 -t1 LRG -ns 64 -re 256 -k -a 1 && python run_corr.py -o outputs/results_sims/autos_j64_ns256_zbin -s 5 -c 200 -t1 BGS_ANY -ns 64 -re 256 -k -a 1 && python run_corr.py -o outputs/results_sims/autos_j64_ns256_zbin -s 5 -c 200 -t1 ELGnotqso -ns 64 -re 256 -k -a 1 && python run_corr.py -o outputs/results_sims/autos_j64_ns256_zbin -s 5 -c 200 -t1 HSC -ns 64 -re 256
+
+setcc && python run_corr.py -o outputs/results_sims/cross_j64_ns256_zbin -s 5 -c 200 -t1 ELGnotqso -t2 HSC -ns 64 -re 256 -r2 4 -w PIP && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 5 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r2 4 -w PIP && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 5 -c 200 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r2 4 -w PIP -j
 
 ##### HSC-DESI cross-correlation
 
@@ -73,3 +77,5 @@ setcc && python run_corr.py -o outputs/results_2/cross_j64_ns256_zbin -s 0 -c 20
 ```bash
 setcc && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 200 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 200 -t1 QSO -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j
 ```
+
+setcc && python run_corr.py -o outputs/results_nonKP_FKP/cross_j64_ns256_zbin -s 0 -c 200 -t1 ELGnotqso -t2 HSC -ns 64 -re 256 -r2 15 -z -w nonKP && python run_corr.py -o outputs/results_nonKP_FKP/cross_j64_ns256_zbin -s 0 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r2 15 -z -w nonKP && python run_corr.py -o outputs/results_nonKP_FKP/cross_j64_ns256_zbin -s 0 -c 200 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r2 15 -z -w nonKP && python run_corr.py -o outputs/results_nonKP_FKP/cross_j64_ns256_zbin -s 0 -c 200 -t1 QSO -t2 HSC -ns 64 -re 256 -r2 15 -z -w nonKP 

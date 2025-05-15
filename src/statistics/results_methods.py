@@ -13,8 +13,8 @@ import src.statistics.corrfiles as corrf
 import src.statistics.corrutils as cu
 import src.statistics.cosmotools as ct
 
-# scale cut in Mpc/h
-scale_cuts = [0.3, 4]
+# scale cut in Mpc/h (COMOVING !!)
+scale_cuts = [1, 6]
 
 def get_desi_ns(tracer, cap=None, **fetch_desi_kw):
     '''
@@ -354,7 +354,7 @@ def wsp(path, tracer, tomo_bin, fine_bin):
     z = (bins_tracer[fine_bin-1] + bins_tracer[fine_bin])/2
     return single_bin_corr(estimators, z=z, beta=-1, method='landy-szalay', skipped_ids=skipped_ids)
 
-def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False):
+def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False, verbose=False):
     '''
     Computes n(z) for the provided tracer and binning.
     
@@ -382,7 +382,9 @@ def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False
         down the dN/dz. This can be from 1 to 4. Convention being that all bins are 1-indexed.
     return_chunks : bool
         If return_chunks is True, will return the individual values used to compute the n(z) for the tracer,
-        in order : `wsp_meas, wpp_meas, wss_meas, hsc_bias, desi_bias, deltaz, zloc`
+        in order : `wsp_meas, wpp_meas, wss_meas, hsc_bias, desi_bias, deltaz, zloc, result`.
+    verbose : bool
+        If verbose is True, will print the values used to compute the n(z) for the tracer.
     '''
     assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer} not a DESI tracer.'
     assert tomo_bin in [1, 2, 3, 4], f'fine_bin {tomo_bin} not a valid bin.'
@@ -413,19 +415,22 @@ def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, return_chunks=False
     )
     hsc_bias = hsc_bias_evolution(z=zloc, b=0.95)
     desi_bias = desi_bias_evolution(z=zloc, tracer=tracer)
-    print(
-        f'B : {hsc_bias:.4f}, {desi_bias:.4f}, prodsqrt : {np.sqrt(hsc_bias) * desi_bias:.4f}, ' 
-        f'num : {np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)):.4f}, num_no_b : {np.sqrt((wpp_meas) * (wss_meas)):.4f}'
-        )
-    #hsc_bias = 1
+    if verbose:
+        print(
+            f'B : {hsc_bias:.4f}, {desi_bias:.4f}, prodsqrt : {np.sqrt(hsc_bias) * desi_bias:.4f}, ' 
+            f'num : {np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)):.4f}, num_no_b : {np.sqrt((wpp_meas) * (wss_meas)):.4f}'
+            )
+    hsc_bias = 1
+    desi_bias = 1
 
-    result = wsp_meas / (deltaz * np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)))
+    #result = wsp_meas / (deltaz * np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)))
+    result = wsp_meas / (deltaz * np.sqrt((desi_bias * wss_meas)))
     if return_chunks:
         return wsp_meas, wpp_meas, wss_meas, hsc_bias, desi_bias, deltaz, zloc, result
     #print(wpp_meas, wss_meas, wsp_meas, zloc)
     return result
 
-def full_npz_tomo(path_dictionary, tracer, tomo_bin):
+def full_npz_tomo(path_dictionary, tracer, tomo_bin, verbose=False):
     '''
     Computes n(z) for the provided tracer and specific tomographic. Returns the array of n(z) values
     for that tomographic bin and tracer.
@@ -460,7 +465,8 @@ def full_npz_tomo(path_dictionary, tracer, tomo_bin):
                 path_dictionary, 
                 tracer=tracer,  
                 fine_bin=i, 
-                tomo_bin=tomo_bin
+                tomo_bin=tomo_bin,
+                verbose=verbose
             )
         )
     return np.array(nz)
