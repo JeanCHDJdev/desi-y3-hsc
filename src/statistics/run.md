@@ -62,7 +62,7 @@ setcc && python run_corr.py -o outputs/results/autos_j64_ns256_zbin -s 0 -c 200 
 with mini-bins :
 NOTE : not excluding "calibration cut" which is bad for first 2 bins D:
 ```bash
-setcc && python run_corr.py -o outputs/results_hsc/nanobins_j64_ns256 -s 0 -c 200 -t1 HSC -ns 64 -re 256 -r1 40 -r2 40
+setcc && python run_corr.py -o outputs/results_hsc/minibins_j64_ns256 -s 0 -c 200 -t1 HSC -ns 64 -re 256 -r1 40 -r2 40
 ```
 
 setcc && python run_corr.py -o outputs/results_sims/autos_j64_ns256_zbin -s 5 -c 200 -t1 LRG -ns 64 -re 256 -k -a 1 && python run_corr.py -o outputs/results_sims/autos_j64_ns256_zbin -s 5 -c 200 -t1 BGS_ANY -ns 64 -re 256 -k -a 1 && python run_corr.py -o outputs/results_sims/autos_j64_ns256_zbin -s 5 -c 200 -t1 ELGnotqso -ns 64 -re 256 -k -a 1 && python run_corr.py -o outputs/results_sims/autos_j64_ns256_zbin -s 5 -c 200 -t1 HSC -ns 64 -re 256

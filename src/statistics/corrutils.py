@@ -76,7 +76,7 @@ class CorrelationMeta(ABC):
     # use_zbin will override this choice
     #bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     # if nano_bins : 
-    bins_hsc = np.arange(0.3, 1.501, 0.0125) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    bins_hsc = np.arange(0, 2.95, 0.15) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
 
     bins_tracers = {
         'LRG': bins_lrg,
@@ -401,12 +401,17 @@ class CorrelationMeta(ABC):
             )
         
         tih = time.time()
+        # we can't use bins on HSC sims
+        if self.sims:
+            self.use_zbin = False
         cat = sample_file_on_moc(
             catf, 
             ra_col=self.ra_hsc_col, 
             dec_col=self.dec_hsc_col, 
             main_weight_col=self.w_hsc_col if not self.sims else None,
-            z_col=self.z_hsc_col if not self.use_zbin else self.z_bin_hsc_col, 
+            # we go with both z col and z bin col in case we want to use the calibration cut
+            # that only the bins know about (and it's important for HSC)
+            z_col=self.z_hsc_col if not self.use_zbin else [self.z_hsc_col, self.z_bin_hsc_col], 
             moc=self.moc if not self.skip_moc else None,
             distance_col=self.distance_col,
             operator=self.w_operator
@@ -424,7 +429,25 @@ class CorrelationMeta(ABC):
             zmask_ran = None
         if self.use_zbin:
             # zbins in HSC are 1-indexed. 0 = outside of the binning scheme
-            zmask_data = cat[self.z_bin_hsc_col]
+            zmask_bins = cat[self.z_bin_hsc_col]
+            # here we do a second digitize to get the binning scheme complete
+            zvalues = cat[self.z_hsc_col]
+            zmask_data = np.digitize(
+                zvalues, 
+                bin_redshift, 
+                right=True
+                )
+            # tomographic range
+            ztomographic = [0.3, 1.5]
+            # which bins are in the tomographic range ?
+            ztomographic = [0.3, 1.5]
+            # Mask redshifts inside tomographic range but with bad quality (tldr : calibration cut)
+            inside_tomo_range = (zvalues > ztomographic[0]) & (zvalues < ztomographic[1])
+            bad_quality = zmask_bins == 0
+
+            # Zero out these values
+            zmask_data[inside_tomo_range & bad_quality] = 0
+
         else:
             zmask_data = np.digitize(
                 cat[self.z_hsc_col], 
@@ -993,11 +1016,25 @@ def _get_data_to_read(
         operator=None, 
         distance_col=None
     ):
-    base_cols = [col for col in [ra_col, dec_col, main_weight_col, z_col] if col is not None]
+    # if HSC + zbin we can have an edge case where the z_col is two values, so flatten and unpack first
+    requested_cols = [ra_col, dec_col, main_weight_col]
+    if isinstance(z_col, list):
+        if len(z_col) == 2:
+            # we want both knowledge on zbin and z
+            requested_cols.append(z_col[0])
+            requested_cols.append(z_col[1])
+        else:
+            raise ValueError(f"z_col should be a list of length 2, got {len(z_col)}")
+    else:
+        # if not a list we're good to go
+        requested_cols.append(z_col)
+    # None values are not valid columns so we exclude them
+    base_cols = [col for col in requested_cols if col is not None]
     cols_to_read = base_cols.copy()
 
     if len(base_cols) == 0:
         raise ValueError(f"No columns to read in {tbl}")
+    # we unpack the weights we want to operate on here...
     if main_weight_col in base_cols:
         if weight_cols_to_operate is not None:
             cols_to_read.remove(main_weight_col)

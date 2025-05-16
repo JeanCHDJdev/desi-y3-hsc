@@ -368,7 +368,17 @@ def wsp(path:str | Path, tracer:str, tomo_bin:int, fine_bin:int, scale_cuts:list
     z = (bins_tracer[fine_bin-1] + bins_tracer[fine_bin])/2
     return single_bin_corr(estimators, z=z, beta=-1, method='landy-szalay', skipped_ids=skipped_ids, scale_cuts=scale_cuts)
 
-def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, scale_cuts, return_chunks=False, verbose=False):
+def compute_npz(
+        path_dictionary, 
+        tracer, 
+        fine_bin, 
+        hsc_correction_bin, 
+        tomo_bin, 
+        scale_cuts, 
+        sigmaj_correction,
+        return_chunks=False, 
+        verbose=False
+        ):
     '''
     Computes n(z) for the provided tracer and binning.
     
@@ -413,7 +423,7 @@ def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, scale_cuts, return_
 
     wpp_meas = wpp(
         path_dictionary['HSC'], 
-        bin_index=tomo_bin,
+        bin_index=hsc_correction_bin,
         scale_cuts=scale_cuts
         )
     wss_meas = wss(
@@ -440,14 +450,22 @@ def compute_npz(path_dictionary, tracer, fine_bin, tomo_bin, scale_cuts, return_
     #hsc_bias = 1
     #desi_bias = 1
 
-    result = wsp_meas / (deltaz * np.sqrt((wpp_meas) * (wss_meas)))
-    #result = wsp_meas / (deltaz * desi_bias * np.sqrt((wss_meas)))
+    result = wsp_meas / (np.sqrt((wss_meas) * (wpp_meas * sigmaj_correction)))
+
     if return_chunks:
         return wsp_meas, wpp_meas, wss_meas, hsc_bias, desi_bias, deltaz, zloc, result
     #print(wpp_meas, wss_meas, wsp_meas, zloc)
     return result
 
-def full_npz_tomo(path_dictionary, tracer, tomo_bin, scale_cuts, verbose=False):
+def full_npz_tomo(
+        path_dictionary, 
+        tracer, 
+        tomo_bin, 
+        scale_cuts, 
+        sigmaj_corrections,
+        verbose=False, 
+        return_chunks=False
+        ):
     '''
     Computes n(z) for the provided tracer and specific tomographic. Returns the array of n(z) values
     for that tomographic bin and tracer.
@@ -479,7 +497,31 @@ def full_npz_tomo(path_dictionary, tracer, tomo_bin, scale_cuts, verbose=False):
     '''
     # let's grab the binning scheme that we are using
     fr = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
+
+    # calibration samples from HSC
+    fr_hsc = corrf.CorrFileReader(path_dictionary['HSC'])
+
     fine_redshift = fr.get_bins(tracer)
+    hsc_redshift = fr_hsc.get_bins('HSC')
+    ## our calibration sample (wpp at zj where j is the fine bin index)
+    # get the indices corresponding to the fine bins in the hsc_redshift
+    hsc_bins = np.zeros(len(fine_redshift), dtype=int)
+    for i in range(len(fine_redshift)):
+        hsc_bins[i] = int(np.argmin(np.abs(hsc_redshift - fine_redshift[i])))
+    assert len(hsc_bins) == len(fine_redshift), (
+        f'len(hsc_bins) = {len(hsc_bins)} != len(fine_redshift) = {len(fine_redshift)}'
+    )
+    if verbose:
+        print(f'fine_redshift : {fine_redshift}')
+        print(f'hsc_redshift : {hsc_redshift}')
+        print(f'hsc_bins that match fine_redshift : {hsc_bins}')
+    print('sigmaj_corrections : ', sigmaj_corrections, len(sigmaj_corrections))
+    
+    sjcorr = np.zeros(len(fine_redshift))
+    for i in range(len(fine_redshift)):
+        index = int(np.argmin(np.abs(hsc_redshift - fine_redshift[i])))
+        sjcorr[i] = sigmaj_corrections[index-1]
+
     nz = []
     for i in range(1, len(fine_redshift)):
         nz.append(
@@ -487,9 +529,12 @@ def full_npz_tomo(path_dictionary, tracer, tomo_bin, scale_cuts, verbose=False):
                 path_dictionary, 
                 tracer=tracer,  
                 fine_bin=i, 
+                hsc_correction_bin=hsc_bins[i],
+                sigmaj_correction=sigmaj_corrections[i],
                 tomo_bin=tomo_bin,
+                scale_cuts=scale_cuts,
                 verbose=verbose,
-                scale_cuts=scale_cuts
+                return_chunks=return_chunks
             )
         )
     return np.array(nz)
