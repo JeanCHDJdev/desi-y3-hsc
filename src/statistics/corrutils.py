@@ -76,7 +76,7 @@ class CorrelationMeta(ABC):
     # use_zbin will override this choice
     #bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     # if nano_bins : 
-    bins_hsc = np.arange(0.3, 1.501, 0.01) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    bins_hsc = np.arange(0.3, 1.501, 0.0125) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
 
     bins_tracers = {
         'LRG': bins_lrg,
