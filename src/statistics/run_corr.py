@@ -40,6 +40,14 @@ def parse_args():
         'Default is 64. '
     )
     parser.add_argument(
+        '-e',
+        '--estimator',
+        type=str,
+        default='davispeebles',
+        choices=['davispeebles', 'landyszalay', 'peebleshauser'],
+        help='Correlation estimator to use. '
+    )
+    parser.add_argument(
         '-re',
         '--resolution',
         type=int,
@@ -179,6 +187,8 @@ def main():
     log = args.log
     areas = args.areas
 
+    estimator = args.estimator
+
     if areas is not None:
         areas = np.array([int(p) for p in areas])
         assert len(areas) > 0, 'areas should be a list of integers'
@@ -212,6 +222,7 @@ def main():
         'logger': logger,
         'output_dir': output_dir,
         'skip_moc': skip_moc,
+        #'estimator': estimator,
     }
     if jackknife:
         corrargs.update({

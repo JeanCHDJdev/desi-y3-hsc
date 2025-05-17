@@ -67,16 +67,17 @@ class CorrelationMeta(ABC):
     bins_rppi_s = np.linspace(0., 200., 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
-    bins_bgs = np.arange(0, 0.525, 0.025) # 0 < z < 0.6
-    bins_lrg = np.arange(0.4, 1.125, 0.025) # 0.4 < z < 1
+    bins_bgs = np.arange(0, 0.525, 0.05) # 0 < z < 0.6
+    bins_lrg = np.arange(0.4, 1.125, 0.05) # 0.4 < z < 1
     bins_elg = np.arange(0.8, 1.604, 0.04) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
     #bins_elg = np.array([0.8, 0.9, 1.0, 1.1]) # for now reduce bin for compute power
     bins_qso = np.arange(0.9, 2.95, 0.15) # 0.9 < z < 2.1
 
     # use_zbin will override this choice
+    bins_hsc = np.arange(0, 2.025, 0.05) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     #bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
-    # if nano_bins : 
-    bins_hsc = np.arange(0, 2.95, 0.15) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    # if mini_bins : 
+    #bins_hsc = np.arange(0, 2.825, 0.025)
 
     bins_tracers = {
         'LRG': bins_lrg,
@@ -93,7 +94,7 @@ class CorrelationMeta(ABC):
     }
     bins_all = {**bins_tracers, **bins_mode}
 
-    estimator_type = 'landyszalay' # 'davispeebles'
+    estimator_type = 'davispeebles'
 
     @staticmethod
     def save_bins(root):
@@ -693,17 +694,18 @@ class CrossCorrelation(CorrelationMeta):
         tpcf = TwoPointCorrelationFunction(
             edges=self.edges,
 
-            data_positions1=dp1,
-            data_positions2=dp2,
+            # davis peebles has a weird, non symetric ordering 
+            data_positions1=dp1 if self.estimator_type == 'landyszalay' else dp2,
+            data_positions2=dp2 if self.estimator_type == 'landyszalay' else dp1,
 
-            randoms_positions1=rp1,
-            randoms_positions2=rp2  if self.estimator_type == 'landyszalay' else None,
+            randoms_positions1=rp1 if self.estimator_type == 'landyszalay' else None,
+            randoms_positions2=rp2 if self.estimator_type == 'landyszalay' else rp1,
 
-            data_weights1=dw1,
-            data_weights2=dw2,
+            data_weights1=dw1 if self.estimator_type == 'landyszalay' else dw2,
+            data_weights2=dw2 if self.estimator_type == 'landyszalay' else dw1,
 
-            randoms_weights1=rw1,
-            randoms_weights2=rw2 if self.estimator_type == 'landyszalay' else None,
+            randoms_weights1=rw1 if self.estimator_type == 'landyszalay' else None,
+            randoms_weights2=rw2 if self.estimator_type == 'landyszalay' else rw1,
 
             # other settings n things
             nthreads=self.nproc,
@@ -1081,7 +1083,7 @@ def _get_data_to_read(
             )
         )
     if weight_cols_to_operate is not None:
-        logging.info(data[:3], Table(tbl.read(columns=weight_cols_to_operate))[:3])
+        logging.info(f'{data[:3]}, {Table(tbl.read(columns=weight_cols_to_operate))[:3]}')
     
     return data
     

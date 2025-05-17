@@ -172,12 +172,19 @@ def single_bin_corr(
     '''
 
     comovsep = ct.arcsec2hMpc(sep*3600, z)
-    scale_mask = (comovsep > scale_cuts[0]) & (comovsep < scale_cuts[1])
+    if scale_cuts is not None :
+        scale_mask = (comovsep > scale_cuts[0]) & (comovsep < scale_cuts[1])
+    else:
+        # keep everything if no scale cuts are specified
+        scale_mask = np.ones_like(comovsep, dtype=bool)
     comovsep = comovsep[scale_mask]
+
+    if integration == 'none':
+        return corr[scale_mask]
 
     # now do the single bin integration with $W(r)\propto r^{\beta} (default \beta = -1)$
     weights = np.zeros_like(comovsep)
-    weights= comovsep**(beta)
+    weights = comovsep**(beta)
     ## normalize the weights with it's integral
     weights /= simpson(weights, x=comovsep)
     
@@ -240,7 +247,7 @@ def _integrate_over_pairs(weights, ncounts, sep):
     # outside of the scale cut
     return simpson(np.multiply(weights, ncounts), x=sep)
 
-def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None, scale_cuts=[]):
+def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None, scale_cuts=[], integration='single-bin'):
     '''
     From the provided path, collate the wss measurements for DESI
     and return an array for the results.
@@ -297,16 +304,18 @@ def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None, scale_cuts=[
         raise ValueError('No estimators found for the provided paths.')
 
     estimators = [est for est in [estimatorSGC, estimatorNGC] if est is not None]
+    assert len(estimators) > 0, 'desi ngc/sgc estimators not found'
     return single_bin_corr(
         estimators, 
         beta=-1, 
         z=0.1, 
+        integration=integration,
         method='landy-szalay', 
         ratios=get_desi_ratios(tracer), 
         scale_cuts=scale_cuts
         )
             
-def wpp(path:str | Path, bin_index:int, scale_cuts:list):
+def wpp(path:str | Path, bin_index:int, scale_cuts:list, integration='single-bin'):
     '''
     From the provided path, collate the wpp measurements for HSC over
     the MOCs and return an array for the results.
@@ -331,16 +340,18 @@ def wpp(path:str | Path, bin_index:int, scale_cuts:list):
             skipped_ids.append(i)
             continue
     z = (bins_hsc[bin_index-1] + bins_hsc[bin_index])/2
+    assert len(estimators) > 0, 'hsc estimators not found'
     return single_bin_corr(
         estimators, 
         z=z, 
         beta=-1, 
+        integration=integration,
         method='landy-szalay', 
         skipped_ids=skipped_ids,
         scale_cuts=scale_cuts
         )
     
-def wsp(path:str | Path, tracer:str, tomo_bin:int, fine_bin:int, scale_cuts:list):
+def wsp(path:str | Path, tracer:str, tomo_bin:int, fine_bin:int, scale_cuts:list, integration='single-bin'):
     '''
     From the provided path, collate the wsp measurements for HSC and DESI
     cross-correlations and return the measurement.
@@ -366,7 +377,17 @@ def wsp(path:str | Path, tracer:str, tomo_bin:int, fine_bin:int, scale_cuts:list
             skipped_ids.append(i)
             continue
     z = (bins_tracer[fine_bin-1] + bins_tracer[fine_bin])/2
-    return single_bin_corr(estimators, z=z, beta=-1, method='landy-szalay', skipped_ids=skipped_ids, scale_cuts=scale_cuts)
+
+    assert len(estimators) > 0, 'HSCxDESI estimators not found'
+    return single_bin_corr(
+        estimators, 
+        z=z, 
+        beta=-1, 
+        integration=integration,
+        method='landy-szalay', 
+        skipped_ids=skipped_ids, 
+        scale_cuts=scale_cuts
+        )
 
 def compute_npz(
         path_dictionary, 
@@ -447,8 +468,6 @@ def compute_npz(
             f'B : {hsc_bias:.4f}, {desi_bias:.4f}, prodsqrt : {np.sqrt(hsc_bias) * desi_bias:.4f}, ' 
             f'num : {np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)):.4f}, num_no_b : {np.sqrt((wpp_meas) * (wss_meas)):.4f}'
             )
-    #hsc_bias = 1
-    #desi_bias = 1
 
     result = wsp_meas / (np.sqrt((wss_meas) * (wpp_meas * sigmaj_correction)))
 
@@ -601,3 +620,130 @@ def hsc_dnnz_error(expect, mids, num_samples=1000):
     pz = np.exp(samples)
     pz = np.array([el/np.trapz(el, mids) for el in pz])
     return pz, mu, np.diag(sig_2)
+    
+def compute_rcc(
+        path_dictionary, 
+        tracer, 
+        fine_bin, 
+        hsc_correction_bin, 
+        verbose=False
+        ):
+    '''
+    Computes r_cc coefficient for the provided tracer and binning.
+    This is broadly similar to n(z) but there is no integration, we grab all scales.
+    There is also no sigmaj correction applied to the wpp measurement.
+
+    Refer to full_rcc_tomo for the parameters.
+    '''
+    assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer} not a DESI tracer.'
+
+    wpp_meas = wpp(
+        path_dictionary['HSC'], 
+        bin_index=hsc_correction_bin,
+        scale_cuts=None
+        )
+    wss_meas = wss(
+        path_dictionary['DESI_NGC'], 
+        path_dictionary['DESI_SGC'], 
+        tracer=tracer, 
+        bin_index=fine_bin,
+        # there is no scale cut : retain all scales
+        scale_cuts=None
+    )
+    wsp_meas = wsp(
+        path_dictionary['DESIxHSC'], 
+        tracer=tracer,
+        fine_bin=fine_bin,
+        tomo_bin=hsc_correction_bin,
+        scale_cuts=None
+    )
+    if verbose:
+        print(
+            f'wsp : {wsp_meas:.4f},\nwpp : {wpp_meas:.4f},\nwss : {wss_meas:.4f}, '
+            )
+        
+    wsp_meas = np.array(wsp_meas)
+    wpp_meas = np.array(wpp_meas)
+    wss_meas = np.array(wss_meas)
+    assert all(wss_meas > 0), 'wss must be positive'
+    assert all(wpp_meas > 0), 'wpp must be positive'
+
+    assert wsp_meas.shape == wpp_meas.shape == wss_meas.shape, (
+        f'wsp shape {wsp_meas.shape} != wpp shape {wpp_meas.shape} != wss shape {wss_meas.shape}'
+    )
+    return wsp_meas / np.sqrt(wpp_meas * wss_meas)
+
+def full_rcc(
+        path_dictionary, 
+        tracer, 
+        verbose=False
+        ):
+    '''
+    Computes r_cc for the provided tracer and specific tomographic. Returns the array of r_cc values
+    for that tomographic bin and tracer. The r_cc values are computed using the wpp, wss and wsp
+    measurements, HOWEVER note that these bins should completely overlap. There is no "tomographic bin"
+    here as we want to assert that the wpp, wss and wsp measurements are done on the same binning scheme.
+
+    Parameters
+    ----------
+
+    path_dictionary : dict
+        Dictionary containing the paths to the HSC and DESI catalogs.
+
+        Scheme :
+        --------
+        {  
+            'HSC': `path_to_hsc`,  
+            'DESI_NGC': `path_to_desi_ngc`,  
+            'DESI_SGC': `path_to_desi_sgc`,  
+            'DESIxHSC': `path_to_desi_x_hsc`
+        }
+    tracer : str
+        The tracer to compute rcc for. Must be one of 'LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'.
+    tomo_bin : int
+        The bin index for the tomographic binning. .
+    verbose : bool
+        If verbose is True, will print the values used to compute the n(z) for the tracer.
+    '''
+    # let's grab the binning scheme that we are using
+    fr = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
+
+    # calibration samples from HSC
+    fr_hsc = corrf.CorrFileReader(path_dictionary['HSC'])
+
+    fine_redshift = fr.get_bins(tracer)
+    hsc_redshift = fr_hsc.get_bins('HSC')
+    ## our calibration sample (wpp at zj where j is the fine bin index)
+    # get the indices corresponding to the fine bins in the hsc_redshift
+    hsc_bins = np.zeros(len(fine_redshift), dtype=int)
+    for i in range(len(fine_redshift)):
+        hsc_bins[i] = int(np.argmin(np.abs(hsc_redshift - fine_redshift[i])))
+    assert len(hsc_bins) == len(fine_redshift), (
+        f'len(hsc_bins) = {len(hsc_bins)} != len(fine_redshift) = {len(fine_redshift)}'
+    )
+    if verbose:
+        print(f'fine_redshift : {fine_redshift}')
+        print(f'hsc_redshift : {hsc_redshift}')
+        print(f'hsc_bins that match fine_redshift : {hsc_bins}')
+    
+    # let's check that the bins are all respectively the same sizes.
+    delta_z = np.diff(fine_redshift)[0]
+    assert np.all(np.diff(fine_redshift) == delta_z), (
+        f'fine_redshift bins are not the same size : {np.diff(fine_redshift)}'
+    )
+    assert np.all(np.diff(hsc_redshift) == delta_z), (
+        f'hsc_redshift bins are not the same size : {np.diff(hsc_redshift)}'
+    )
+
+    rcc = []
+    for i in range(1, len(fine_redshift)):
+        rcc.append(
+            compute_rcc(
+                path_dictionary, 
+                tracer=tracer,  
+                fine_bin=i, 
+                hsc_correction_bin=hsc_bins[i],
+                verbose=verbose,
+            )
+        )
+    return np.array(rcc)
