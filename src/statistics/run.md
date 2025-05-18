@@ -62,7 +62,7 @@ setcc && python run_corr.py -o outputs/results/autos_j64_ns256_zbin -s 0 -c 200 
 with mini-bins :
 NOTE : not excluding "calibration cut" which is bad for first 2 bins D:
 ```bash
-setcc && python run_corr.py -o outputs/results_hsc/minibins_j64_ns256 -s 0 -c 200 -t1 HSC -ns 64 -re 256 -r1 40 -r2 40
+setcc && python run_corr.py -o outputs/results_hsc/minibins_j64_ns256 -s 0 -c 200 -t1 HSC -ns 64 -re 256 -r1 40 -r2 40 -z
 ```
 
 setcc && python run_corr.py -o outputs/results_sims/autos_j64_ns256_zbin -s 5 -c 200 -t1 LRG -ns 64 -re 256 -k -a 1 && python run_corr.py -o outputs/results_sims/autos_j64_ns256_zbin -s 5 -c 200 -t1 BGS_ANY -ns 64 -re 256 -k -a 1 && python run_corr.py -o outputs/results_sims/autos_j64_ns256_zbin -s 5 -c 200 -t1 ELGnotqso -ns 64 -re 256 -k -a 1 && python run_corr.py -o outputs/results_sims/autos_j64_ns256_zbin -s 5 -c 200 -t1 HSC -ns 64 -re 256
@@ -88,9 +88,14 @@ setcc && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 200 
 setcc && python run_corr.py -o outputs/nonKP_FKP_davis_peebles/cross_j64_ns256_zbin -s 0 -c 200 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r1 4 -r2 15 -z -w nonKP && python run_corr.py -o outputs/nonKP_FKP_davis_peebles/cross_j64_ns256_zbin -s 0 -c 200 -t1 QSO -t2 HSC -ns 64 -re 256 -r1 4 -r2 15 -z -w nonKP && python run_corr.py -o outputs/nonKP_FKP_davis_peebles/cross_j64_ns256_zbin -s 0 -c 200 -t1 ELGnotqso -t2 HSC -ns 64 -re 256 -r1 4 -r2 15 -z -w nonKP && python run_corr.py -o outputs/nonKP_FKP_davis_peebles/cross_j64_ns256_zbin -s 0 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r1 4 -r2 15 -z -w nonKP
 ```
 
-setcc && python run_corr.py -o outputs/results_nonKP_FKP/cross_j64_ns256_zbin -s 0 -c 200 -t1 ELGnotqso -t2 HSC -ns 64 -re 256 -r2 15 -z -w nonKP && python run_corr.py -o outputs/results_nonKP_FKP/cross_j64_ns256_zbin -s 0 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r2 15 -z -w nonKP && python run_corr.py -o outputs/results_nonKP_FKP/cross_j64_ns256_zbin -s 0 -c 200 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r2 15 -z -w nonKP && python run_corr.py -o outputs/results_nonKP_FKP/cross_j64_ns256_zbin -s 0 -c 200 -t1 QSO -t2 HSC -ns 64 -re 256 -r2 15 -z -w nonKP 
+# 17/05 morning
+setcc && python run_corr.py -o outputs/nonKP_FKP_davispeebles_0_05/cross_j64_ns256_zbin -s 0 -c 200 -t1 ELGnotqso -t2 HSC -ns 64 -re 256 -r2 15 -z -w nonKP && python run_corr.py -o outputs/nonKP_FKP_davispeebles_0_05/cross_j64_ns256_zbin -s 0 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r2 15 -z -w nonKP && python run_corr.py -o outputs/nonKP_FKP_davispeebles_0_05/cross_j64_ns256_zbin -s 0 -c 200 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r2 15 -z -w nonKP && python run_corr.py -o outputs/nonKP_FKP_davispeebles_0_05/cross_j64_ns256_zbin -s 0 -c 200 -t1 QSO -t2 HSC -ns 64 -re 256 -r2 15 -z -w nonKP 
+
+setcc && python run_corr.py -o outputs/nonKP_FKP_davispeebles_0_05/autos_j64_ns256_NGC -s 0 -c 200 -t1 LRG -ns 64 -re 256 -z -k -a 1 -w nonKP && python run_corr.py -o outputs/nonKP_FKP_davispeebles_0_05/autos_j64_ns256_NGC -s 0 -c 200 -t1 BGS_ANY -ns 64 -re 256 -r1 40 -r2 40 -z -k -a 1 -w nonKP && python run_corr.py -o outputs/nonKP_FKP_davispeebles_0_05/autos_j64_ns256_NGC -s 0 -c 200 -t1 ELGnotqso -ns 64 -re 256 -r1 40 -r2 40 -z -k -a 1 -w nonKP && python run_corr.py -o outputs/nonKP_FKP_davispeebles_0_05/autos_j64_ns256_NGC -s 0 -c 200 -t1 QSO -ns 64 -re 256 -r1 40 -r2 40 -z -k -a 1 -w nonKP 
 
 
 # TODO : compute r_cc based on simulations
 
-setcc && python run_corr.py -o outputs/results_sims_rcc/cross_j64_ns256_zbin -s 5 -c 200 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r1 4 -r2 4 && python run_corr.py -o outputs/results_sims_rcc/cross_j64_ns256_zbin -s 5 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r1 4 -r2 4
+setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/cross_j64_ns256_zbin -s 5 -c 200 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r1 4 -r2 4 && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/cross_j64_ns256_zbin -s 5 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r1 4 -r2 4
+
+setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_zbin -s 5 -c 200 -t1 HSC -ns 64 -re 256 -r1 4 -r2 4 && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_zbin -s 5 -c 200 -t1 LRG -ns 64 -re 256 -r1 4 -r2 4 && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_zbin -s 5 -c 200 -t1 BGS_ANY -ns 64 -re 256 -r1 4 -r2 4

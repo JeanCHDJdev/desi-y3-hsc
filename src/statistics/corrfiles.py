@@ -96,7 +96,7 @@ class CorrFileReader():
         else:
             return file
 
-    def make_dndz(self, sims : int, outfile='dndz.npz', overwrite=False, z_dens_resolution=np.linspace(0, 5, 250), oversample_rate=100):
+    def make_dndz(self, sims : int, outfile='dndz.npz', overwrite=False, z_dens_resolution=5, oversample_rate=100):
 
         use_sims = True if sims > 0 else False
         assert sims >= 0, f"Invalid simulations version {sims}"
