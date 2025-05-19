@@ -67,14 +67,14 @@ class CorrelationMeta(ABC):
     bins_rppi_s = np.linspace(0., 200., 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
-    bins_bgs = np.arange(0, 0.55, 0.05) # 0 < z < 0.6
-    bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1
-    bins_elg = np.arange(0.8, 1.65, 0.05) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
+    bins_bgs = np.arange(0, 0.6, 0.1) # 0 < z < 0.6
+    bins_lrg = np.arange(0.4, 1.2, 0.1) # 0.4 < z < 1.2
+    bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
     #bins_elg = np.array([0.8, 0.9, 1.0, 1.1]) # for now reduce bin for compute power
     bins_qso = np.arange(0.9, 2.95, 0.15) # 0.9 < z < 2.1
 
     # use_zbin will override this choice
-    bins_hsc = np.arange(0.3, 1.55, 0.05) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     #bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     # if mini_bins : 
     #bins_hsc = np.arange(0, 2.825, 0.025)

@@ -99,3 +99,5 @@ setcc && python run_corr.py -o outputs/nonKP_FKP_davispeebles_0_05/autos_j64_ns2
 setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/cross_j64_ns256_zbin -s 5 -c 200 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r1 4 -r2 4 && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/cross_j64_ns256_zbin -s 5 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r1 4 -r2 4
 
 setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_zbin -s 5 -c 200 -t1 HSC -ns 64 -re 256 -r1 4 -r2 4 && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_zbin -s 5 -c 200 -t1 LRG -ns 64 -re 256 -r1 4 -r2 4 && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_zbin -s 5 -c 200 -t1 BGS_ANY -ns 64 -re 256 -r1 4 -r2 4
+
+setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_zbin -s 5 -c 200 -t1 ELGnotqso -t2 LRG -ns 64 -re 256 -r1 6 -r2 6 -k -a 1

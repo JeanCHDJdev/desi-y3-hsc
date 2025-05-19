@@ -97,7 +97,7 @@ def get_wCM(angular_bins, zbin_edges, zbin_counts):
     )
 
     # angular power spectrum from C_ells
-    ell = np.linspace(0.1, 10000, 5000)
+    ell = np.linspace(0.1, 30000, 5000)
     cl = ccl.angular_cl(COSMO_ccl, tracer, tracer, ell)
 
     # w(theta) from C_ells using Limber approximation

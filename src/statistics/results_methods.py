@@ -132,6 +132,98 @@ def hsc_bias_evolution(z, b):
     '''
     return b / (1 / (1 + z))
 
+def combine_estimators(estimators, ratios=None, skipped_ids=None, rebin=1):
+    '''
+    From the provided path, collate the measurements on each of the MOCs
+    and return a dictionary of the results.
+    '''
+    if ratios is None:
+        # hardcoded MOC ratios by source counts in HSC
+        ratios = [
+            0.584270,
+            0.075393,
+            0.232669,
+            0.107665,
+        ]
+    if skipped_ids is None:
+        skipped_ids = []
+    else:
+        ratios = [ratios[i] for i in range(len(ratios)) if i not in skipped_ids]
+        ratios = ratios / np.sum(ratios)
+    assert len(estimators) == len(ratios)
+
+    # if there are any NaN values in sep or corr, remove the estimator and hope for the best
+    remove_indices = []
+    for x, est in enumerate(estimators):
+        if rebin > 1:
+            assert len(est.sep) % rebin == 0, (
+                f'len(est.sep) = {len(est.sep)} not divisible by rebin = {rebin}'
+            )
+            est.rebin(rebin)
+        if any(np.isnan(est.corr)) or any(np.isnan(est.sep)):
+            index_est = estimators.index(est)
+            remove_indices.append(index_est)
+            print(f'removing estimator with NaN values : {x}')
+    
+    # clean up estimators
+    estimators = np.array(
+        [estimators[i] for i in range(len(estimators)) if i not in remove_indices]
+        )
+    ratios = np.array(
+        [ratios[i] for i in range(len(ratios)) if i not in remove_indices]
+        )
+    ratios = ratios / np.sum(ratios)
+
+    assert len(estimators) == len(ratios), (
+        f'len(estimators) = {len(estimators)} != len(ratios) = {len(ratios)}'
+    )
+    assert len(estimators) > 0, 'No estimators found.'
+
+    #print(f'skipped_ids : {skipped_ids}, ratios : {ratios}, rebin : {rebin}')
+
+    sep = estimators[0].sep
+    allsep = np.zeros_like(sep)
+    allcorr = np.zeros_like(sep)
+    allcov = np.zeros((len(sep), len(sep)))
+
+    for i, est in enumerate(estimators):
+        sep = est.sep
+        corr = est.corr
+        if hasattr(est, 'cov'):
+            cov = est.cov()
+        else:
+            cov = np.zeros((len(sep), len(sep)))
+
+        allsep += sep * ratios[i]
+        allcorr += corr * ratios[i]
+        allcov += cov * ratios[i]
+    #print(f'allsep : {allsep}')
+    return allsep, allcorr, allcov
+    
+
+def hsc_dnnz_error(expect, mids, num_samples=1000): 
+    '''
+    Compute the error on the n(z) using a log-normal distribution.
+    
+    Parameters
+    ----------
+
+    expect : array-like
+        The expected n(z) values.
+    mids : array-like
+        The midpoints of the bins.
+    num_samples : int
+        The number of samples to draw from the log-normal distribution.
+    '''
+    var = (0.15 * expect)**2
+    mu = np.log(expect**2/np.sqrt(var + expect**2))
+    sig_2 = np.log(var/expect**2 + 1.0)
+    samples = multivariate_normal.rvs(mu, np.diag(sig_2), size=num_samples)
+    pz = np.exp(samples)
+    pz = np.array([el/np.trapz(el, mids) for el in pz])
+
+    return pz, mu, np.diag(sig_2)
+
 def single_bin_corr(
         estimators : list[TwoPointEstimator], 
         scale_cuts:list, 
@@ -254,28 +346,62 @@ def _integrate_over_pairs(weights, ncounts, sep):
     # outside of the scale cut
     return simpson(np.multiply(weights, ncounts), x=sep)
 
-def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None, scale_cuts=[], rebin:int=1, integration='single-bin'):
+def wss(
+        bin_index1, 
+        bin_index2, 
+        tracer1='LRG',
+        tracer2='LRG',
+        path_NGC=None, 
+        path_SGC=None, 
+        scale_cuts=[], 
+        rebin:int=1, 
+        integration='single-bin'
+    ):
     '''
     From the provided path, collate the wss measurements for DESI
     and return an array for the results.
     s : spectroscopic
+
+    Parameters
+    ----------
+    bin_index1 : int
+        The bin index for the first tracer.
+    bin_index2 : int
+        The bin index for the second tracer.
+    tracer1 : str
+        The first tracer to compute the wss for. Must be one of 'LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'.
+    tracer2 : str
+        The second tracer to compute the wss for. Must be one of 'LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'.
+    path_NGC : str
+        The path to the NGC catalog. Can be None if path_SGC is provided.
+    path_SGC : str
+        The path to the SGC catalog. Can be None if path_NGC is provided.
+    scale_cuts : list
+        The scale cuts to apply to the measurements. This is a list of two values, the lower and upper
+        bounds of the scale cuts, in comoving Mpc/h. If None, no scale cuts are applied.
+    rebin : int
+        The rebinning factor to apply to the measurements.
+    integration : str
+        The integration method to use. Can be 'single-bin', 'euclid' or 'none'.
     '''
 
-    assert bin_index is not None, 'bin_index must be provided'
+    assert tracer1 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer1} not a DESI tracer.'
+    assert tracer2 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer2} not a DESI tracer.'
 
-    assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer} not a DESI tracer.'
     if path_NGC is not None:
         path_NGC = Path(path_NGC)
         assert path_NGC.exists(), f'Path {path_NGC} does not exist.'
         frNGC = corrf.CorrFileReader(path_NGC)
-        bins_desi = frNGC.get_bins(tracer)
+        bins_t1 = frNGC.get_bins(tracer1)
+        bins_t2 = frNGC.get_bins(tracer2)
     else:
         frNGC = None
     if path_SGC is not None:
         path_SGC = Path(path_SGC)
         assert path_SGC.exists(), f'Path {path_SGC} does not exist.'
         frSGC = corrf.CorrFileReader(path_SGC)
-        bins_desi = frNGC.get_bins(tracer)
+        bins_t1 = frNGC.get_bins(tracer1)
+        bins_t2 = frNGC.get_bins(tracer2)
     else:
         frSGC = None
     if frNGC is None and frSGC is None:
@@ -292,11 +418,13 @@ def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None, scale_cuts=[
 
     estimatorNGC = None
     estimatorSGC = None
+
     if frNGC is not None:
         for moc_id in mocngc:
             try:
+                #assert Path(frNGC.get_file(bin_index1+1, bin_index2+1, tracer1, tracer2, moc_id+1)).exists()
                 estimatorNGC = TwoPointEstimator.load(
-                    frNGC.get_file(bin_index, bin_index, tracer, tracer, moc_id)
+                    frNGC.get_file(bin_index1, bin_index2, tracer1, tracer2, moc_id)
                 )
             except FileNotFoundError:
                 continue
@@ -304,23 +432,32 @@ def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None, scale_cuts=[
         for moc_id in mocsgc:
             try:
                 estimatorSGC = TwoPointEstimator.load(
-                    frSGC.get_file(bin_index, bin_index, tracer, tracer, moc_id)
+                    frSGC.get_file(bin_index1, bin_index2, tracer1, tracer2, moc_id)
                 )
             except FileNotFoundError:
                 continue
-    if estimatorNGC is None and estimatorSGC is None:
+    estimators = [est for est in [estimatorSGC, estimatorNGC] if est is not None]
+    zloc1 = (bins_t1[bin_index1-1] + bins_t1[bin_index1])/2
+    zloc2 = (bins_t2[bin_index2-1] + bins_t2[bin_index2])/2
+    assert np.isclose(zloc1, zloc2, atol=0.02), (
+        f'zloc1 {zloc1} != zloc2 {zloc2}, bin_index1 {bin_index1} | bin_index2 {bin_index2}'
+    )
+    zloc = (zloc1 + zloc2)/2
+
+    print(f'NGC estimator : {estimatorNGC}, SGC estimator : {estimatorSGC}, bin_index1 : {bin_index1}, bin_index2 : {bin_index2}, tracer1 : {tracer1}, tracer2 : {tracer2}')
+    if len(estimators) == 0:
         raise ValueError('No estimators found for the provided paths.')
 
-    estimators = [est for est in [estimatorSGC, estimatorNGC] if est is not None]
-    zloc = (bins_desi[bin_index-1] + bins_desi[bin_index])/2
     skipped_ids = []
     if estimatorNGC is None:
         skipped_ids.append(0)
     if estimatorSGC is None:
         skipped_ids.append(1)
-    print(f'wss : bin_index : {bin_index}, zloc : {zloc}')
 
     assert len(estimators) > 0, 'desi ngc/sgc estimators not found'
+
+    # for security let's get the mean of tracers
+    ratios = (get_desi_ratios(tracer1) + get_desi_ratios(tracer2))/2
     return single_bin_corr(
         estimators, 
         beta=-1, 
@@ -328,7 +465,9 @@ def wss(path_NGC=None, path_SGC=None, tracer='LRG', bin_index=None, scale_cuts=[
         rebin=rebin,
         integration=integration,
         method='landy-szalay', 
-        ratios=get_desi_ratios(tracer), 
+        # this should be okay most of the time, the ratios should be very similar 
+        # with each tracer
+        ratios=ratios, 
         skipped_ids=skipped_ids,
         scale_cuts=scale_cuts
         )
@@ -358,7 +497,6 @@ def wpp(path:str | Path, bin_index:int, scale_cuts:list, rebin:int=1, integratio
             skipped_ids.append(i)
             continue
     zloc = (bins_hsc[bin_index-1] + bins_hsc[bin_index])/2
-    print(f'wpp : bin_index : {bin_index}, zloc : {zloc}')
 
     assert len(estimators) > 0, 'hsc estimators not found'
     return single_bin_corr(
@@ -398,7 +536,7 @@ def wsp(path:str | Path, tracer:str, tomo_bin:int, fine_bin:int, scale_cuts:list
             skipped_ids.append(i)
             continue
     zloc = (bins_tracer[fine_bin-1] + bins_tracer[fine_bin])/2
-    print(f'wsp : bin_index : {fine_bin}, zloc : {zloc}')
+    #print(f'wsp : bin_index : {fine_bin}, zloc : {zloc}')
 
     assert len(estimators) > 0, 'HSCxDESI estimators not found'
     return single_bin_corr(
@@ -420,6 +558,7 @@ def compute_npz(
         tomo_bin, 
         scale_cuts, 
         sigmaj_correction,
+        rebin=1,
         return_chunks=False, 
         verbose=False
         ):
@@ -466,26 +605,29 @@ def compute_npz(
     deltaz = fine_redshift[fine_bin] - fine_redshift[fine_bin-1]
 
     wpp_meas = wpp(
-        path_dictionary['HSC'], 
+        path=path_dictionary['HSC'], 
         bin_index=hsc_correction_bin,
-        scale_cuts=scale_cuts
+        scale_cuts=scale_cuts,
+        rebin=rebin,
         )
     wss_meas = wss(
-        path_dictionary['DESI_NGC'], 
-        path_dictionary['DESI_SGC'], 
-        tracer=tracer, 
-        bin_index=fine_bin,
-        scale_cuts=scale_cuts
+        path_NGC=path_dictionary['DESI_NGC'], 
+        path_SGC=path_dictionary['DESI_SGC'], 
+        tracer1=tracer,
+        tracer2=tracer, 
+        bin_index1=fine_bin,
+        bin_index2=fine_bin,
+        scale_cuts=scale_cuts,
+        rebin=rebin,
     )
     wsp_meas = wsp(
         path_dictionary['DESIxHSC'], 
         tracer=tracer,
         fine_bin=fine_bin,
         tomo_bin=tomo_bin,
-        scale_cuts=scale_cuts
+        scale_cuts=scale_cuts,
+        rebin=rebin,
     )
-    hsc_bias = hsc_bias_evolution(z=zloc, b=0.95)
-    desi_bias = desi_bias_evolution(z=zloc, tracer=tracer)
     #if verbose:
     #    print(
     #        f'B : {hsc_bias:.4f}, {desi_bias:.4f}, prodsqrt : {np.sqrt(hsc_bias) * desi_bias:.4f}, ' 
@@ -495,7 +637,7 @@ def compute_npz(
     result = wsp_meas / (np.sqrt((wss_meas) * (wpp_meas * sigmaj_correction)))
 
     if return_chunks:
-        return wsp_meas, wpp_meas, wss_meas, hsc_bias, desi_bias, deltaz, zloc, result
+        return wsp_meas, wpp_meas, wss_meas, deltaz, zloc, result
     #print(wpp_meas, wss_meas, wsp_meas, zloc)
     return result
 
@@ -505,6 +647,7 @@ def full_npz_tomo(
         tomo_bin, 
         scale_cuts, 
         sigmaj_corrections,
+        rebin=1,
         verbose=False, 
         return_chunks=False
         ):
@@ -534,6 +677,11 @@ def full_npz_tomo(
     scale_cuts : list
         The scale cuts to apply to the measurements. This is a list of two values, the lower and upper
         bounds of the scale cuts, in comoving Mpc/h.
+    sigmaj_corrections : list
+        The sigmaj corrections to apply to the wpp measurement. This is a list of the same length as
+        the fine redshift bins. 
+    rebin : int
+        Wether to rebin the measurements by a factor.
     verbose : bool
         If verbose is True, will print the values used to compute the n(z) for the tracer.
     '''
@@ -575,109 +723,19 @@ def full_npz_tomo(
                 sigmaj_correction=sigmaj_corrections[i],
                 tomo_bin=tomo_bin,
                 scale_cuts=scale_cuts,
+                rebin=rebin,
                 verbose=verbose,
                 return_chunks=return_chunks
             )
         )
     return np.array(nz)
-
-def combine_estimators(estimators, ratios=None, skipped_ids=None, rebin=1):
-    '''
-    From the provided path, collate the measurements on each of the MOCs
-    and return a dictionary of the results.
-    '''
-    if ratios is None:
-        # hardcoded MOC ratios by source counts in HSC
-        ratios = [
-            0.584270,
-            0.075393,
-            0.232669,
-            0.107665,
-        ]
-    if skipped_ids is None:
-        skipped_ids = []
-    else:
-        ratios = [ratios[i] for i in range(len(ratios)) if i not in skipped_ids]
-        ratios = ratios / np.sum(ratios)
-    assert len(estimators) == len(ratios)
-
-    # if there are any NaN values in sep or corr, remove the estimator and hope for the best
-    remove_indices = []
-    for x, est in enumerate(estimators):
-        if rebin > 1:
-            assert len(est.sep) % rebin == 0, (
-                f'len(est.sep) = {len(est.sep)} not divisible by rebin = {rebin}'
-            )
-            est.rebin(rebin)
-        if any(np.isnan(est.corr)) or any(np.isnan(est.sep)):
-            index_est = estimators.index(est)
-            remove_indices.append(index_est)
-            print(f'removing estimator with NaN values : {x}')
-    
-    # clean up estimators
-    estimators = np.array(
-        [estimators[i] for i in range(len(estimators)) if i not in remove_indices]
-        )
-    ratios = np.array(
-        [ratios[i] for i in range(len(ratios)) if i not in remove_indices]
-        )
-    ratios = ratios / np.sum(ratios)
-
-    assert len(estimators) == len(ratios), (
-        f'len(estimators) = {len(estimators)} != len(ratios) = {len(ratios)}'
-    )
-    assert len(estimators) > 0, 'No estimators found.'
-
-    print(f'skipped_ids : {skipped_ids}, ratios : {ratios}, rebin : {rebin}')
-
-    sep = estimators[0].sep
-    allsep = np.zeros_like(sep)
-    allcorr = np.zeros_like(sep)
-    allcov = np.zeros((len(sep), len(sep)))
-
-    for i, est in enumerate(estimators):
-        sep = est.sep
-        corr = est.corr
-        if hasattr(est, 'cov'):
-            cov = est.cov()
-        else:
-            cov = np.zeros((len(sep), len(sep)))
-
-        allsep += sep * ratios[i]
-        allcorr += corr * ratios[i]
-        allcov += cov * ratios[i]
-    #print(f'allsep : {allsep}')
-    return allsep, allcorr, allcov
-    
-
-def hsc_dnnz_error(expect, mids, num_samples=1000): 
-    '''
-    Compute the error on the n(z) using a log-normal distribution.
-    
-    Parameters
-    ----------
-
-    expect : array-like
-        The expected n(z) values.
-    mids : array-like
-        The midpoints of the bins.
-    num_samples : int
-        The number of samples to draw from the log-normal distribution.
-    '''
-    var = (0.15 * expect)**2
-    mu = np.log(expect**2/np.sqrt(var + expect**2))
-    sig_2 = np.log(var/expect**2 + 1.0)
-    samples = multivariate_normal.rvs(mu, np.diag(sig_2), size=num_samples)
-    pz = np.exp(samples)
-    pz = np.array([el/np.trapz(el, mids) for el in pz])
-
-    return pz, mu, np.diag(sig_2)
     
 def compute_rcc(
         path_dictionary, 
-        tracer, 
-        fine_bin, 
-        hsc_correction_bin, 
+        tracer1,
+        tracer2, 
+        bin_index1, 
+        bin_index2, 
         rebin=1,
         scale_cuts=None,
         verbose=False
@@ -689,40 +747,78 @@ def compute_rcc(
 
     Refer to full_rcc_tomo for the parameters.
     '''
-    assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer} not a DESI tracer.'
+    assert tracer1 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer1} not a DESI tracer.'
 
-    wpp_meas = wpp(
-        path_dictionary['HSC'], 
-        bin_index=hsc_correction_bin,
-        scale_cuts=scale_cuts,
-        integration='none',
-        rebin=rebin
+    if tracer2 == 'HSC':
+        w22_meas = wpp(
+            path_dictionary['HSC'], 
+            bin_index=bin_index2,
+            scale_cuts=scale_cuts,
+            integration='none',
+            rebin=rebin
+            )
+        w11_meas = wss(
+            path_dictionary['DESI_NGC'], 
+            path_dictionary['DESI_SGC'], 
+            tracer1=tracer1,
+            tracer2=tracer2, 
+            bin_index1=bin_index1,
+            bin_index2=bin_index2,
+            integration='none',
+            rebin=rebin,
+            scale_cuts=scale_cuts
         )
-    wss_meas = wss(
-        path_dictionary['DESI_NGC'], 
-        path_dictionary['DESI_SGC'], 
-        tracer=tracer, 
-        bin_index=fine_bin,
-        integration='none',
-        rebin=rebin,
-        # there is no scale cut : retain all scales
-        scale_cuts=scale_cuts
-    )
-    wsp_meas = wsp(
-        path_dictionary['DESIxHSC'], 
-        tracer=tracer,
-        fine_bin=fine_bin,
-        tomo_bin=hsc_correction_bin,
-        integration='none',
-        rebin=rebin,
-        scale_cuts=scale_cuts
-    )
+        w12_meas = wsp(
+            path_dictionary['DESIxHSC'], 
+            tracer=tracer1,
+            fine_bin=tracer1,
+            tomo_bin=tracer2,
+            integration='none',
+            rebin=rebin,
+            scale_cuts=scale_cuts
+        )
+    else:
+        w22_meas = wss(
+            path_NGC=path_dictionary['DESI_NGC'], 
+            path_SGC=path_dictionary['DESI_SGC'],  
+            tracer1=tracer2,
+            tracer2=tracer2, 
+            bin_index1=bin_index2,
+            bin_index2=bin_index2,
+            scale_cuts=scale_cuts,
+            integration='none',
+            rebin=rebin
+        )
+        w11_meas = wss(
+            path_NGC=path_dictionary['DESI_NGC'], 
+            path_SGC=path_dictionary['DESI_SGC'], 
+            tracer1=tracer1, 
+            tracer2=tracer1,
+            bin_index1=bin_index1,
+            bin_index2=bin_index1,
+            integration='none',
+            rebin=rebin,
+            scale_cuts=scale_cuts
+        )
+        w12_meas = wss(
+            path_NGC=path_dictionary['DESI_NGC'], 
+            path_SGC=path_dictionary['DESI_SGC'],
+            tracer1=tracer1,
+            tracer2=tracer2,
+            bin_index1=bin_index1,
+            bin_index2=bin_index2,
+            integration='none',
+            rebin=rebin,
+            scale_cuts=scale_cuts
+        )
+
     if verbose:
         pass
     
-    wsp_meas = np.array(wsp_meas)
-    wpp_meas = np.array(wpp_meas)
-    wss_meas = np.array(wss_meas)
+    wsp_meas = np.array(w12_meas)
+    wss_meas = np.array(w11_meas)
+    wpp_meas = np.array(w22_meas)
+    print(f'wsp_meas : {wsp_meas}, wss_meas : {wss_meas}, wpp_meas : {wpp_meas}')
 
     assert wsp_meas.shape == wpp_meas.shape == wss_meas.shape, (
         f'wsp shape {wsp_meas.shape} != wpp shape {wpp_meas.shape} != wss shape {wss_meas.shape}'
@@ -731,7 +827,8 @@ def compute_rcc(
 
 def full_rcc(
         path_dictionary, 
-        tracer, 
+        tracer1, 
+        tracer2,
         rebin=1,
         verbose=False,
         scale_cuts=None
@@ -768,43 +865,69 @@ def full_rcc(
         If verbose is True, will print the values used to compute the n(z) for the tracer.
     '''
     # let's grab the binning scheme that we are using
-    fr = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
+    if tracer1 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']:
+        fr1 = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
+        tracer1_redshift = fr1.get_bins(tracer1)
+    else:
+        raise NotImplementedError(f'{tracer1} not a DESI tracer is not implemented functionality.')
 
-    # calibration samples from HSC
-    fr_hsc = corrf.CorrFileReader(path_dictionary['HSC'])
+    # calibration samples
+    if tracer2 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']:
+        fr2 = corrf.CorrFileReader(path_dictionary['DESI_NGC'])
+    else:
+        # this is the HSC tracer
+        fr2 = corrf.CorrFileReader(path_dictionary['HSC'])
+    tracer2_redshift = fr2.get_bins(tracer2)
 
-    fine_redshift = fr.get_bins(tracer)
-    hsc_redshift = fr_hsc.get_bins('HSC')
+    # let's check that the bins are all respectively the same sizes.
+    delta_z = np.diff(tracer1_redshift)[0]
+    assert np.all(np.isclose(np.diff(tracer1_redshift), delta_z)), (
+        f'tracer1_redshift bins are not the same size : {np.diff(tracer1_redshift)}, {delta_z}'
+    )
+    assert np.all(np.isclose(np.diff(tracer2_redshift), delta_z)), (
+        f'tracer2_redshiftbins are not the same size : {np.diff(tracer2_redshift)}, {delta_z}'
+    )
     ## our calibration sample (wpp at zj where j is the fine bin index)
     # get the indices corresponding to the fine bins in the hsc_redshift
-    hsc_bins = np.zeros(len(fine_redshift), dtype=int)
-    for i in range(len(fine_redshift)):
-        hsc_bins[i] = int(np.argmin(np.abs(hsc_redshift - fine_redshift[i])))
-    assert len(hsc_bins) == len(fine_redshift), (
-        f'len(hsc_bins) = {len(hsc_bins)} != len(fine_redshift) = {len(fine_redshift)}'
+    tracer2_bins = np.zeros(len(tracer1_redshift), dtype=int)
+    for i in range(len(tracer1_redshift)):
+        tracer2_bins[i] = int(np.argmin(np.abs(tracer2_redshift - tracer1_redshift[i])))
+    assert len(tracer2_bins) == len(tracer1_redshift), (
+        f'len(hsc_bins) = {len(tracer2_bins)} != len(tracer1_redshift) = {len(tracer1_redshift)}'
     )
+    # let's get the overlapping bin indices
+    tracer1_bins = np.array(
+        [
+            int(np.argmin(np.abs(tracer1_redshift - tracer2_redshift[i]))) 
+            for i in range(len(tracer2_redshift))
+            ]
+    )
+    tracer2_bins = np.array(
+        [
+            int(np.argmin(np.abs(tracer2_redshift - tracer1_redshift[i]))) 
+            for i in range(len(tracer1_redshift))
+            ]
+    )
+    # exclude out of bounds bins
+    tracer1_bins = tracer1_bins[(tracer1_bins > 0) & (tracer1_bins < len(tracer1_redshift))]
+    tracer2_bins = tracer2_bins[(tracer2_bins > 0) & (tracer2_bins < len(tracer2_redshift))]+1
+
     if verbose:
-        print(f'fine_redshift : {fine_redshift}')
-        print(f'hsc_redshift : {hsc_redshift}')
-        print(f'hsc_bins that match fine_redshift : {hsc_bins}')
+        print(f'tracer1_redshift : {tracer1_redshift}')
+        print(f'tracer2_redshift : {tracer2_redshift}')
     
-    # let's check that the bins are all respectively the same sizes.
-    delta_z = np.diff(fine_redshift)[0]
-    assert np.all(np.isclose(np.diff(fine_redshift), delta_z)), (
-        f'fine_redshift bins are not the same size : {np.diff(fine_redshift)}, {delta_z}'
-    )
-    assert np.all(np.isclose(np.diff(hsc_redshift), delta_z)), (
-        f'hsc_redshift bins are not the same size : {np.diff(hsc_redshift)}, {delta_z}'
-    )
+    print(f'tracer1_redshift : {tracer1_redshift}, tracer1_bins : {tracer1_bins}')
+    print(f'tracer2_redshift : {tracer2_redshift}, tracer2_bins : {tracer2_bins}')
 
     rcc = []
-    for i in range(1, len(fine_redshift)):
+    for i in range(0, min(len(tracer1_bins), len(tracer2_bins))):
         rcc.append(
             compute_rcc(
                 path_dictionary, 
-                tracer=tracer,  
-                fine_bin=i, 
-                hsc_correction_bin=hsc_bins[i],
+                tracer1=tracer1,
+                tracer2=tracer2,  
+                bin_index1=tracer1_bins[i], 
+                bin_index2=tracer2_bins[i],
                 rebin=rebin,
                 verbose=verbose,
                 scale_cuts=scale_cuts,
