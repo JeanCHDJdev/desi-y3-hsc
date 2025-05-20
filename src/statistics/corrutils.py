@@ -68,7 +68,7 @@ class CorrelationMeta(ABC):
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
     bins_bgs = np.arange(0, 0.6, 0.1) # 0 < z < 0.6
-    bins_lrg = np.arange(0.4, 1.2, 0.1) # 0.4 < z < 1.2
+    bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.2
     bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
     #bins_elg = np.array([0.8, 0.9, 1.0, 1.1]) # for now reduce bin for compute power
     bins_qso = np.arange(0.9, 2.95, 0.15) # 0.9 < z < 2.1
@@ -94,7 +94,7 @@ class CorrelationMeta(ABC):
     }
     bins_all = {**bins_tracers, **bins_mode}
 
-    estimator_type = 'davispeebles'
+    estimator_type = 'davispeebles' #'landyszalay' #'davispeebles'
 
     @staticmethod
     def save_bins(root):
@@ -241,6 +241,8 @@ class CorrelationMeta(ABC):
         self.output_dir = Path(output_dir, f'{tgt1}x{tgt2}')
         if not self.output_dir.exists():
             self.output_dir.mkdir(parents=True)
+
+        self.logger.info('Estimator type : ' + self.estimator_type)
 
         # Grabbing the catalogs on initialisation
         logger.info(

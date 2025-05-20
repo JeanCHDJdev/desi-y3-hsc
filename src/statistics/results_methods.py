@@ -444,7 +444,7 @@ def wss(
     )
     zloc = (zloc1 + zloc2)/2
 
-    print(f'NGC estimator : {estimatorNGC}, SGC estimator : {estimatorSGC}, bin_index1 : {bin_index1}, bin_index2 : {bin_index2}, tracer1 : {tracer1}, tracer2 : {tracer2}')
+    #print(f'NGC estimator : {estimatorNGC}, SGC estimator : {estimatorSGC}, bin_index1 : {bin_index1}, bin_index2 : {bin_index2}, tracer1 : {tracer1}, tracer2 : {tracer2}')
     if len(estimators) == 0:
         raise ValueError('No estimators found for the provided paths.')
 
