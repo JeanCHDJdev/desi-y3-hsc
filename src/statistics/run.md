@@ -43,6 +43,12 @@ setcc && python run_corr.py -o outputs/nonKP_FKP_davis_peebles/autos_j64_ns256_N
 setcc && python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 QSO -w PIP -k -ns 64 -re 256 -a 1 && python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 200 -t1 BGS_ANY -w PIP -k -ns 64 -re 256 -a 1 -j
 ```
 
+setcc && python run_corr.py -o outputs/nonKP_FKP_landyszalay_0_05/cross_j64_ns256_zbin -s 0 -c 200 -t1 LRG -t2 HSC -w nonKP -a 1 -ns 64 -re 256 -z
+
+setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_HSC -s 5 -c 200 -t1 HSC -w nonKP -a 1 -ns 64 -re 256 -z -r1 6 -r2 6
+
+setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_HSC -s 5 -c 200 -t1 HSC -w nonKP -a 1 -ns 64 -re 256 -z -r1 6 -r2 6
+
 #### HSC autocorrelation settings
 
 ---------------------------------
@@ -101,3 +107,17 @@ setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/cross_j64_ns256_z
 setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_zbin -s 5 -c 200 -t1 HSC -ns 64 -re 256 -r1 4 -r2 4 && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_zbin -s 5 -c 200 -t1 LRG -ns 64 -re 256 -r1 4 -r2 4 && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_zbin -s 5 -c 200 -t1 BGS_ANY -ns 64 -re 256 -r1 4 -r2 4
 
 setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_zbin -s 5 -c 200 -t1 ELGnotqso -t2 LRG -ns 64 -re 256 -r1 6 -r2 6 -k -a 1
+
+
+
+
+### Commands to run
+
+-Cross correlations :
+setcc && python run_corr.py -o outputs/current/cross -s 0 -c 200 -t1 ELGnotqso -t2 HSC -ns 64 -re 256 -r1 5 -r2 50 -z && python run_corr.py -o outputs/current/cross -s 0 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -r1 5 -r2 50 -z && python run_corr.py -o outputs/current/cross -s 0 -c 200 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r1 5 -r2 50 -z && python run_corr.py -o outputs/current/cross -s 0 -c 200 -t1 QSO -t2 HSC -ns 64 -re 256 -r1 5 -r2 50 -z 
+
+-Auto correlation :
+setcc && python run_corr.py -o outputs/current/auto -s 0 -c 200 -t1 ELGnotqso -ns 64 -re 256 -r1 5 -r2 50 -z && python run_corr.py -o outputs/current/auto -s 0 -c 200 -t1 LRG -ns 64 -re 256 -r1 5 -r2 50 -z && python run_corr.py -o outputs/current/auto -s 0 -c 200 -t1 BGS_ANY -ns 64 -re 256 -r1 5 -r2 50 -z && python run_corr.py -o outputs/current/auto -s 0 -c 200 -t1 QSO -ns 64 -re 256 -r1 5 -r2 50 -z
+
+-Simulations :
+setcc && python run_corr.py -o outputs/current/auto -s 0 -c 200 -t1 ELGnotqso -ns 64 -re 256 -r1 5 -r2 50 -z && python run_corr.py -o outputs/current/auto -s 0 -c 200 -t1 LRG -ns 64 -re 256 -r1 5 -r2 50 -z && python run_corr.py -o outputs/current/auto -s 0 -c 200 -t1 BGS_ANY -ns 64 -re 256 -r1 5 -r2 50 -z && python run_corr.py -o outputs/current/auto -s 0 -c 200 -t1 QSO -ns 64 -re 256 -r1 5 -r2 50 -z

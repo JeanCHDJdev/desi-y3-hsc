@@ -442,6 +442,7 @@ def wss(
     assert np.isclose(zloc1, zloc2, atol=0.02), (
         f'zloc1 {zloc1} != zloc2 {zloc2}, bin_index1 {bin_index1} | bin_index2 {bin_index2}'
     )
+    #print(f'bin_index1 {bin_index1} | bin_index2 {bin_index2}')
     zloc = (zloc1 + zloc2)/2
 
     #print(f'NGC estimator : {estimatorNGC}, SGC estimator : {estimatorSGC}, bin_index1 : {bin_index1}, bin_index2 : {bin_index2}, tracer1 : {tracer1}, tracer2 : {tracer2}')
@@ -607,7 +608,7 @@ def compute_npz(
     wpp_meas = wpp(
         path=path_dictionary['HSC'], 
         bin_index=hsc_correction_bin,
-        scale_cuts=scale_cuts,
+        scale_cuts=ct.arcsec2hMpc(np.array(scale_cuts)*3600, zloc),#/(1 + zloc),
         rebin=rebin,
         )
     wss_meas = wss(
@@ -617,7 +618,7 @@ def compute_npz(
         tracer2=tracer, 
         bin_index1=fine_bin,
         bin_index2=fine_bin,
-        scale_cuts=scale_cuts,
+        scale_cuts=scale_cuts, #ct.arcsec2hMpc(np.array(scale_cuts)*3600, zloc),#/(1 + zloc),
         rebin=rebin,
     )
     wsp_meas = wsp(
@@ -625,7 +626,7 @@ def compute_npz(
         tracer=tracer,
         fine_bin=fine_bin,
         tomo_bin=tomo_bin,
-        scale_cuts=scale_cuts,
+        scale_cuts=scale_cuts, #ct.arcsec2hMpc(np.array(scale_cuts)*3600, zloc),#/(1 + zloc),
         rebin=rebin,
     )
     #if verbose:
@@ -701,11 +702,6 @@ def full_npz_tomo(
     assert len(hsc_bins) == len(fine_redshift), (
         f'len(hsc_bins) = {len(hsc_bins)} != len(fine_redshift) = {len(fine_redshift)}'
     )
-    #if verbose:
-        #print(f'fine_redshift : {fine_redshift}')
-        #print(f'hsc_redshift : {hsc_redshift}')
-        #print(f'hsc_bins that match fine_redshift : {hsc_bins}')
-    #print('sigmaj_corrections : ', sigmaj_corrections, len(sigmaj_corrections))
     
     sjcorr = np.zeros(len(fine_redshift))
     for i in range(len(fine_redshift)):
@@ -745,7 +741,7 @@ def compute_rcc(
     This is broadly similar to n(z) but there is no integration, we grab all scales.
     There is also no sigmaj correction applied to the wpp measurement.
 
-    Refer to full_rcc_tomo for the parameters.
+    Refer to full_rcc for the parameters.
     '''
     assert tracer1 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer1} not a DESI tracer.'
 
@@ -758,12 +754,13 @@ def compute_rcc(
             rebin=rebin
             )
         w11_meas = wss(
-            path_dictionary['DESI_NGC'], 
-            path_dictionary['DESI_SGC'], 
+            path_NGC=path_dictionary['DESI_NGC'], 
+            path_SGC=path_dictionary['DESI_SGC'], 
+            # only give the tracer1 here (DESI)
             tracer1=tracer1,
-            tracer2=tracer2, 
+            tracer2=tracer1, 
             bin_index1=bin_index1,
-            bin_index2=bin_index2,
+            bin_index2=bin_index1,
             integration='none',
             rebin=rebin,
             scale_cuts=scale_cuts
@@ -771,8 +768,8 @@ def compute_rcc(
         w12_meas = wsp(
             path_dictionary['DESIxHSC'], 
             tracer=tracer1,
-            fine_bin=tracer1,
-            tomo_bin=tracer2,
+            fine_bin=bin_index1,
+            tomo_bin=bin_index2,
             integration='none',
             rebin=rebin,
             scale_cuts=scale_cuts
@@ -866,7 +863,7 @@ def full_rcc(
     '''
     # let's grab the binning scheme that we are using
     if tracer1 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']:
-        fr1 = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
+        fr1 = corrf.CorrFileReader(path_dictionary['DESI_NGC'])
         tracer1_redshift = fr1.get_bins(tracer1)
     else:
         raise NotImplementedError(f'{tracer1} not a DESI tracer is not implemented functionality.')
@@ -878,6 +875,9 @@ def full_rcc(
         # this is the HSC tracer
         fr2 = corrf.CorrFileReader(path_dictionary['HSC'])
     tracer2_redshift = fr2.get_bins(tracer2)
+
+    print(f'tracer1_redshift : {tracer1_redshift}')
+    print(f'tracer2_redshift : {tracer2_redshift}')
 
     # let's check that the bins are all respectively the same sizes.
     delta_z = np.diff(tracer1_redshift)[0]

@@ -59,19 +59,17 @@ class CorrelationMeta(ABC):
         ])
 
     # ----------Defining fiducial bins here---------- 
-    # from .2 arcmin to 100 arcmin
-    bins_theta = np.logspace(math.log(0.1, 10), math.log(100, 10), 33, base=10)/60
+    # We define the required bins in Mpc/h units (comoving)
+    bins_rp = np.logspace(math.log(0.1, 10), math.log(30, 10), 33, base=10)
 
-    #np.linspace(0.0001, 2, 41)
-    bins_rp = np.linspace(0.1, 120, 26)
     bins_rppi_s = np.linspace(0., 200., 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
-    bins_bgs = np.arange(0, 0.6, 0.1) # 0 < z < 0.6
-    bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.2
-    bins_elg = np.arange(0.8, 1.7, 0.1) # 0.6 < z < 1.6 => 0.8 < z < 1.6 in redshift distribution
+    bins_bgs = np.arange(0, 0.55, 0.05) # 0 < z < 0.5
+    bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.1
+    bins_elg = np.arange(0.8, 1.7, 0.1) # 0.8 < z < 1.6 in redshift distribution
     #bins_elg = np.array([0.8, 0.9, 1.0, 1.1]) # for now reduce bin for compute power
-    bins_qso = np.arange(0.9, 2.95, 0.15) # 0.9 < z < 2.1
+    bins_qso = np.arange(0.9, 2.92, 0.12) # 0.9 < z < 2.8
 
     # use_zbin will override this choice
     bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
@@ -87,14 +85,13 @@ class CorrelationMeta(ABC):
         'HSC': bins_hsc,
     }
     bins_mode = {
-        'theta': bins_theta,
         'rp' : bins_rp,
         'rppi_s' : bins_rppi_s,
         'rppi_mu' : bins_rppi_mu
     }
     bins_all = {**bins_tracers, **bins_mode}
 
-    estimator_type = 'davispeebles' #'landyszalay' #'davispeebles'
+    estimator_type = 'davispeebles' #'landyszalay' or 'davispeebles'
 
     @staticmethod
     def save_bins(root):
@@ -205,7 +202,7 @@ class CorrelationMeta(ABC):
 
         # which edges and correlation type to use :
         self.corr_type = corr_type
-        if self.corr_type not in self.bins_mode:
+        if self.corr_type not in ['theta', 'rp', 'rppi']:
             raise ValueError(
                 f'corr_type {self.corr_type} not in {self.bins_mode.keys()}'
                 )
@@ -226,10 +223,10 @@ class CorrelationMeta(ABC):
         if self.corr_type == 'rppi':
             self.edges = (self.bins_mode['rppi_s'], self.bins_mode['rppi_mu'])
         else:
-            self.edges = self.bins_mode[self.corr_type]
+            self.edges = self.bins_mode['rp' if self.corr_type == 'theta' else self.corr_type]
 
         self.logger.info(f'mode : {self.corr_type}')
-        self.logger.info(f'edges : {self.edges}')
+        self.logger.info(f'edges : {self.edges} in Mpc/h')
         self.logger.info(f'pos type : {self.pos_type}')
 
         # Setup multiprocessing; can do mpi4py later on
@@ -468,6 +465,9 @@ class CorrelationMeta(ABC):
         assert bin_redshift1 is not None, 'bin_redshift1 cannot be None'
         assert bin_redshift2 is not None, 'bin_redshift2 cannot be None'
 
+        self.bin_redshift1 = bin_redshift1
+        self.bin_redshift2 = bin_redshift2
+
         if self.use_desi:
             cat, ran, zmask_cat, zmask_ran = self.set_desi_tracer(self.tgt1, bin_redshift1)
         if self.double_desi:
@@ -543,6 +543,10 @@ class CorrelationMeta(ABC):
             bin1=bin_index1, 
             bin2=bin_index2
             )
+        zloc = (self.bin_redshift1[bin_index1-1] + self.bin_redshift1[bin_index1]) / 2
+        self.theta_edges = ct.hMpc2arcsec(self.edges, zloc)/3600 #convert to degrees
+        self.logger.info(f'Execution redshift = bins :{bin_index1}, {bin_index2}, zloc= {zloc}')
+        self.logger.info('Theta edges : ' + str(self.theta_edges))
 
         self.logger.info(
             f'N data {self.tgt1}: {np.sum(self.z_bool_d1) if self.z_bool_d1 is not None else "None"}' + 
@@ -693,8 +697,9 @@ class CrossCorrelation(CorrelationMeta):
     def run_corr(self):
 
         dp1, dp2, rp1, rp2, dw1, dw2, rw1, rw2 = self.make_corr_data()
+
         tpcf = TwoPointCorrelationFunction(
-            edges=self.edges,
+            edges=self.theta_edges,
 
             # davis peebles has a weird, non symetric ordering 
             data_positions1=dp1 if self.estimator_type == 'landyszalay' else (
@@ -776,8 +781,8 @@ class JackknifeCrossCorrelation(CorrelationMeta):
                             self.randoms2[self.z_hsc_randoms_col]
                             )
                         )
-        if self.data2 is not None and self.randoms2 is not None:
-            self.logger.info(f'Data2 length {len(self.data2)} and randoms2 length {len(self.randoms2)}')
+        #if self.data2 is not None and self.randoms2 is not None:
+        #   self.logger.info(f'Data2 length {len(self.data2)} and randoms2 length {len(self.randoms2)}')
 
         self.logger.info('Subsampling data2 with KMeansSubsampler...')
         subsampler = KMeansSubsampler(
@@ -809,7 +814,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             ds2 = None
 
         tpcf = TwoPointCorrelationFunction(
-            edges=self.edges,
+            edges=self.theta_edges,
 
             data_positions1=dp1,
             data_positions2=dp2,

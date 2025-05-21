@@ -149,18 +149,18 @@ class CorrFileReader():
             btgt = self.get_bins(tgt)
             tgts_save[f'{tgt}_bin'] = btgt
 
-            angular_bins=self.get_bins('theta')
-            # let's oversample the angular bins to get a better resolution
-            angular_bins = np.linspace(
-                angular_bins[0], angular_bins[-1], oversample_rate*len(angular_bins)
-                )
-
             for b in range(1, len(btgt)):
                 mask = (
                     (ztbl > btgt[b-1]) & (ztbl <= btgt[b])
                     )
                 counts, edges = np.histogram(
                     ztbl[mask], bins=z_dens_resolution
+                    )
+                rp_bins = self.get_bins('rp')
+                angular_bins = ct.hMpc2arcsec() * 3600
+                # let's oversample the angular bins to get a better resolution
+                angular_bins = np.linspace(
+                    angular_bins[0], angular_bins[-1], oversample_rate*len(angular_bins)
                     )
                 wDM = ct.get_wCM(
                     angular_bins=angular_bins,
