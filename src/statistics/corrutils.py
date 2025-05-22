@@ -834,7 +834,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             randoms_weights1=rw1 if self.estimator_type == 'landyszalay' else None,
             randoms_weights2=rw2 if self.estimator_type == 'landyszalay' else rw1,
 
-            data_samples1=ds1 if self.estimator_type == 'landyszalay' else None,
+            data_samples1=ds1 if self.estimator_type == 'landyszalay' else ds2,
             data_samples2=ds2 if self.estimator_type == 'landyszalay' else ds1,
 
             randoms_samples1=rs1 if self.estimator_type == 'landyszalay' else None,

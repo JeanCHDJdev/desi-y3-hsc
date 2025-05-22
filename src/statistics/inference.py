@@ -3,7 +3,7 @@ import pandas as pd
 import fitsio as fio
 
 from pathlib import Path
-from pycorr import TwoPointEstimator
+from pycorr import TwoPointEstimator, utils
 from astropy.coordinates import SkyCoord
 from mocpy import MOC
 from scipy.stats import multivariate_normal
@@ -11,6 +11,7 @@ from scipy.integrate import simpson
 from scipy.interpolate import interp1d
 
 import src.statistics.corrfiles as corrf
+import src.statistics.combination as comb
 import src.statistics.corrutils as cu
 import src.statistics.cosmotools as ct
 
@@ -141,10 +142,10 @@ def combine_estimators(estimators, scale_cuts, z, ratios=None, skipped_ids=None,
     if ratios is None:
         # hardcoded MOC ratios by source counts in HSC
         ratios = [
+            0.107665,
             0.584270,
             0.075393,
             0.232669,
-            0.107665,
         ]
     if skipped_ids is None:
         skipped_ids = []
@@ -152,19 +153,6 @@ def combine_estimators(estimators, scale_cuts, z, ratios=None, skipped_ids=None,
         ratios = [ratios[i] for i in range(len(ratios)) if i not in skipped_ids]
         ratios = ratios / np.sum(ratios)
 
-    # if there are any NaN values in sep or corr, remove the estimator and hope for the best
-    remove_indices = []
-    for est in estimators:
-        if rebin > 1:
-            est.rebin(rebin)
-    
-    # clean up estimators
-    estimators = np.array(
-        [estimators[i] for i in range(len(estimators)) if i not in remove_indices]
-        )
-    ratios = np.array(
-        [ratios[i] for i in range(len(ratios)) if i not in remove_indices]
-        )
     ratios = ratios / np.sum(ratios)
 
     assert len(estimators) == len(ratios), (
@@ -182,9 +170,15 @@ def combine_estimators(estimators, scale_cuts, z, ratios=None, skipped_ids=None,
     merged = estimators[0]
     if len(estimators) > 1:
         for i in range(1, len(estimators)):
+            estimators[i].rebin(rebin)
             merged = merged.concatenate_x(estimators[i])
+        merged = estimators[1]
 
-        print(merged.sep-estimators[1].sep, merged.corr-estimators[1].corr)
+        #print(merged.sep-estimators[1].sep, merged.corr-estimators[1].corr)
+    if hasattr(merged, 'cov'):
+        allcov = merged.cov()   
+    else:
+        allcov = np.zeros((len(merged.sep), len(merged.sep)))
     return merged.sep, merged.corr, allcov
 
     store_sep = []
@@ -223,30 +217,6 @@ def combine_estimators(estimators, scale_cuts, z, ratios=None, skipped_ids=None,
     )
     
     return valid_sep, valid_corr, valid_cov
-    
-
-def hsc_dnnz_error(expect, mids, num_samples=1000): 
-    '''
-    Compute the error on the n(z) using a log-normal distribution.
-    
-    Parameters
-    ----------
-
-    expect : array-like
-        The expected n(z) values.
-    mids : array-like
-        The midpoints of the bins.
-    num_samples : int
-        The number of samples to draw from the log-normal distribution.
-    '''
-    var = (0.15 * expect)**2
-    mu = np.log(expect**2/np.sqrt(var + expect**2))
-    sig_2 = np.log(var/expect**2 + 1.0)
-    samples = multivariate_normal.rvs(mu, np.diag(sig_2), size=num_samples)
-    pz = np.exp(samples)
-    pz = np.array([el/np.trapz(el, mids) for el in pz])
-
-    return pz, mu, np.diag(sig_2)
 
 def single_bin_corr(
         estimators : list[TwoPointEstimator], 
@@ -281,6 +251,8 @@ def single_bin_corr(
         skipped_ids=skipped_ids, 
         rebin=rebin
         )
+    print('cov')
+    print(cov)
 
     # debug plot to compare with the first estimator and check consistency
     '''
@@ -304,17 +276,26 @@ def single_bin_corr(
         scale_mask = np.ones_like(comovsep, dtype=bool)
         scale_cuts = [np.min(comovsep), np.max(comovsep)]
 
-    comovsep = comovsep[scale_mask]
+    corr_sc = corr[scale_mask]
+    comovsep_sc = comovsep[scale_mask]
+    cov_sc = cov[scale_mask][:, scale_mask]
 
     if integration == 'none':
-        return corr[scale_mask]
+        return corr_sc, np.sqrt(np.diag(cov_sc)), comovsep_sc
 
     # now do the single bin integration with $W(r)\propto r^{\beta}$ (default $\beta$ = -1)$
     weights = np.zeros_like(comovsep)
     weights = comovsep**(beta)
     
     if integration == 'single-bin':
-        return simpson(np.multiply(1, corr[scale_mask]), x=comovsep)
+        # compute the error bars given the covariance matrix
+        w_bar = np.trapz(y=np.multiply(weights[scale_mask], corr[scale_mask]), x=comovsep[scale_mask])
+        # get the integration weights for trapz
+        int_weights = comb.trapz_weights(comovsep[scale_mask]) / weights[scale_mask]
+        # now compute the error bars with the full covariance matrix (cov_sc)
+        w_err = np.sqrt(np.dot(int_weights, np.dot(cov_sc, int_weights)))
+        print(w_err)
+        return w_bar, w_err, comovsep_sc
         
     elif integration == 'euclid':
         # weird integration scheme I can't really get to work
@@ -630,14 +611,15 @@ def compute_npz(
     zloc = (fine_redshift[fine_bin-1] + fine_redshift[fine_bin])/2
     deltaz = fine_redshift[fine_bin] - fine_redshift[fine_bin-1]
 
-    #wpp_meas = wpp(
+    #wpp_meas, wpp_err, _ = wpp(
     #    path=path_dictionary['HSC'], 
     #    scale_cuts=ct.arcsec2hMpc(np.array(scale_cuts)*3600, zloc),#/(1 + zloc),
     #    bin_index=hsc_correction_bin,
     #    rebin=rebin,
     #    )
     wpp_meas = 1
-    wss_meas = wss(
+    wpp_err = 1
+    wss_meas, wss_err, _ = wss(
         path_NGC=path_dictionary['DESI_NGC'], 
         path_SGC=path_dictionary['DESI_SGC'], 
         tracer1=tracer,
@@ -646,14 +628,16 @@ def compute_npz(
         bin_index2=fine_bin,
         scale_cuts=scale_cuts, #ct.arcsec2hMpc(np.array(scale_cuts)*3600, zloc),#/(1 + zloc),
         rebin=rebin,
+        integration='single-bin'
     )
-    wsp_meas = wsp(
+    wsp_meas, wsp_err, _  = wsp(
         path_dictionary['DESIxHSC'], 
         tracer=tracer,
         fine_bin=fine_bin,
         tomo_bin=tomo_bin,
         scale_cuts=scale_cuts, #ct.arcsec2hMpc(np.array(scale_cuts)*3600, zloc),#/(1 + zloc),
         rebin=rebin,
+        integration='single-bin'
     )
     #if verbose:
     #    print(
@@ -664,7 +648,7 @@ def compute_npz(
     result = wsp_meas / (np.sqrt((wss_meas) * (wpp_meas * sigmaj_correction)))
 
     if return_chunks:
-        return wsp_meas, wpp_meas, wss_meas, deltaz, zloc, result
+        return wsp_meas, wsp_err, wpp_meas, wpp_err, wss_meas, wss_err, deltaz, zloc, result
     #print(wpp_meas, wss_meas, wsp_meas, zloc)
     return result
 
