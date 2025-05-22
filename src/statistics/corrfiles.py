@@ -153,11 +153,12 @@ class CorrFileReader():
                 mask = (
                     (ztbl > btgt[b-1]) & (ztbl <= btgt[b])
                     )
+                zloc = (btgt[b-1] + btgt[b]) / 2
                 counts, edges = np.histogram(
                     ztbl[mask], bins=z_dens_resolution
                     )
                 rp_bins = self.get_bins('rp')
-                angular_bins = ct.hMpc2arcsec() * 3600
+                angular_bins = ct.hMpc2arcsec(rp_bins, z=zloc) * 3600
                 # let's oversample the angular bins to get a better resolution
                 angular_bins = np.linspace(
                     angular_bins[0], angular_bins[-1], oversample_rate*len(angular_bins)

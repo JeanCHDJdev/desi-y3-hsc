@@ -8,6 +8,7 @@ from astropy.coordinates import SkyCoord
 from mocpy import MOC
 from scipy.stats import multivariate_normal
 from scipy.integrate import simpson
+from scipy.interpolate import interp1d
 
 import src.statistics.corrfiles as corrf
 import src.statistics.corrutils as cu
@@ -132,7 +133,7 @@ def hsc_bias_evolution(z, b):
     '''
     return b / (1 / (1 + z))
 
-def combine_estimators(estimators, ratios=None, skipped_ids=None, rebin=1):
+def combine_estimators(estimators, scale_cuts, z, ratios=None, skipped_ids=None, rebin=1):
     '''
     From the provided path, collate the measurements on each of the MOCs
     and return a dictionary of the results.
@@ -150,20 +151,12 @@ def combine_estimators(estimators, ratios=None, skipped_ids=None, rebin=1):
     else:
         ratios = [ratios[i] for i in range(len(ratios)) if i not in skipped_ids]
         ratios = ratios / np.sum(ratios)
-    assert len(estimators) == len(ratios)
 
     # if there are any NaN values in sep or corr, remove the estimator and hope for the best
     remove_indices = []
-    for x, est in enumerate(estimators):
+    for est in estimators:
         if rebin > 1:
-            assert len(est.sep) % rebin == 0, (
-                f'len(est.sep) = {len(est.sep)} not divisible by rebin = {rebin}'
-            )
             est.rebin(rebin)
-        if any(np.isnan(est.corr)) or any(np.isnan(est.sep)):
-            index_est = estimators.index(est)
-            remove_indices.append(index_est)
-            print(f'removing estimator with NaN values : {x}')
     
     # clean up estimators
     estimators = np.array(
@@ -182,23 +175,54 @@ def combine_estimators(estimators, ratios=None, skipped_ids=None, rebin=1):
     #print(f'skipped_ids : {skipped_ids}, ratios : {ratios}, rebin : {rebin}')
 
     sep = estimators[0].sep
+    # sep is just here to get the size of the arrays
     allsep = np.zeros_like(sep)
     allcorr = np.zeros_like(sep)
     allcov = np.zeros((len(sep), len(sep)))
+    merged = estimators[0]
+    if len(estimators) > 1:
+        for i in range(1, len(estimators)):
+            merged = merged.concatenate_x(estimators[i])
 
+        print(merged.sep-estimators[1].sep, merged.corr-estimators[1].corr)
+    return merged.sep, merged.corr, allcov
+
+    store_sep = []
     for i, est in enumerate(estimators):
         sep = est.sep
+        store_sep.append(sep)
         corr = est.corr
         if hasattr(est, 'cov'):
             cov = est.cov()
         else:
             cov = np.zeros((len(sep), len(sep)))
 
+        # weighted mean over the sky patches
         allsep += sep * ratios[i]
         allcorr += corr * ratios[i]
         allcov += cov * ratios[i]
+
+    best_est = np.argmax([est.D1D2.size1 for est in estimators])
+    print(f'best_est : {best_est}')
+    allsep = estimators[best_est].sep
+    allcorr = estimators[best_est].corr
     #print(f'allsep : {allsep}')
-    return allsep, allcorr, allcov
+
+    comovsep = ct.arcsec2hMpc(allsep*3600, z)
+    valid_comov = (comovsep > scale_cuts[0]) & (comovsep < scale_cuts[1])
+    valid_sep = allsep[valid_comov]
+    valid_corr = allcorr[valid_comov]
+    valid_cov = allcov[valid_comov][:, valid_comov]
+
+    if any(np.isnan(valid_corr)):
+        raise ValueError('NaN values in valid_corr')
+    if any(np.isnan(valid_sep)):
+        raise ValueError('NaN values in valid_sep')
+    assert len(valid_sep) == len(valid_corr), (
+        f'len(valid_sep) = {len(valid_sep)} != len(valid_corr) = {len(valid_corr)}'
+    )
+    
+    return valid_sep, valid_corr, valid_cov
     
 
 def hsc_dnnz_error(expect, mids, num_samples=1000): 
@@ -248,9 +272,11 @@ def single_bin_corr(
         estimators = [estimators]
     if len(estimators) == 0:
         raise ValueError('No estimators provided.')
-
+    
     sep, corr, cov = combine_estimators(
         estimators, 
+        scale_cuts=scale_cuts,
+        z=z,
         ratios=ratios, 
         skipped_ids=skipped_ids, 
         rebin=rebin
@@ -269,27 +295,26 @@ def single_bin_corr(
     plt.legend()
     plt.show()
     '''
+    comovsep = ct.arcsec2hMpc(sep*3600, z)    # remove the nan values
 
-    comovsep = ct.arcsec2hMpc(sep*3600, z)
     if scale_cuts is not None :
-        scale_mask = (comovsep > scale_cuts[0]) & (comovsep < scale_cuts[1])
+        scale_mask = (comovsep >= scale_cuts[0]) & (comovsep <= scale_cuts[1]) & ~np.isnan(comovsep)
     else:
         # keep everything if no scale cuts are specified
         scale_mask = np.ones_like(comovsep, dtype=bool)
+        scale_cuts = [np.min(comovsep), np.max(comovsep)]
+
     comovsep = comovsep[scale_mask]
 
     if integration == 'none':
         return corr[scale_mask]
 
-    # now do the single bin integration with $W(r)\propto r^{\beta} (default \beta = -1)$
+    # now do the single bin integration with $W(r)\propto r^{\beta}$ (default $\beta$ = -1)$
     weights = np.zeros_like(comovsep)
     weights = comovsep**(beta)
-    ## normalize the weights with it's integral
-    weights /= simpson(weights, x=comovsep)
     
     if integration == 'single-bin':
-        #return simpson(np.multiply(weights, estimators[0].corr[scale_mask]), x=comovsep)
-        return simpson(np.multiply(weights, corr[scale_mask]), x=comovsep)
+        return simpson(np.multiply(1, corr[scale_mask]), x=comovsep)
         
     elif integration == 'euclid':
         # weird integration scheme I can't really get to work
@@ -605,12 +630,13 @@ def compute_npz(
     zloc = (fine_redshift[fine_bin-1] + fine_redshift[fine_bin])/2
     deltaz = fine_redshift[fine_bin] - fine_redshift[fine_bin-1]
 
-    wpp_meas = wpp(
-        path=path_dictionary['HSC'], 
-        bin_index=hsc_correction_bin,
-        scale_cuts=ct.arcsec2hMpc(np.array(scale_cuts)*3600, zloc),#/(1 + zloc),
-        rebin=rebin,
-        )
+    #wpp_meas = wpp(
+    #    path=path_dictionary['HSC'], 
+    #    scale_cuts=ct.arcsec2hMpc(np.array(scale_cuts)*3600, zloc),#/(1 + zloc),
+    #    bin_index=hsc_correction_bin,
+    #    rebin=rebin,
+    #    )
+    wpp_meas = 1
     wss_meas = wss(
         path_NGC=path_dictionary['DESI_NGC'], 
         path_SGC=path_dictionary['DESI_SGC'], 
@@ -716,7 +742,7 @@ def full_npz_tomo(
                 tracer=tracer,  
                 fine_bin=i, 
                 hsc_correction_bin=hsc_bins[i],
-                sigmaj_correction=sigmaj_corrections[i],
+                sigmaj_correction=1,#sigmaj_corrections[i],
                 tomo_bin=tomo_bin,
                 scale_cuts=scale_cuts,
                 rebin=rebin,

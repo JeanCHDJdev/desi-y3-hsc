@@ -60,16 +60,16 @@ class CorrelationMeta(ABC):
 
     # ----------Defining fiducial bins here---------- 
     # We define the required bins in Mpc/h units (comoving)
-    bins_rp = np.logspace(math.log(0.1, 10), math.log(30, 10), 33, base=10)
+    bins_rp = np.logspace(math.log(0.08, 10), math.log(20, 10), 21, base=10)
 
     bins_rppi_s = np.linspace(0., 200., 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
     bins_bgs = np.arange(0, 0.55, 0.05) # 0 < z < 0.5
     bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.1
-    bins_elg = np.arange(0.8, 1.7, 0.1) # 0.8 < z < 1.6 in redshift distribution
+    bins_elg = np.arange(0.8, 1.68, 0.08) # 0.8 < z < 1.6 in redshift distribution
     #bins_elg = np.array([0.8, 0.9, 1.0, 1.1]) # for now reduce bin for compute power
-    bins_qso = np.arange(0.9, 2.92, 0.12) # 0.9 < z < 2.8
+    bins_qso = np.arange(0.9, 2.95, 0.15) # 0.9 < z < 2.8
 
     # use_zbin will override this choice
     bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
@@ -757,8 +757,8 @@ class JackknifeCrossCorrelation(CorrelationMeta):
                     ]
             else:
                 rpsamp = [
-                    self.randoms2[self.ra_hsc_randoms_col],
-                    self.randoms2[self.dec_hsc_randoms_col]
+                    self.randoms1[self.ra_desi_col],
+                    self.randoms1[self.dec_desi_col]
                     ]
         
         if self.corr_type == 'rp':
@@ -784,7 +784,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
         #if self.data2 is not None and self.randoms2 is not None:
         #   self.logger.info(f'Data2 length {len(self.data2)} and randoms2 length {len(self.randoms2)}')
 
-        self.logger.info('Subsampling data2 with KMeansSubsampler...')
+        self.logger.info('Subsampling randoms with KMeansSubsampler...')
         subsampler = KMeansSubsampler(
             mode='angular' if self.corr_type == 'theta' else '3d', 
             # The largest, most complete dataset we have is rp2
@@ -807,7 +807,10 @@ class JackknifeCrossCorrelation(CorrelationMeta):
         ds1 = self.subsampler.label(dp1)
         rs1 = self.subsampler.label(rp1)
         if not self.autocorr:
-            rs2 = self.subsampler.label(rp2)
+            if self.estimator_type == 'landyszalay':
+                rs2 = self.subsampler.label(rp2)
+            else:
+                rs2 = None
             ds2 = self.subsampler.label(dp2)
         else:
             rs2 = None
@@ -816,23 +819,26 @@ class JackknifeCrossCorrelation(CorrelationMeta):
         tpcf = TwoPointCorrelationFunction(
             edges=self.theta_edges,
 
-            data_positions1=dp1,
-            data_positions2=dp2,
+            # davis peebles has a weird, non symetric ordering 
+            data_positions1=dp1 if self.estimator_type == 'landyszalay' else (
+                dp2 if not self.autocorr else dp1
+                ),
+            data_positions2=dp2 if self.estimator_type == 'landyszalay' else dp1,
 
-            randoms_positions1=rp1,
-            randoms_positions2=rp2 if self.estimator_type == 'landyszalay' else None,
+            randoms_positions1=rp1 if self.estimator_type == 'landyszalay' else None,
+            randoms_positions2=rp2 if self.estimator_type == 'landyszalay' else rp1,
 
-            data_weights1=dw1,
-            data_weights2=dw2,
+            data_weights1=dw1 if self.estimator_type == 'landyszalay' else dw2,
+            data_weights2=dw2 if self.estimator_type == 'landyszalay' else dw1,
 
-            randoms_weights1=rw1,
-            randoms_weights2=rw2 if self.estimator_type == 'landyszalay' else None,
+            randoms_weights1=rw1 if self.estimator_type == 'landyszalay' else None,
+            randoms_weights2=rw2 if self.estimator_type == 'landyszalay' else rw1,
 
-            data_samples1=ds1,
-            data_samples2=ds2,
+            data_samples1=ds1 if self.estimator_type == 'landyszalay' else None,
+            data_samples2=ds2 if self.estimator_type == 'landyszalay' else ds1,
 
-            randoms_samples1=rs1,
-            randoms_samples2=rs2,
+            randoms_samples1=rs1 if self.estimator_type == 'landyszalay' else None,
+            randoms_samples2=rs2 if self.estimator_type == 'landyszalay' else rs1,
 
             nthreads=self.nproc,
             mode=self.corr_type,
