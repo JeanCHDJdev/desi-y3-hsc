@@ -859,56 +859,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
         )
         tpcf.save(self.outfile)
 
-class DESIAutoCorrelation(CorrelationMeta):
-    def __init__(
-            self, 
-            tgt1 : str,
-            tgt2 : str, 
-            moc : MOC, 
-            output_dir :str | Path, 
-            nproc:int=None, 
-            sample_rate_1:int=1, 
-            logger:logging.Logger=None
-        ):
-        assert tgt1==tgt2, f'Auto correlation only for {tgt1} and {tgt2} equal'
-        super().__init__(
-            tgt1=tgt1,
-            tgt2=tgt2,
-            moc=moc,
-            sims=False,
-            pip=False,
-            output_dir=output_dir,
-            nproc=nproc,
-            sample_rate_1=sample_rate_1,
-            logger=logger
-        )
-        
-    def run_corr(self):
-
-        tpcf = TwoPointCorrelationFunction(
-            edges=(np.linspace(0., 200., 51), np.linspace(-40, 40, 81)),
-            data_positions1=[
-                self.data1[self.ra_desi_col][self.z_bool_d1], 
-                self.data1[self.dec_desi_col][self.z_bool_d1],
-                ct.z2dist(self.data1[self.z_desi_col][self.z_bool_d1])
-                ],
-            randoms_positions1=[
-                self.randoms1[self.ra_desi_col][self.z_bool_r1],
-                self.randoms1[self.dec_desi_col][self.z_bool_r1],
-                ct.z2dist(self.randoms1[self.z_desi_randoms_col][self.z_bool_r1]),
-                ],
-            data_weights1=self.data1[self.w_desi_col][self.z_bool_d1],
-            randoms_weights1=self.randoms1[self.w_desi_col][self.z_bool_r1],
-            nthreads=self.nproc,
-            mode='rppi',
-            position_type='rdd', 
-            engine='corrfunc',
-            estimator='landyszalay',
-        )
-        tpcf.save(self.outfile)
-
-
-## Generic methods for each class
+# ---------------- Processing methods ----------------
 def _process_random_file(
         f, 
         ra_col, 
@@ -1134,6 +1085,10 @@ def figure_out_class(tgt1, tgt2=None, jackknife=False):
         return CrossCorrelation
     
 def get_target_couple(tgt1, tgt2=None):
+    '''
+    Utility method to get the target couple for DESI and HSC targets and reordering them
+    based on what the script needs.
+    '''
     avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'HSC']
     assert not((tgt1 is None) and (tgt2 is None)), 'tgt1 and tgt2 cannot be None simultaneously'
     if tgt2 is None and tgt1 is not None:
