@@ -701,19 +701,26 @@ class CrossCorrelation(CorrelationMeta):
         tpcf = TwoPointCorrelationFunction(
             edges=self.theta_edges,
 
-            # davis peebles has a weird, non symetric ordering 
-            data_positions1=dp1 if self.estimator_type == 'landyszalay' else (
-                dp2 if not self.autocorr else dp1
-                ),
+            # davis peebles has a weird, non symetric ordering where we have to give it
+            # data1, data2 and randoms2 => since randoms2 has to be DESI randoms we have to reorder
+            # the data and randoms to be in the right order
+
+            # however when doing autocorrelation, data1 = data2 and randoms1 = randoms2
+            # so we can just use the same data and randoms for both
+            data_positions1=dp1 if self.estimator_type == 'landyszalay' else 
+                (dp2 if not self.autocorr else dp1),
             data_positions2=dp2 if self.estimator_type == 'landyszalay' else dp1,
 
-            randoms_positions1=rp1 if self.estimator_type == 'landyszalay' else None,
+            randoms_positions1=rp1 if self.estimator_type == 'landyszalay' else 
+                (rp2 if not self.autocorr else rp1),
             randoms_positions2=rp2 if self.estimator_type == 'landyszalay' else rp1,
 
-            data_weights1=dw1 if self.estimator_type == 'landyszalay' else dw2,
+            data_weights1=dw1 if self.estimator_type == 'landyszalay' else 
+                (dw2 if not self.autocorr else dw1),
             data_weights2=dw2 if self.estimator_type == 'landyszalay' else dw1,
 
-            randoms_weights1=rw1 if self.estimator_type == 'landyszalay' else None,
+            randoms_weights1=rw1 if self.estimator_type == 'landyszalay' else 
+                (rw2 if not self.autocorr else rw1),
             randoms_weights2=rw2 if self.estimator_type == 'landyszalay' else rw1,
 
             # other settings n things
@@ -820,24 +827,28 @@ class JackknifeCrossCorrelation(CorrelationMeta):
             edges=self.theta_edges,
 
             # davis peebles has a weird, non symetric ordering 
-            data_positions1=dp1 if self.estimator_type == 'landyszalay' else (
-                dp2 if not self.autocorr else dp1
-                ),
+            data_positions1=dp1 if self.estimator_type == 'landyszalay' else 
+                (dp2 if not self.autocorr else dp1),
             data_positions2=dp2 if self.estimator_type == 'landyszalay' else dp1,
 
-            randoms_positions1=rp1 if self.estimator_type == 'landyszalay' else None,
+            randoms_positions1=rp1 if self.estimator_type == 'landyszalay' else 
+                (rp2 if not self.autocorr else rp1),
             randoms_positions2=rp2 if self.estimator_type == 'landyszalay' else rp1,
 
-            data_weights1=dw1 if self.estimator_type == 'landyszalay' else dw2,
+            data_weights1=dw1 if self.estimator_type == 'landyszalay' else 
+                (dw2 if not self.autocorr else dw1),
             data_weights2=dw2 if self.estimator_type == 'landyszalay' else dw1,
 
-            randoms_weights1=rw1 if self.estimator_type == 'landyszalay' else None,
+            randoms_weights1=rw1 if self.estimator_type == 'landyszalay' else 
+                (rw2 if not self.autocorr else rw1),
             randoms_weights2=rw2 if self.estimator_type == 'landyszalay' else rw1,
 
-            data_samples1=ds1 if self.estimator_type == 'landyszalay' else ds2,
+            data_samples1=ds1 if self.estimator_type == 'landyszalay' else
+                (ds2 if not self.autocorr else ds1),
             data_samples2=ds2 if self.estimator_type == 'landyszalay' else ds1,
 
-            randoms_samples1=rs1 if self.estimator_type == 'landyszalay' else None,
+            randoms_samples1=rs1 if self.estimator_type == 'landyszalay' else 
+                (rs2 if not self.autocorr else rs1),
             randoms_samples2=rs2 if self.estimator_type == 'landyszalay' else rs1,
 
             nthreads=self.nproc,

@@ -134,7 +134,7 @@ def hsc_bias_evolution(z, b):
     '''
     return b / (1 / (1 + z))
 
-def combine_estimators(estimators, scale_cuts, z, ratios=None, skipped_ids=None, rebin=1):
+def combine_estimators(estimators, ratios=None, skipped_ids=None, rebin=1):
     '''
     From the provided path, collate the measurements on each of the MOCs
     and return a dictionary of the results.
@@ -160,63 +160,23 @@ def combine_estimators(estimators, scale_cuts, z, ratios=None, skipped_ids=None,
     )
     assert len(estimators) > 0, 'No estimators found.'
 
-    #print(f'skipped_ids : {skipped_ids}, ratios : {ratios}, rebin : {rebin}')
-
     sep = estimators[0].sep
     # sep is just here to get the size of the arrays
-    allsep = np.zeros_like(sep)
-    allcorr = np.zeros_like(sep)
     allcov = np.zeros((len(sep), len(sep)))
-    merged = estimators[0]
-    if len(estimators) > 1:
-        for i in range(1, len(estimators)):
-            estimators[i].rebin(rebin)
-            merged = merged.concatenate_x(estimators[i])
-        merged = estimators[1]
 
-        #print(merged.sep-estimators[1].sep, merged.corr-estimators[1].corr)
+    if len(estimators) > 1:
+        merged = np.sum([est.normalize() for est in estimators])   
+    else:
+        merged = estimators[0]
+    if rebin > 1:
+        merged.rebin(rebin)
+
     if hasattr(merged, 'cov'):
         allcov = merged.cov()   
     else:
         allcov = np.zeros((len(merged.sep), len(merged.sep)))
+
     return merged.sep, merged.corr, allcov
-
-    store_sep = []
-    for i, est in enumerate(estimators):
-        sep = est.sep
-        store_sep.append(sep)
-        corr = est.corr
-        if hasattr(est, 'cov'):
-            cov = est.cov()
-        else:
-            cov = np.zeros((len(sep), len(sep)))
-
-        # weighted mean over the sky patches
-        allsep += sep * ratios[i]
-        allcorr += corr * ratios[i]
-        allcov += cov * ratios[i]
-
-    best_est = np.argmax([est.D1D2.size1 for est in estimators])
-    print(f'best_est : {best_est}')
-    allsep = estimators[best_est].sep
-    allcorr = estimators[best_est].corr
-    #print(f'allsep : {allsep}')
-
-    comovsep = ct.arcsec2hMpc(allsep*3600, z)
-    valid_comov = (comovsep > scale_cuts[0]) & (comovsep < scale_cuts[1])
-    valid_sep = allsep[valid_comov]
-    valid_corr = allcorr[valid_comov]
-    valid_cov = allcov[valid_comov][:, valid_comov]
-
-    if any(np.isnan(valid_corr)):
-        raise ValueError('NaN values in valid_corr')
-    if any(np.isnan(valid_sep)):
-        raise ValueError('NaN values in valid_sep')
-    assert len(valid_sep) == len(valid_corr), (
-        f'len(valid_sep) = {len(valid_sep)} != len(valid_corr) = {len(valid_corr)}'
-    )
-    
-    return valid_sep, valid_corr, valid_cov
 
 def single_bin_corr(
         estimators : list[TwoPointEstimator], 
@@ -229,7 +189,6 @@ def single_bin_corr(
         skipped_ids=None,
         ratios=None,
         ):
-    #! todo : assert this is correct implementation
     '''
     Computes the single bin Landy-Szalay estimator (Schmidt+2013, Ménard+2013)
     for the wpp, wss and wsp measurements. 
@@ -245,14 +204,10 @@ def single_bin_corr(
     
     sep, corr, cov = combine_estimators(
         estimators, 
-        scale_cuts=scale_cuts,
-        z=z,
         ratios=ratios, 
         skipped_ids=skipped_ids, 
         rebin=rebin
         )
-    print('cov')
-    print(cov)
 
     # debug plot to compare with the first estimator and check consistency
     '''
@@ -267,7 +222,7 @@ def single_bin_corr(
     plt.legend()
     plt.show()
     '''
-    comovsep = ct.arcsec2hMpc(sep*3600, z)    # remove the nan values
+    comovsep = ct.arcsec2hMpc(sep*3600, z)
 
     if scale_cuts is not None :
         scale_mask = (comovsep >= scale_cuts[0]) & (comovsep <= scale_cuts[1]) & ~np.isnan(comovsep)
@@ -294,7 +249,7 @@ def single_bin_corr(
         int_weights = comb.trapz_weights(comovsep[scale_mask]) / weights[scale_mask]
         # now compute the error bars with the full covariance matrix (cov_sc)
         w_err = np.sqrt(np.dot(int_weights, np.dot(cov_sc, int_weights)))
-        print(w_err)
+
         return w_bar, w_err, comovsep_sc
         
     elif integration == 'euclid':
@@ -428,7 +383,6 @@ def wss(
     if frNGC is not None:
         for moc_id in mocngc:
             try:
-                #assert Path(frNGC.get_file(bin_index1+1, bin_index2+1, tracer1, tracer2, moc_id+1)).exists()
                 estimatorNGC = TwoPointEstimator.load(
                     frNGC.get_file(bin_index1, bin_index2, tracer1, tracer2, moc_id)
                 )
@@ -445,13 +399,12 @@ def wss(
     estimators = [est for est in [estimatorSGC, estimatorNGC] if est is not None]
     zloc1 = (bins_t1[bin_index1-1] + bins_t1[bin_index1])/2
     zloc2 = (bins_t2[bin_index2-1] + bins_t2[bin_index2])/2
-    assert np.isclose(zloc1, zloc2, atol=0.02), (
+    assert np.isclose(zloc1, zloc2, atol=0.001), (
         f'zloc1 {zloc1} != zloc2 {zloc2}, bin_index1 {bin_index1} | bin_index2 {bin_index2}'
     )
-    #print(f'bin_index1 {bin_index1} | bin_index2 {bin_index2}')
     zloc = (zloc1 + zloc2)/2
+    print(f'wss : bin_index1,2 : {bin_index1}, {bin_index2}, zloc1,2 : {zloc}, 1:{zloc1}, 2:{zloc2}')
 
-    #print(f'NGC estimator : {estimatorNGC}, SGC estimator : {estimatorSGC}, bin_index1 : {bin_index1}, bin_index2 : {bin_index2}, tracer1 : {tracer1}, tracer2 : {tracer2}')
     if len(estimators) == 0:
         raise ValueError('No estimators found for the provided paths.')
 
@@ -504,6 +457,7 @@ def wpp(path:str | Path, bin_index:int, scale_cuts:list, rebin:int=1, integratio
             skipped_ids.append(i)
             continue
     zloc = (bins_hsc[bin_index-1] + bins_hsc[bin_index])/2
+    print(f'wpp : bin_index : {bin_index}, zloc : {zloc}')
 
     assert len(estimators) > 0, 'hsc estimators not found'
     return single_bin_corr(
@@ -543,7 +497,7 @@ def wsp(path:str | Path, tracer:str, tomo_bin:int, fine_bin:int, scale_cuts:list
             skipped_ids.append(i)
             continue
     zloc = (bins_tracer[fine_bin-1] + bins_tracer[fine_bin])/2
-    #print(f'wsp : bin_index : {fine_bin}, zloc : {zloc}')
+    print(f'wsp : bin_index : {fine_bin}, zloc : {zloc}')
 
     assert len(estimators) > 0, 'HSCxDESI estimators not found'
     return single_bin_corr(
@@ -611,6 +565,7 @@ def compute_npz(
     zloc = (fine_redshift[fine_bin-1] + fine_redshift[fine_bin])/2
     deltaz = fine_redshift[fine_bin] - fine_redshift[fine_bin-1]
 
+    #TODO : implement micro corrections on this ?
     #wpp_meas, wpp_err, _ = wpp(
     #    path=path_dictionary['HSC'], 
     #    scale_cuts=ct.arcsec2hMpc(np.array(scale_cuts)*3600, zloc),#/(1 + zloc),
@@ -619,6 +574,7 @@ def compute_npz(
     #    )
     wpp_meas = 1
     wpp_err = 1
+
     wss_meas, wss_err, _ = wss(
         path_NGC=path_dictionary['DESI_NGC'], 
         path_SGC=path_dictionary['DESI_SGC'], 
@@ -635,21 +591,15 @@ def compute_npz(
         tracer=tracer,
         fine_bin=fine_bin,
         tomo_bin=tomo_bin,
-        scale_cuts=scale_cuts, #ct.arcsec2hMpc(np.array(scale_cuts)*3600, zloc),#/(1 + zloc),
+        scale_cuts=scale_cuts,
         rebin=rebin,
         integration='single-bin'
     )
-    #if verbose:
-    #    print(
-    #        f'B : {hsc_bias:.4f}, {desi_bias:.4f}, prodsqrt : {np.sqrt(hsc_bias) * desi_bias:.4f}, ' 
-    #        f'num : {np.sqrt((hsc_bias * wpp_meas) * (desi_bias * wss_meas)):.4f}, num_no_b : {np.sqrt((wpp_meas) * (wss_meas)):.4f}'
-    #        )
 
     result = wsp_meas / (np.sqrt((wss_meas) * (wpp_meas * sigmaj_correction)))
 
     if return_chunks:
         return wsp_meas, wsp_err, wpp_meas, wpp_err, wss_meas, wss_err, deltaz, zloc, result
-    #print(wpp_meas, wss_meas, wsp_meas, zloc)
     return result
 
 def full_npz_tomo(
@@ -704,7 +654,7 @@ def full_npz_tomo(
 
     fine_redshift = fr.get_bins(tracer)
     hsc_redshift = fr_hsc.get_bins('HSC')
-    ## our calibration sample (wpp at zj where j is the fine bin index)
+    # our calibration sample (wpp at zj where j is the fine bin index)
     # get the indices corresponding to the fine bins in the hsc_redshift
     hsc_bins = np.zeros(len(fine_redshift), dtype=int)
     for i in range(len(fine_redshift)):
@@ -726,7 +676,7 @@ def full_npz_tomo(
                 tracer=tracer,  
                 fine_bin=i, 
                 hsc_correction_bin=hsc_bins[i],
-                sigmaj_correction=1,#sigmaj_corrections[i],
+                sigmaj_correction=1,
                 tomo_bin=tomo_bin,
                 scale_cuts=scale_cuts,
                 rebin=rebin,
@@ -756,14 +706,14 @@ def compute_rcc(
     assert tracer1 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer1} not a DESI tracer.'
 
     if tracer2 == 'HSC':
-        w22_meas = wpp(
+        w22_meas, w22_cov, w22_sep = wpp(
             path_dictionary['HSC'], 
             bin_index=bin_index2,
             scale_cuts=scale_cuts,
             integration='none',
             rebin=rebin
             )
-        w11_meas = wss(
+        w11_meas, w11_cov, w11_sep = wss(
             path_NGC=path_dictionary['DESI_NGC'], 
             path_SGC=path_dictionary['DESI_SGC'], 
             # only give the tracer1 here (DESI)
@@ -775,7 +725,7 @@ def compute_rcc(
             rebin=rebin,
             scale_cuts=scale_cuts
         )
-        w12_meas = wsp(
+        w12_meas, w12_cov, w12_sep = wsp(
             path_dictionary['DESIxHSC'], 
             tracer=tracer1,
             fine_bin=bin_index1,
@@ -785,7 +735,7 @@ def compute_rcc(
             scale_cuts=scale_cuts
         )
     else:
-        w22_meas = wss(
+        w22_meas, w22_cov, w22_sep = wss(
             path_NGC=path_dictionary['DESI_NGC'], 
             path_SGC=path_dictionary['DESI_SGC'],  
             tracer1=tracer2,
@@ -796,7 +746,7 @@ def compute_rcc(
             integration='none',
             rebin=rebin
         )
-        w11_meas = wss(
+        w11_meas, w11_cov, w11_sep = wss(
             path_NGC=path_dictionary['DESI_NGC'], 
             path_SGC=path_dictionary['DESI_SGC'], 
             tracer1=tracer1, 
@@ -807,7 +757,7 @@ def compute_rcc(
             rebin=rebin,
             scale_cuts=scale_cuts
         )
-        w12_meas = wss(
+        w12_meas, w12_cov, w12_sep = wss(
             path_NGC=path_dictionary['DESI_NGC'], 
             path_SGC=path_dictionary['DESI_SGC'],
             tracer1=tracer1,
@@ -825,7 +775,7 @@ def compute_rcc(
     wsp_meas = np.array(w12_meas)
     wss_meas = np.array(w11_meas)
     wpp_meas = np.array(w22_meas)
-    print(f'wsp_meas : {wsp_meas}, wss_meas : {wss_meas}, wpp_meas : {wpp_meas}')
+    #print(f'wsp_meas : {wsp_meas}, wss_meas : {wss_meas}, wpp_meas : {wpp_meas}')
 
     assert wsp_meas.shape == wpp_meas.shape == wss_meas.shape, (
         f'wsp shape {wsp_meas.shape} != wpp shape {wpp_meas.shape} != wss shape {wss_meas.shape}'
@@ -931,16 +881,20 @@ def full_rcc(
 
     rcc = []
     for i in range(0, min(len(tracer1_bins), len(tracer2_bins))):
-        rcc.append(
-            compute_rcc(
-                path_dictionary, 
-                tracer1=tracer1,
-                tracer2=tracer2,  
-                bin_index1=tracer1_bins[i], 
-                bin_index2=tracer2_bins[i],
-                rebin=rebin,
-                verbose=verbose,
-                scale_cuts=scale_cuts,
+        try:
+            rcc.append(
+                compute_rcc(
+                    path_dictionary, 
+                    tracer1=tracer1,
+                    tracer2=tracer2,  
+                    bin_index1=tracer1_bins[i], 
+                    bin_index2=tracer2_bins[i],
+                    rebin=rebin,
+                    verbose=verbose,
+                    scale_cuts=scale_cuts,
+                )
             )
-        )
+        except AssertionError:
+            print(f'AssertionError for tracer1_bins {tracer1_bins[i]} and tracer2_bins {tracer2_bins[i]}')
+            continue
     return rcc

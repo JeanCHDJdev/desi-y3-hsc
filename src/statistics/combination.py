@@ -70,3 +70,45 @@ def combine_error_bars(x, xerr, y, yerr):
         (xerr/np.sqrt(y))**2
         *(((x/(2*np.sqrt(y)))/np.abs(y))*yerr)**2
         )
+
+#### Draft code
+'''
+Outdated code for combining estimators :
+
+    store_sep = []
+    for i, est in enumerate(estimators):
+        sep = est.sep
+        store_sep.append(sep)
+        corr = est.corr
+        if hasattr(est, 'cov'):
+            cov = est.cov()
+        else:
+            cov = np.zeros((len(sep), len(sep)))
+
+        # weighted mean over the sky patches
+        allsep += sep * ratios[i]
+        allcorr += corr * ratios[i]
+        allcov += cov * ratios[i]
+
+    best_est = np.argmax([est.D1D2.size1 for est in estimators])
+    print(f'best_est : {best_est}')
+    allsep = estimators[best_est].sep
+    allcorr = estimators[best_est].corr
+    #print(f'allsep : {allsep}')
+
+    comovsep = ct.arcsec2hMpc(allsep*3600, z)
+    valid_comov = (comovsep > scale_cuts[0]) & (comovsep < scale_cuts[1])
+    valid_sep = allsep[valid_comov]
+    valid_corr = allcorr[valid_comov]
+    valid_cov = allcov[valid_comov][:, valid_comov]
+
+    if any(np.isnan(valid_corr)):
+        raise ValueError('NaN values in valid_corr')
+    if any(np.isnan(valid_sep)):
+        raise ValueError('NaN values in valid_sep')
+    assert len(valid_sep) == len(valid_corr), (
+        f'len(valid_sep) = {len(valid_sep)} != len(valid_corr) = {len(valid_corr)}'
+    )
+    
+    return valid_sep, valid_corr, valid_cov
+'''
