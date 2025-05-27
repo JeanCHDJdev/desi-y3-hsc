@@ -169,6 +169,8 @@ def combine_estimators(estimators, ratios=None, skipped_ids=None, rebin=1):
     allcov = np.zeros((len(sep), len(sep)))
 
     if len(estimators) > 1:
+        # we also checked this is consistent if e.g merged=estimators[1] 
+        # (best estimator for HSC as performed on largest patch of sky)
         merged = np.sum([est.normalize() for est in estimators])   
     else:
         merged = estimators[0]
@@ -243,9 +245,9 @@ def single_bin_corr(
         return corr_sc, np.sqrt(np.diag(cov_sc)), comovsep_sc
 
     # now do the single bin integration with $W(r)\propto r^{\beta}$ (default $\beta$ = -1)$
-    wkernel = comovsep[scale_mask]**(beta)
+    wkernel = comovsep_sc**(beta)
     # divide by the integral of the kernel to normalize it
-    wkernel /= simpson(wkernel, x=comovsep[scale_mask])
+    wkernel /= simpson(wkernel, x=comovsep_sc)
 
     if integration == 'single-bin':
         # compute the error bars given the covariance matrix
@@ -288,16 +290,16 @@ def single_bin_corr(
             r1r2_counts += est.R1R2.ncounts
         
         rr = _integrate_over_pairs(
-            weights, r1r2_counts[scale_mask], comovsep
+            wkernel, r1r2_counts[scale_mask], comovsep
         ) / (Nr1 + Nr2)
         dd = _integrate_over_pairs(
-            weights, d1d2_counts[scale_mask], comovsep
+            wkernel, d1d2_counts[scale_mask], comovsep
         ) / (Nd1 + Nd2)
         rd = _integrate_over_pairs(
-            weights, r1d2_counts[scale_mask], comovsep
+            wkernel, r1d2_counts[scale_mask], comovsep
         ) / (Nr1 + Nd2)
         dr = _integrate_over_pairs(
-            weights, d1r2_counts[scale_mask], comovsep
+            wkernel, d1r2_counts[scale_mask], comovsep
         ) / (Nd1 + Nr2)
 
         if method=='landy-szalay':
@@ -566,7 +568,7 @@ def compute_npz(
         If verbose is True, will print the values used to compute the n(z) for the tracer.
     '''
     assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer} not a DESI tracer.'
-    assert tomo_bin in [1, 2, 3, 4], f'fine_bin {tomo_bin} not a valid bin.'
+    assert tomo_bin in [1, 2, 3, 4], f'tomo_bin {tomo_bin} not a valid bin.'
     
     # let's grab the binning scheme that we are using
     fr = corrf.CorrFileReader(path_dictionary['DESIxHSC'])

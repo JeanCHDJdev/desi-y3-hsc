@@ -72,7 +72,7 @@ class CorrelationMeta(ABC):
     bins_qso = np.arange(0.825, 2.875, 0.15) # 0.9 < z < 2.8
 
     # use_zbin will override this choice
-    bins_hsc = np.arange(0.0, 2.1, 0.1) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     #bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     # if mini_bins : 
     #bins_hsc = np.arange(0, 2.825, 0.025)
@@ -101,8 +101,13 @@ class CorrelationMeta(ABC):
         bin_dir = Path(root, 'bins')
         if not bin_dir.exists():
             bin_dir.mkdir(parents=True)
+        outfile = Path(bin_dir, 'bins_all.npz')
+        if outfile.exists():
+            print(f'Bins file {outfile} already exists, saving new iteration under a different name')
+            outfile = Path(bin_dir, f'bins_all_{time.strftime(("%Y%m%d_%H%M%S"))}.npz')
+            
         np.savez(
-            Path(bin_dir, 'bins_all.npz'),
+            outfile,
             **{k: v for k, v in CorrelationMeta.bins_all.items()}
         )
 
@@ -428,6 +433,10 @@ class CorrelationMeta(ABC):
             # no z masking on HSC randoms for real HSC data
             zmask_ran = None
         if self.use_zbin:
+            zmask_data = cat[self.z_bin_hsc_col]
+
+        elif self.use_zbin and False:
+            # TODO
             # zbins in HSC are 1-indexed. 0 = outside of the binning scheme
             zmask_bins = cat[self.z_bin_hsc_col]
             # here we do a second digitize to get the binning scheme complete
@@ -437,12 +446,10 @@ class CorrelationMeta(ABC):
                 bin_redshift, 
                 right=True
                 )
-            # tomographic range
-            ztomographic = [0.3, 1.5]
             # which bins are in the tomographic range ?
             ztomographic = [0.3, 1.5]
             # Mask redshifts inside tomographic range but with bad quality (tldr : calibration cut)
-            inside_tomo_range = (zvalues > ztomographic[0]) & (zvalues < ztomographic[1])
+            inside_tomo_range = (zvalues > ztomographic[0]) & (zvalues <= ztomographic[1])
             bad_quality = zmask_bins == 0
 
             # Zero out these values
