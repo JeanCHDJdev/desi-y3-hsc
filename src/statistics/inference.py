@@ -1,3 +1,7 @@
+'''
+Inference pipeline for the results.
+'''
+
 import numpy as np
 import pandas as pd
 import fitsio as fio
@@ -239,17 +243,24 @@ def single_bin_corr(
         return corr_sc, np.sqrt(np.diag(cov_sc)), comovsep_sc
 
     # now do the single bin integration with $W(r)\propto r^{\beta}$ (default $\beta$ = -1)$
-    weights = np.zeros_like(comovsep)
-    weights = comovsep**(beta)
-    
+    wkernel = comovsep[scale_mask]**(beta)
+    # divide by the integral of the kernel to normalize it
+    wkernel /= simpson(wkernel, x=comovsep[scale_mask])
+
     if integration == 'single-bin':
         # compute the error bars given the covariance matrix
-        w_bar = np.trapz(y=np.multiply(weights[scale_mask], corr[scale_mask]), x=comovsep[scale_mask])
-        # get the integration weights for trapz
-        int_weights = comb.trapz_weights(comovsep[scale_mask]) / weights[scale_mask]
-        # now compute the error bars with the full covariance matrix (cov_sc)
-        w_err = np.sqrt(np.dot(int_weights, np.dot(cov_sc, int_weights)))
+        w_bar = np.trapz(y=np.multiply(wkernel, corr[scale_mask]), x=comovsep[scale_mask])
+        # weights are trapezoidal integration weights so :
+        delta_r = np.zeros_like(comovsep_sc)
+        delta_r[1:-1] = (comovsep_sc[2:] - comovsep_sc[:-2]) / 2
+        delta_r[0] = (comovsep_sc[1] - comovsep_sc[0]) / 2
+        delta_r[-1] = (comovsep_sc[-1] - comovsep_sc[-2]) / 2
 
+        # get the linear contribution vector to the covariance matrix
+        v = wkernel * delta_r
+
+        # v @ cov_sc @ v = v^T*\Sigma*v
+        w_err = np.sqrt(v @ cov_sc @ v)
         return w_bar, w_err, comovsep_sc
         
     elif integration == 'euclid':
@@ -403,7 +414,7 @@ def wss(
         f'zloc1 {zloc1} != zloc2 {zloc2}, bin_index1 {bin_index1} | bin_index2 {bin_index2}'
     )
     zloc = (zloc1 + zloc2)/2
-    print(f'wss : bin_index1,2 : {bin_index1}, {bin_index2}, zloc1,2 : {zloc}, 1:{zloc1}, 2:{zloc2}')
+    #print(f'wss : bin_index1,2 : {bin_index1}, {bin_index2}, zloc1,2 : {zloc}, 1:{zloc1}, 2:{zloc2}')
 
     if len(estimators) == 0:
         raise ValueError('No estimators found for the provided paths.')
@@ -457,7 +468,7 @@ def wpp(path:str | Path, bin_index:int, scale_cuts:list, rebin:int=1, integratio
             skipped_ids.append(i)
             continue
     zloc = (bins_hsc[bin_index-1] + bins_hsc[bin_index])/2
-    print(f'wpp : bin_index : {bin_index}, zloc : {zloc}')
+    #print(f'wpp : bin_index : {bin_index}, zloc : {zloc}')
 
     assert len(estimators) > 0, 'hsc estimators not found'
     return single_bin_corr(
@@ -497,7 +508,7 @@ def wsp(path:str | Path, tracer:str, tomo_bin:int, fine_bin:int, scale_cuts:list
             skipped_ids.append(i)
             continue
     zloc = (bins_tracer[fine_bin-1] + bins_tracer[fine_bin])/2
-    print(f'wsp : bin_index : {fine_bin}, zloc : {zloc}')
+    #print(f'wsp : bin_index : {fine_bin}, zloc : {zloc}')
 
     assert len(estimators) > 0, 'HSCxDESI estimators not found'
     return single_bin_corr(
@@ -595,12 +606,16 @@ def compute_npz(
         rebin=rebin,
         integration='single-bin'
     )
-
+    combined_err = comb.combine_error_bars(
+        x=wsp_meas, 
+        xerr=wsp_err, 
+        y=wss_meas, 
+        yerr=wss_err
+        )
     result = wsp_meas / (np.sqrt((wss_meas) * (wpp_meas * sigmaj_correction)))
-
     if return_chunks:
-        return wsp_meas, wsp_err, wpp_meas, wpp_err, wss_meas, wss_err, deltaz, zloc, result
-    return result
+        return wsp_meas, wsp_err, wpp_meas, wpp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
+    return result, combined_err
 
 def full_npz_tomo(
         path_dictionary, 
@@ -669,22 +684,43 @@ def full_npz_tomo(
         sjcorr[i] = sigmaj_corrections[index-1]
 
     nz = []
+    nz_err = []
+
+    data = []
     for i in range(1, len(fine_redshift)):
-        nz.append(
-            compute_npz(
+        if return_chunks:
+            d = compute_npz(
                 path_dictionary, 
                 tracer=tracer,  
                 fine_bin=i, 
                 hsc_correction_bin=hsc_bins[i],
-                sigmaj_correction=1,
+                sigmaj_correction=sjcorr[i],
                 tomo_bin=tomo_bin,
                 scale_cuts=scale_cuts,
                 rebin=rebin,
                 verbose=verbose,
-                return_chunks=return_chunks
+                return_chunks=True
             )
-        )
-    return np.array(nz)
+            data.append(d)
+        else:
+            nz_s, nz_err_s = compute_npz(
+                    path_dictionary, 
+                    tracer=tracer,  
+                    fine_bin=i, 
+                    hsc_correction_bin=hsc_bins[i],
+                    sigmaj_correction=1,
+                    tomo_bin=tomo_bin,
+                    scale_cuts=scale_cuts,
+                    rebin=rebin,
+                    verbose=verbose,
+                    return_chunks=return_chunks
+                )
+            nz.append(nz_s)
+            nz_err.append(nz_err_s)
+    if return_chunks:
+        return np.array(data)
+    else:
+        return np.array(nz), np.array(nz_err)
     
 def compute_rcc(
         path_dictionary, 
@@ -728,8 +764,8 @@ def compute_rcc(
         w12_meas, w12_cov, w12_sep = wsp(
             path_dictionary['DESIxHSC'], 
             tracer=tracer1,
-            fine_bin=bin_index1,
             tomo_bin=bin_index2,
+            fine_bin=bin_index1,
             integration='none',
             rebin=rebin,
             scale_cuts=scale_cuts
@@ -775,7 +811,6 @@ def compute_rcc(
     wsp_meas = np.array(w12_meas)
     wss_meas = np.array(w11_meas)
     wpp_meas = np.array(w22_meas)
-    #print(f'wsp_meas : {wsp_meas}, wss_meas : {wss_meas}, wpp_meas : {wpp_meas}')
 
     assert wsp_meas.shape == wpp_meas.shape == wss_meas.shape, (
         f'wsp shape {wsp_meas.shape} != wpp shape {wpp_meas.shape} != wss shape {wss_meas.shape}'
@@ -836,9 +871,6 @@ def full_rcc(
         fr2 = corrf.CorrFileReader(path_dictionary['HSC'])
     tracer2_redshift = fr2.get_bins(tracer2)
 
-    print(f'tracer1_redshift : {tracer1_redshift}')
-    print(f'tracer2_redshift : {tracer2_redshift}')
-
     # let's check that the bins are all respectively the same sizes.
     delta_z = np.diff(tracer1_redshift)[0]
     assert np.all(np.isclose(np.diff(tracer1_redshift), delta_z)), (
@@ -849,52 +881,47 @@ def full_rcc(
     )
     ## our calibration sample (wpp at zj where j is the fine bin index)
     # get the indices corresponding to the fine bins in the hsc_redshift
-    tracer2_bins = np.zeros(len(tracer1_redshift), dtype=int)
-    for i in range(len(tracer1_redshift)):
-        tracer2_bins[i] = int(np.argmin(np.abs(tracer2_redshift - tracer1_redshift[i])))
-    assert len(tracer2_bins) == len(tracer1_redshift), (
-        f'len(hsc_bins) = {len(tracer2_bins)} != len(tracer1_redshift) = {len(tracer1_redshift)}'
-    )
-    # let's get the overlapping bin indices
-    tracer1_bins = np.array(
-        [
-            int(np.argmin(np.abs(tracer1_redshift - tracer2_redshift[i]))) 
-            for i in range(len(tracer2_redshift))
-            ]
-    )
-    tracer2_bins = np.array(
-        [
-            int(np.argmin(np.abs(tracer2_redshift - tracer1_redshift[i]))) 
-            for i in range(len(tracer1_redshift))
-            ]
-    )
-    # exclude out of bounds bins
-    tracer1_bins = tracer1_bins[(tracer1_bins > 0) & (tracer1_bins < len(tracer1_redshift))]
-    tracer2_bins = tracer2_bins[(tracer2_bins > 0) & (tracer2_bins < len(tracer2_redshift))]+1
+    # Ensure both redshift bin arrays are sorted
+    tracer1_redshift = np.sort(tracer1_redshift)
+    tracer2_redshift = np.sort(tracer2_redshift)
 
-    if verbose:
-        print(f'tracer1_redshift : {tracer1_redshift}')
-        print(f'tracer2_redshift : {tracer2_redshift}')
-    
-    print(f'tracer1_redshift : {tracer1_redshift}, tracer1_bins : {tracer1_bins}')
-    print(f'tracer2_redshift : {tracer2_redshift}, tracer2_bins : {tracer2_bins}')
+    z1_centers = 0.5 * (tracer1_redshift[:-1] + tracer1_redshift[1:])
+    z2_centers = 0.5 * (tracer2_redshift[:-1] + tracer2_redshift[1:])
+
+    t1_to_t2_bin_indices = np.digitize(z1_centers, tracer2_redshift)
+    t2_to_t1_bin_indices = np.digitize(z2_centers, tracer1_redshift)
+
+    t1_to_t2_bin_indices = t1_to_t2_bin_indices[
+        (t1_to_t2_bin_indices > 0) &
+        (t1_to_t2_bin_indices < len(z2_centers) + 1)
+    ]
+    t2_to_t1_bin_indices = t2_to_t1_bin_indices[
+        (t2_to_t1_bin_indices > 0) &
+        (t2_to_t1_bin_indices < len(z1_centers) + 1)
+    ]
+
+    print(f'tracer1_redshift : {tracer1_redshift}, t1_to_t2_bin_indices : {t1_to_t2_bin_indices}')
+    print(f'tracer2_redshift : {tracer2_redshift}, t2_to_t1_bin_indices : {t2_to_t1_bin_indices}')
 
     rcc = []
-    for i in range(0, min(len(tracer1_bins), len(tracer2_bins))):
+    for bin_index1, bin_index2 in zip(t2_to_t1_bin_indices, t1_to_t2_bin_indices):
+        print(f'bin_index1, bin_index2 : {bin_index1}, {bin_index2}')
+
         try:
             rcc.append(
                 compute_rcc(
                     path_dictionary, 
                     tracer1=tracer1,
                     tracer2=tracer2,  
-                    bin_index1=tracer1_bins[i], 
-                    bin_index2=tracer2_bins[i],
+                    bin_index1=bin_index1, 
+                    bin_index2=bin_index2,
                     rebin=rebin,
                     verbose=verbose,
                     scale_cuts=scale_cuts,
                 )
             )
-        except AssertionError:
-            print(f'AssertionError for tracer1_bins {tracer1_bins[i]} and tracer2_bins {tracer2_bins[i]}')
+        except AssertionError as e:
+            #print(f'AssertionError for tracer1_bins {tracer1_bins[i]} and tracer2_bins {tracer2_bins[i]}')
+            print(e)
             continue
     return rcc

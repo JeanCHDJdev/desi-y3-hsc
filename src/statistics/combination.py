@@ -68,7 +68,7 @@ def combine_error_bars(x, xerr, y, yerr):
     '''
     return np.sqrt(
         (xerr/np.sqrt(y))**2
-        *(((x/(2*np.sqrt(y)))/np.abs(y))*yerr)**2
+         + (((x/(2*np.sqrt(y)))/np.abs(y))*yerr)**2
         )
 
 #### Draft code

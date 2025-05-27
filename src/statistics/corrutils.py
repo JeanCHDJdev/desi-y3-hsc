@@ -65,14 +65,14 @@ class CorrelationMeta(ABC):
     bins_rppi_s = np.linspace(0., 200., 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
-    bins_bgs = np.arange(0, 0.55, 0.05) # 0 < z < 0.5
-    bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.1
-    bins_elg = np.arange(0.8, 1.68, 0.08) # 0.8 < z < 1.6 in redshift distribution
+    bins_bgs = np.arange(0.025, 0.525, 0.05) # 0 < z < 0.5
+    bins_lrg = np.arange(0.375, 1.125, 0.05) # 0.4 < z < 1.1
+    bins_elg = np.arange(0.76, 1.64, 0.08) # 0.8 < z < 1.6 in redshift distribution
     #bins_elg = np.array([0.8, 0.9, 1.0, 1.1]) # for now reduce bin for compute power
-    bins_qso = np.arange(0.9, 2.95, 0.15) # 0.9 < z < 2.8
+    bins_qso = np.arange(0.825, 2.875, 0.15) # 0.9 < z < 2.8
 
     # use_zbin will override this choice
-    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    bins_hsc = np.arange(0.0, 2.1, 0.1) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     #bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     # if mini_bins : 
     #bins_hsc = np.arange(0, 2.825, 0.025)
@@ -916,7 +916,7 @@ def sample_randoms_on_moc(
         num_processes=None
     ):
     """
-    Multiprocessed random sampling with optional MOC filtering
+    Multiprocessed random sampling with optional MOC filtering. Set MOC to None to skip filtering.
     """
     assert operator is not None, f"Operator not provided for weight columns"
 
@@ -931,9 +931,19 @@ def sample_randoms_on_moc(
     with mp.Pool(processes=num_processes) as pool:
         results = pool.starmap(
             _process_random_file, [
-            (f, ra_col, dec_col, main_w_col, weight_cols_to_operate, z_col, moc, distance_col, operator) 
-            for f in random_files
-        ])
+                (
+                    f, 
+                    ra_col, 
+                    dec_col, 
+                    main_w_col, 
+                    weight_cols_to_operate, 
+                    z_col, moc, 
+                    distance_col, 
+                    operator
+                    ) 
+                for f in random_files
+            ]
+        )
     print(f"Processed {len(random_files)} random files in {time.time()-tp:.2f} seconds")
 
     randoms = [r for r in results if r is not None]
