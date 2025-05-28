@@ -60,20 +60,20 @@ class CorrelationMeta(ABC):
 
     # ----------Defining fiducial bins here---------- 
     # We define the required bins in Mpc/h units (comoving)
-    bins_rp = np.logspace(math.log(0.08, 10), math.log(20, 10), 21, base=10)
+    bins_rp = np.logspace(math.log(0.1, 10), math.log(20, 10), 26, base=10)
 
     bins_rppi_s = np.linspace(0., 200., 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
-    bins_bgs = np.arange(0.025, 0.525, 0.05) # 0 < z < 0.5
-    bins_lrg = np.arange(0.375, 1.125, 0.05) # 0.4 < z < 1.1
-    bins_elg = np.arange(0.76, 1.64, 0.08) # 0.8 < z < 1.6 in redshift distribution
+    bins_bgs = np.arange(0.0, 0.55, 0.05) # 0 < z < 0.5
+    bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.1
+    bins_elg = np.arange(0.8, 1.68, 0.08) # 0.8 < z < 1.6 in redshift distribution
     #bins_elg = np.array([0.8, 0.9, 1.0, 1.1]) # for now reduce bin for compute power
-    bins_qso = np.arange(0.825, 2.875, 0.15) # 0.9 < z < 2.8
+    bins_qso = np.arange(0.8, 2.95, 0.15) # 0.9 < z < 2.8
 
     # use_zbin will override this choice
+    #bins_hsc = np.arange(0, 2.9, 0.1) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
-    #bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     # if mini_bins : 
     #bins_hsc = np.arange(0, 2.825, 0.025)
 
@@ -432,10 +432,10 @@ class CorrelationMeta(ABC):
         else:
             # no z masking on HSC randoms for real HSC data
             zmask_ran = None
-        if self.use_zbin:
-            zmask_data = cat[self.z_bin_hsc_col]
+        #if self.use_zbin:
+        #    zmask_data = cat[self.z_bin_hsc_col]
 
-        elif self.use_zbin and False:
+        if self.use_zbin:
             # TODO
             # zbins in HSC are 1-indexed. 0 = outside of the binning scheme
             zmask_bins = cat[self.z_bin_hsc_col]

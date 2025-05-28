@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import fitsio as fio
+import matplotlib.pyplot as plt
 
 from pathlib import Path
 from pycorr import TwoPointEstimator, utils
@@ -9,8 +10,10 @@ from mocpy import MOC
 from scipy.stats import multivariate_normal
 from scipy.integrate import simpson
 from scipy.interpolate import interp1d
+from scipy.optimize import minimize_scalar
+from functools import partial
 
-import src.statistics.corrfiles as corrf
+import src.statistics.corrfiles as cf
 import src.statistics.corrutils as cu
 import src.statistics.cosmotools as ct
 
@@ -112,3 +115,159 @@ Outdated code for combining estimators :
     
     return valid_sep, valid_corr, valid_cov
 '''
+
+def chi2(alpha, x1, x2, sigma_x1, sigma_x2):
+    num = (x1 - alpha * x2)**2
+    den = sigma_x1**2 + (alpha**2) * sigma_x2**2
+    return np.sum(num / den)
+
+def get_normalization_correction(
+    path_dictionary,
+    nzs_per_tracer,
+    tracer1,
+    tracer2,
+    tomo_bin,
+):
+    '''
+    Get the normalization correction for the two tracers in the given tomographic bin.
+    '''
+    # find the overlapping bins
+    desi_fr = cf.CorrFileReader(path_dictionary['DESI_NGC'])
+    
+    tracer1_redshift = np.sort(desi_fr.get_bins(tracer1))
+    tracer2_redshift = np.sort(desi_fr.get_bins(tracer2))
+    z1_centers = 0.5 * (tracer1_redshift[:-1] + tracer1_redshift[1:])
+    z2_centers = 0.5 * (tracer2_redshift[:-1] + tracer2_redshift[1:])
+
+    t1_to_t2_bin_indices = np.digitize(z1_centers, tracer2_redshift)
+    t2_to_t1_bin_indices = np.digitize(z2_centers, tracer1_redshift)
+    t1_to_t2_bin_indices = t1_to_t2_bin_indices[
+        (t1_to_t2_bin_indices > 0) &
+        (t1_to_t2_bin_indices < len(z2_centers) + 1)
+    ]
+    t2_to_t1_bin_indices = t2_to_t1_bin_indices[
+        (t2_to_t1_bin_indices > 0) &
+        (t2_to_t1_bin_indices < len(z1_centers) + 1)
+    ]
+    #print(f"Tracer {tracer1} has {len(t1_to_t2_bin_indices)} overlapping bins with {tracer2}.")
+    #print(f"Tracer {tracer2} has {len(t2_to_t1_bin_indices)} overlapping bins with {tracer1}.")
+    #print('t2_to_t1_bin_indices :', t2_to_t1_bin_indices)
+    #print('t1_to_t2_bin_indices :', t1_to_t2_bin_indices)
+    #print(f"Redshift centers for {tracer1} : {z1_centers}")
+    #print(f"Redshift centers for {tracer2} : {z2_centers}")
+
+    nz1, nz1_err = nzs_per_tracer[tracer1][tomo_bin]
+    nz2, nz2_err = nzs_per_tracer[tracer2][tomo_bin]
+    
+    mask1 = np.zeros(len(nz1), dtype=bool)
+    mask2 = np.zeros(len(nz2), dtype=bool)
+    mask1[t2_to_t1_bin_indices - 1] = 1
+    mask2[t1_to_t2_bin_indices - 1] = 1
+    nz1_overlap = nz1[mask1]
+    nz2_overlap = nz2[mask2]
+    nz1_err_overlap = nz1_err[mask1]
+    nz2_err_overlap = nz2_err[mask2]
+
+    #print(nz1_overlap, nz1)
+    #print(nz2_overlap, nz2)
+
+    chi2_func = partial(
+        chi2, x1=nz1_overlap, x2=nz2_overlap, sigma_x1=nz1_err_overlap, sigma_x2=nz2_err_overlap
+        )
+    # alpha ratio such that on the overlapping bins, the two n(z) are equal (chi2 minimized)
+    # x1 \approx alpha * x2
+    mini_alpha = minimize_scalar(
+        chi2_func, 
+        bounds=(0., 5), 
+        method='bounded'
+    )
+    if not mini_alpha.success:
+        raise ValueError(
+            f"Minimization failed for {tracer1} and {tracer2} in tomo bin {tomo_bin}. "
+            f"Message: {mini_alpha.message}"
+        )
+    alpha12 = mini_alpha.x
+    # now we can scale the n(z) of tracer2 by alpha12
+    nz2_scaled = alpha12 * nz2
+    
+    # now we can compute the full integral for the two bins such that the integral of
+    # the pdf for this bin is 1
+    joint_nz1 = list(nz1) + list(nz2_scaled[~mask2])
+    joint_z1 = list(z1_centers) + list(z2_centers[~mask2])
+    norm1 = np.trapz(joint_nz1, x=joint_z1)
+
+    joint_nz2 = (list(nz1[~mask1]/alpha12) + list(nz2))
+    joint_z2 = list(z1_centers[~mask1]) + list(z2_centers)
+    norm2 = np.trapz(joint_nz2, x=joint_z2)
+
+    plt.plot(joint_z1, joint_nz1, label=f'{tracer1} + {tracer2} n(z)', color='blue')
+    plt.plot(joint_z2, joint_nz2, label=f'{tracer2} + {tracer1} n(z)', color='orange')
+    plt.xlabel('Redshift')
+    plt.ylabel('n(z)')
+    plt.title(f'Overlap between {tracer1} and {tracer2} in tomo bin {tomo_bin}')
+    plt.legend()
+    plt.grid()
+    plt.show()
+    
+    return norm1, norm2
+
+def get_norm_per_tracer(path_dictionary, nz_per_tracer):
+    norm_per_tracer = {}
+    for t in ['BGS_ANY', 'LRG', 'ELGnotqso', 'QSO']:
+        norm_per_tracer[t] = {}
+
+    print(f'Bin 1')
+    norm1, norm2 = get_normalization_correction(
+        path_dictionary=path_dictionary,
+        nzs_per_tracer=nz_per_tracer,
+        tracer1='BGS_ANY',
+        tracer2='LRG',
+        tomo_bin=1,
+    )
+    norm_per_tracer['BGS_ANY'][1] = norm1
+    norm_per_tracer['LRG'][1] = norm2
+
+    print(f'Bin 2')
+    norm1, norm2 = get_normalization_correction(
+        path_dictionary=path_dictionary,
+        nzs_per_tracer=nz_per_tracer,
+        tracer1='LRG',
+        tracer2='ELGnotqso',
+        tomo_bin=2,
+    )
+    norm_per_tracer['LRG'][2] = norm1
+    norm_per_tracer['ELGnotqso'][2] = norm2
+
+    print(f'Bin 3')
+    norm1, norm2 = get_normalization_correction(
+        path_dictionary=path_dictionary,
+        nzs_per_tracer=nz_per_tracer,
+        tracer1='LRG',
+        tracer2='ELGnotqso',
+        tomo_bin=3,
+    )
+    norm_per_tracer['LRG'][3] = norm1
+    norm_per_tracer['ELGnotqso'][3] = norm2
+
+    norm1, norm2 = get_normalization_correction(
+        path_dictionary=path_dictionary,
+        nzs_per_tracer=nz_per_tracer,
+        tracer1='ELGnotqso',
+        tracer2='QSO',
+        tomo_bin=3,
+    )
+    norm_per_tracer['ELGnotqso'][3] = norm1
+    norm_per_tracer['QSO'][3] = norm2
+
+    print(f'Bin 4')
+    norm1, norm2 = get_normalization_correction(
+        path_dictionary=path_dictionary,
+        nzs_per_tracer=nz_per_tracer,
+        tracer1='ELGnotqso',
+        tracer2='QSO',
+        tomo_bin=4,
+    )
+    norm_per_tracer['ELGnotqso'][4] = norm1
+    norm_per_tracer['QSO'][4] = norm2
+
+    return norm_per_tracer
