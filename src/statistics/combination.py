@@ -282,42 +282,31 @@ def get_norm_corr_interp(
     """
     Compute relative scaling factors for two tracers in a given tomographic bin by
     matching their n(z) values in the overlapping redshift region.
+    One tracer is fixed (a=1), and the other is scaled by b.
     The final combined n(z) is normalized to have unit integral.
     """
 
-    from scipy.interpolate import interp1d
-    from scipy.optimize import minimize
-    from scipy.integrate import simpson
-    import numpy as np
-    import matplotlib.pyplot as plt
-
-    # Load redshift bins
     desi_fr = cf.CorrFileReader(path_dictionary['DESI_NGC'])
     z1_edges = np.sort(desi_fr.get_bins(tracer1))
     z2_edges = np.sort(desi_fr.get_bins(tracer2))
     z1_centers = 0.5 * (z1_edges[:-1] + z1_edges[1:])
     z2_centers = 0.5 * (z2_edges[:-1] + z2_edges[1:])
 
-    # Load n(z) and error
     nz1, nz1_err = nzs_per_tracer[tracer1][tomo_bin]
     nz2, nz2_err = nzs_per_tracer[tracer2][tomo_bin]
 
-    # Interpolators
     interp1 = lambda arr: interp1d(z1_centers, arr, kind='linear', bounds_error=False, fill_value=0)
     interp2 = lambda arr: interp1d(z2_centers, arr, kind='linear', bounds_error=False, fill_value=0)
 
-    # Overlap region
     zmin_overlap = max(z1_centers.min(), z2_centers.min())
     zmax_overlap = min(z1_centers.max(), z2_centers.max())
     z_overlap = np.linspace(zmin_overlap, zmax_overlap, 300)
 
-    # Interpolated n(z) and errors on the overlap region
     nz1_overlap = interp1(nz1)(z_overlap)
     nz2_overlap = interp2(nz2)(z_overlap)
     nz1_err_overlap = interp1(nz1_err)(z_overlap)
     nz2_err_overlap = interp2(nz2_err)(z_overlap)
 
-    # Full redshift grid for final reconstruction
     z_total = np.linspace(
         min(z1_centers.min(), z2_centers.min()),
         max(z1_centers.max(), z2_centers.max()),
@@ -327,24 +316,22 @@ def get_norm_corr_interp(
     nz_interp1 = interp1(nz1)
     nz_interp2 = interp2(nz2)
 
-    # Chi2 matching only in overlap
-    def chi2(params):
-        a, b = params
-        diff = a * nz1_overlap - b * nz2_overlap
-        sigma2 = (a * nz1_err_overlap)**2 + (b * nz2_err_overlap)**2
+    def chi2(b):
+        diff = nz1_overlap - b * nz2_overlap
+        sigma2 = nz1_err_overlap**2 + (b * nz2_err_overlap)**2
         return np.sum(diff**2 / sigma2)
 
     result = minimize(
         chi2,
-        x0=[1.0, 1.0],
-        bounds=[(0.001, 1000), (0.001, 1000)],
+        x0=[1.0],
+        bounds=[(0.001, 1000)],
         tol=1e-8,
         options={'ftol': 1e-10, 'maxiter': 1000},
     )
 
-    a_opt, b_opt = result.x
+    b_opt = result.x[0]
+    a_opt = 1.0
 
-    # Scale and combine
     nz1_scaled = a_opt * nz_interp1(z_total)
     nz2_scaled = b_opt * nz_interp2(z_total)
 
@@ -354,13 +341,11 @@ def get_norm_corr_interp(
         np.where(z_total < zmin_overlap, nz1_scaled, nz2_scaled)
     )
 
-    # Normalize the joint distribution
     norm_factor = simpson(joint_nz, x=z_total)
     joint_nz /= norm_factor
 
-    # Plot
     plt.figure(figsize=(4, 3))
-    plt.plot(z_total, nz1_scaled, label=f'{tracer1} scaled (a={a_opt:.3f})', color='blue')
+    plt.plot(z_total, nz1_scaled, label=f'{tracer1} scaled (a=1)', color='blue')
     plt.plot(z_total, nz2_scaled, label=f'{tracer2} scaled (b={b_opt:.3f})', color='orange')
     plt.plot(z_total, joint_nz, label='Combined (normalized)', color='green', linestyle='--')
     plt.xlabel('Redshift')
@@ -371,7 +356,8 @@ def get_norm_corr_interp(
     plt.tight_layout()
     plt.show()
 
-    return a_opt/norm_factor, b_opt/norm_factor
+    return a_opt / norm_factor, b_opt / norm_factor
+
 
 def get_norm_per_tracer(path_dictionary, nz_per_tracer):
     norm_per_tracer = {}
