@@ -11,6 +11,7 @@ from scipy.stats import multivariate_normal
 from scipy.integrate import simpson
 from scipy.interpolate import interp1d
 from scipy.optimize import minimize_scalar
+from scipy.optimize import minimize
 from functools import partial
 
 import src.statistics.corrfiles as cf
@@ -139,6 +140,13 @@ def get_normalization_correction(
     z1_centers = 0.5 * (tracer1_redshift[:-1] + tracer1_redshift[1:])
     z2_centers = 0.5 * (tracer2_redshift[:-1] + tracer2_redshift[1:])
 
+    # Create a fine common grid across the overlap range
+    zmin = max(min(z1_centers), min(z2_centers))
+    zmax = min(max(z1_centers), max(z2_centers))
+
+    nz1, nz1_err = nzs_per_tracer[tracer1][tomo_bin]
+    nz2, nz2_err = nzs_per_tracer[tracer2][tomo_bin]
+
     t1_to_t2_bin_indices = np.digitize(z1_centers, tracer2_redshift)
     t2_to_t1_bin_indices = np.digitize(z2_centers, tracer1_redshift)
     t1_to_t2_bin_indices = t1_to_t2_bin_indices[
@@ -167,9 +175,6 @@ def get_normalization_correction(
     nz2_overlap = nz2[mask2]
     nz1_err_overlap = nz1_err[mask1]
     nz2_err_overlap = nz2_err[mask2]
-
-    #print(nz1_overlap, nz1)
-    #print(nz2_overlap, nz2)
 
     chi2_func = partial(
         chi2, x1=nz1_overlap, x2=nz2_overlap, sigma_x1=nz1_err_overlap, sigma_x2=nz2_err_overlap
@@ -211,13 +216,115 @@ def get_normalization_correction(
     
     return norm1, norm2
 
+def get_normalization_correction_interp_dual_scaling(
+    path_dictionary,
+    nzs_per_tracer,
+    tracer1,
+    tracer2,
+    tomo_bin,
+):
+    """
+    Compute normalization corrections for two tracers in a given tomographic bin by
+    finding independent scaling factors for each n(z) that enforce continuity and total normalization.
+    """
+
+    # Load redshift bins
+    desi_fr = cf.CorrFileReader(path_dictionary['DESI_NGC'])
+    z1_edges = np.sort(desi_fr.get_bins(tracer1))
+    z2_edges = np.sort(desi_fr.get_bins(tracer2))
+    z1_centers = 0.5 * (z1_edges[:-1] + z1_edges[1:])
+    z2_centers = 0.5 * (z2_edges[:-1] + z2_edges[1:])
+
+    # Load n(z) and error
+    nz1, nz1_err = nzs_per_tracer[tracer1][tomo_bin]
+    nz2, nz2_err = nzs_per_tracer[tracer2][tomo_bin]
+
+    # Interpolators
+    interp1 = lambda arr: interp1d(z1_centers, arr, kind='linear', bounds_error=False, fill_value=0)
+    interp2 = lambda arr: interp1d(z2_centers, arr, kind='linear', bounds_error=False, fill_value=0)
+
+    # Overlap region
+    zmin_overlap = max(z1_centers.min(), z2_centers.min())
+    zmax_overlap = min(z1_centers.max(), z2_centers.max())
+    z_overlap = np.linspace(zmin_overlap, zmax_overlap, 300)
+
+    nz1_overlap = interp1(nz1)(z_overlap)
+    nz2_overlap = interp2(nz2)(z_overlap)
+
+    # Total redshift range
+    z_total = np.linspace(min(z1_centers.min(), z2_centers.min()),
+                          max(z1_centers.max(), z2_centers.max()), 400)
+
+    # Full interpolated curves
+    f1 = interp1(nz1)
+    f2 = interp2(nz2)
+
+    def chi2_objective(params):
+        a, b = params
+        diff = a * nz1_overlap - b * nz2_overlap
+        return np.sum(diff**2)
+
+    def integral_constraint(params):
+        a, b = params
+        # Break integration into pre-overlap, overlap, and post-overlap
+        z_pre = z_total[z_total < zmin_overlap]
+        z_mid = z_total[(z_total >= zmin_overlap) & (z_total <= zmax_overlap)]
+        z_post = z_total[z_total > zmax_overlap]
+
+        int_pre = simpson(a * f1(z_pre), x=z_pre) if len(z_pre) > 0 else 0.
+        int_mid = simpson(0.5 * (a * f1(z_mid) + b * f2(z_mid)), x=z_mid)
+        int_post = simpson(b * f2(z_post), x=z_post) if len(z_post) > 0 else 0.
+
+        return int_pre + int_mid + int_post - 1.0
+
+    result = minimize(
+        chi2_objective,
+        x0=[1.0, 1.0],
+        constraints={'type': 'eq', 'fun': integral_constraint},
+        method='SLSQP',
+        bounds=[(0.01, 10), (0.01, 10)]
+    )
+
+    a_opt, b_opt = result.x
+
+    # Final scaled n(z)
+    nz1_scaled = a_opt * f1(z_total)
+    nz2_scaled = b_opt * f2(z_total)
+
+    # Blended on overlap
+    joint_nz = np.where(
+        (z_total >= zmin_overlap) & (z_total <= zmax_overlap),
+        0.5 * (nz1_scaled + nz2_scaled),
+        np.where(z_total < zmin_overlap, nz1_scaled, nz2_scaled)
+    )
+
+    norm_check = simpson(joint_nz, x=z_total)
+
+    # Plot
+    plt.figure(figsize=(8, 5))
+    plt.plot(z_total, nz1_scaled, label=f'{tracer1} scaled (a={a_opt:.3f})', color='blue')
+    plt.plot(z_total, nz2_scaled, label=f'{tracer2} scaled (b={b_opt:.3f})', color='orange')
+    plt.plot(z_total, joint_nz, label='Combined', color='green', linestyle='--')
+    plt.xlabel('Redshift')
+    plt.ylabel('n(z)')
+    plt.title(f'Normalized n(z) combination for {tracer1} + {tracer2} (bin {tomo_bin})\nArea = {norm_check:.4f}')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    return a_opt, b_opt
+
+
 def get_norm_per_tracer(path_dictionary, nz_per_tracer):
     norm_per_tracer = {}
     for t in ['BGS_ANY', 'LRG', 'ELGnotqso', 'QSO']:
         norm_per_tracer[t] = {}
 
+    method = get_normalization_correction_interp_dual_scaling
+
     print(f'Bin 1')
-    norm1, norm2 = get_normalization_correction(
+    norm1, norm2 = method(
         path_dictionary=path_dictionary,
         nzs_per_tracer=nz_per_tracer,
         tracer1='BGS_ANY',
@@ -228,7 +335,7 @@ def get_norm_per_tracer(path_dictionary, nz_per_tracer):
     norm_per_tracer['LRG'][1] = norm2
 
     print(f'Bin 2')
-    norm1, norm2 = get_normalization_correction(
+    norm1, norm2 = method(
         path_dictionary=path_dictionary,
         nzs_per_tracer=nz_per_tracer,
         tracer1='LRG',
@@ -239,7 +346,7 @@ def get_norm_per_tracer(path_dictionary, nz_per_tracer):
     norm_per_tracer['ELGnotqso'][2] = norm2
 
     print(f'Bin 3')
-    norm1, norm2 = get_normalization_correction(
+    norm1, norm2 = method(
         path_dictionary=path_dictionary,
         nzs_per_tracer=nz_per_tracer,
         tracer1='LRG',
@@ -249,7 +356,7 @@ def get_norm_per_tracer(path_dictionary, nz_per_tracer):
     norm_per_tracer['LRG'][3] = norm1
     norm_per_tracer['ELGnotqso'][3] = norm2
 
-    norm1, norm2 = get_normalization_correction(
+    norm1, norm2 = method(
         path_dictionary=path_dictionary,
         nzs_per_tracer=nz_per_tracer,
         tracer1='ELGnotqso',
@@ -260,7 +367,7 @@ def get_norm_per_tracer(path_dictionary, nz_per_tracer):
     norm_per_tracer['QSO'][3] = norm2
 
     print(f'Bin 4')
-    norm1, norm2 = get_normalization_correction(
+    norm1, norm2 = method(
         path_dictionary=path_dictionary,
         nzs_per_tracer=nz_per_tracer,
         tracer1='ELGnotqso',
