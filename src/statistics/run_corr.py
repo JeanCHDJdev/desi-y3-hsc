@@ -146,13 +146,6 @@ def parse_args():
         'Default is `os.cpu_count()-2`.'
         )
     parser.add_argument(
-        '-m',
-        '--use_mpi',
-        action='store_true',
-        help='Use MPI for parallelization. '
-        'Default is False. Currently not implemented.'
-    )
-    parser.add_argument(
         '-a',
         '--areas', 
         type=int, 
@@ -222,7 +215,6 @@ def main():
         'logger': logger,
         'output_dir': output_dir,
         'skip_moc': skip_moc,
-        #'estimator': estimator,
     }
     if jackknife:
         corrargs.update({
@@ -305,6 +297,8 @@ def main():
                     cc.run(b1, b2, m)
                     txt = f'Finished {t1}x{t2}, {b1} : {bin1[b1-1]}-{bin1[b1]}, {b2} : {bin2[b2-1]}-{bin2[b2]} in {time.time()-tb1b2:.2f}s'
                     logger.info(txt)
+                    
+            cc.save_zeff(t1, t2, m)
 
 if __name__ == '__main__':
     print('Starting cross-correlation script ...')

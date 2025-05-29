@@ -67,9 +67,9 @@ class CorrelationMeta(ABC):
 
     bins_bgs = np.arange(0.0, 0.55, 0.05) # 0 < z < 0.5
     bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.1
-    bins_elg = np.arange(0.8, 1.68, 0.08) # 0.8 < z < 1.6 in redshift distribution
+    bins_elg = np.arange(0.8, 1.65, 0.05) # 0.8 < z < 1.6 in redshift distribution
     #bins_elg = np.array([0.8, 0.9, 1.0, 1.1]) # for now reduce bin for compute power
-    bins_qso = np.arange(0.8, 2.95, 0.15) # 0.9 < z < 2.8
+    bins_qso = np.arange(0.8, 2.85, 0.05) # 0.9 < z < 2.8
 
     # use_zbin will override this choice
     #bins_hsc = np.arange(0, 2.9, 0.1) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
@@ -264,6 +264,8 @@ class CorrelationMeta(ABC):
             bin_redshift2=self.bin_redshift2
         )
 
+        self.z_effective = []
+
     def set_simulation_status(self, sims_version=0):
         # rename the class attributes if using simulations bc not the same class names
         self.sims = sims_version > 0
@@ -318,7 +320,7 @@ class CorrelationMeta(ABC):
         if not self.sims:
             # use onle the first 6 random files for now, it's fine... 
             # could do more but not really worth the hassle
-            ranf = ranf[:5]
+            ranf = ranf[:4]
 
         tid = time.time()
         cat = sample_file_on_moc(
@@ -403,7 +405,7 @@ class CorrelationMeta(ABC):
         self.logger.info(
             f'Collated HSC randoms in {time.time()-trh:.2f}s. ' 
             f'Reduction : {samp_r_length/all_r_length*100:.2f}% ({all_r_length} -> {samp_r_length})'
-            )
+                )
         
         tih = time.time()
         # we can't use bins on HSC sims
@@ -532,6 +534,18 @@ class CorrelationMeta(ABC):
             'run_corr() not implemented in the derived class. '
         )
     
+    def save_zeff(self, t1, t2, moc):
+        '''
+        Save the effective redshift of the cross correlation.
+        '''
+        outfile = Path(self.output_dir, 'zeff', f'zeff_{t1}x{t2}_moc{moc}.npy')
+        outfile.parent.mkdir(parents=True, exist_ok=True)
+        if outfile.exists():
+            self.logger.info(f'File {outfile} already exists, skipping')
+            return
+        np.save(outfile, np.unique(np.array(self.z_effective)))
+        self.logger.info(f'Saved effective redshift to {outfile}')
+
     def run(self, bin_index1, bin_index2, moc_index):
         '''
         Base method to call when running cross corr.
@@ -550,10 +564,6 @@ class CorrelationMeta(ABC):
             bin1=bin_index1, 
             bin2=bin_index2
             )
-        zloc = (self.bin_redshift1[bin_index1-1] + self.bin_redshift1[bin_index1]) / 2
-        self.theta_edges = ct.hMpc2arcsec(self.edges, zloc)/3600 #convert to degrees
-        self.logger.info(f'Execution redshift = bins :{bin_index1}, {bin_index2}, zloc= {zloc}')
-        self.logger.info('Theta edges : ' + str(self.theta_edges))
 
         self.logger.info(
             f'N data {self.tgt1}: {np.sum(self.z_bool_d1) if self.z_bool_d1 is not None else "None"}' + 
@@ -572,12 +582,14 @@ class CorrelationMeta(ABC):
         assert len(self.randoms1[self.z_bool_r1]) > 0
         assert len(self.data1[self.z_bool_d1]) > 0
         if not self.autocorr:
-            if self.z_bool_r1 is not None:
+            if self.z_bool_r1 is not None and self.randoms2 is not None:
                 assert len(self.randoms2[self.z_bool_r2]) > 0
             else:
-                assert len(self.randoms2) > 0
+                if self.randoms2 is not None:
+                    assert len(self.randoms2) > 0
             if self.z_bool_d2 is not None:
                 assert len(self.data2[self.z_bool_d2]) > 0
+
         self.run_corr()
 
     def make_corr_data(self):
@@ -594,6 +606,7 @@ class CorrelationMeta(ABC):
                 self.randoms1[self.ra_desi_col][self.z_bool_r1],
                 self.randoms1[self.dec_desi_col][self.z_bool_r1]
                 ]
+            z1 = np.mean(self.data1[self.z_desi_col][self.z_bool_d1])
             if self.corr_type == 'rp' or self.corr_type == 'rppi':
                 # autocorrelation case : rp1, dp1 are not used
                 dp1.append(
@@ -611,6 +624,7 @@ class CorrelationMeta(ABC):
                 self.randoms1[self.ra_hsc_randoms_col],
                 self.randoms1[self.dec_hsc_randoms_col]
                 ]   
+            z1 = np.mean(self.data1[self.z_hsc_col][self.z_bool_d1])
             if self.corr_type == 'rp' or self.corr_type == 'rppi':
                 # autocorrelation case : rp1, dp1 are not used
                 dp1.append(
@@ -661,7 +675,15 @@ class CorrelationMeta(ABC):
             # autocorrelation case : rp2, dp2 are not used
             rp2 = None
             dp2 = None 
-            
+        
+        
+        #zloc = (self.bin_redshift1[bin_index1-1] + self.bin_redshift1[bin_index1]) / 2
+        self.zloc = z1
+        self.logger.info(f'Effective redshift for {self.tgt1} : {z1}')
+        self.z_effective.append(z1)
+        self.theta_edges = ct.hMpc2arcsec(self.edges, self.zloc)/3600 #convert to degrees
+        self.logger.info('Theta edges : ' + str(self.theta_edges))
+
         dw1 = None
         dw2 = None
         rw1 = None

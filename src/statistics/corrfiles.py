@@ -20,6 +20,27 @@ class CorrFileReader():
         assert self.ROOT.exists(), f"Path {self.ROOT} does not exist"
         self.dndz_file = None
 
+    def get_zeff(self, tgt1, tgt2):
+        '''
+        Get the effective redshift for given redshift bins.
+        '''
+        zeff_files = list(Path(self.ROOT / f'{tgt1}x{tgt2}').glob(f'zeff_{tgt1}x{tgt2}_*.npy'))
+        if len(zeff_files) == 0:
+            raise FileNotFoundError(f"No zeff files found for {tgt1}x{tgt2}")
+        elif len(zeff_files) == 1:
+            # desi tracer (only NGC) : 
+            return np.load(zeff_files[0])
+        elif len(zeff_files) == 2:
+            # assume DESI (NGC and SGC)
+            zeff1 = np.load(zeff_files[0])
+            zeff2 = np.load(zeff_files[1])
+            return (zeff1 + zeff2) / 2
+        else:
+            assert len(zeff_files) == 4
+            # assume HSC (all 4 MOCs)
+
+        return
+
     def get_file(self, b1, b2, tgt1, tgt2, moc):
         """
         Get the file name for given redshift bins and MOC.

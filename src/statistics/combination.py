@@ -75,12 +75,35 @@ def combine_error_bars(x, xerr, y, yerr):
          + (((x/(2*np.sqrt(y)))/np.abs(y))*yerr)**2
         )
 
+
+### ------------------------------------------- ###
+def get_norm_corr_rebin(
+    path_dictionary,
+    nzs_per_tracer,
+    tracer1,
+    tracer2,
+    tomo_bin,
+    threshold=None,
+):
+    '''
+    Based on the n(z) of two tracers and their overlap,
+    compute the normalization correction for the two tracers in the given tomographic bin.
+    Rebin to the largest bin of the two tracers, and compute the normalization correction
+    based on a chi2 minimization.
+    '''
+    desi_fr = cf.CorrFileReader(path_dictionary['DESI_NGC'])
+    tracer1_redshift = np.sort(desi_fr.get_bins(tracer1))
+    tracer2_redshift = np.sort(desi_fr.get_bins(tracer2))
+    tracer1_effective_bins = desi_fr.get_zeff(tracer1)
+
+
 def get_norm_corr(
     path_dictionary,
     nzs_per_tracer,
     tracer1,
     tracer2,
     tomo_bin,
+    threshold=None,
 ):
     '''
     Get the normalization correction for the two tracers in the given tomographic bin.
@@ -176,6 +199,8 @@ def get_norm_corr_interp_interg(
     tracer1,
     tracer2,
     tomo_bin,
+    show_plots=True,
+    threshold=None,
 ):
     """
     Compute normalization corrections for two tracers in a given tomographic bin by
@@ -191,7 +216,6 @@ def get_norm_corr_interp_interg(
     nz1, nz1_err = nzs_per_tracer[tracer1][tomo_bin]
     nz2, nz2_err = nzs_per_tracer[tracer2][tomo_bin]
 
-    # interpolation operators
     interp1 = lambda arr: interp1d(z1_centers, arr, kind='cubic', bounds_error=False)
     interp2 = lambda arr: interp1d(z2_centers, arr, kind='cubic', bounds_error=False)
 
@@ -199,7 +223,6 @@ def get_norm_corr_interp_interg(
     zmax_overlap = min(z1_centers.max(), z2_centers.max())
     z_overlap = np.linspace(zmin_overlap, zmax_overlap, 300)
 
-    # interpolated n(z) and errors on the overlap region
     nz_interp1 = interp1(nz1)
     nz_interp2 = interp2(nz2)
     nz1_overlap = nz_interp1(z_overlap)
@@ -243,7 +266,11 @@ def get_norm_corr_interp_interg(
         tol=1e-8,
         options={'ftol': 1e-10, 'maxiter': 2000},
     )
-
+    if not result.success:
+        raise ValueError(
+            f"Minimization failed for {tracer1} and {tracer2} in tomo bin {tomo_bin}. "
+            f"Message: {result.message}"
+        )
     a_opt, b_opt = result.x
 
     nz1_scaled = a_opt * nz_interp1(z_total)
@@ -257,18 +284,18 @@ def get_norm_corr_interp_interg(
 
     norm_check = simpson(joint_nz, x=z_total)
 
-    # Plot
-    plt.figure(figsize=(4, 3))
-    plt.plot(z_total, nz1_scaled, label=f'{tracer1} scaled (a={a_opt:.3f})', color='blue')
-    plt.plot(z_total, nz2_scaled, label=f'{tracer2} scaled (b={b_opt:.3f})', color='orange')
-    plt.plot(z_total, joint_nz, label='Combined', color='green', linestyle='--')
-    plt.xlabel('Redshift')
-    plt.ylabel('n(z)')
-    plt.title(f'Normalized n(z) combination for {tracer1} + {tracer2} (bin {tomo_bin})\nArea = {norm_check:.4f}')
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+    if show_plots:
+        plt.figure(figsize=(4, 3))
+        plt.plot(z_total, nz1_scaled, label=f'{tracer1} scaled (a={a_opt:.3f})', color='blue')
+        plt.plot(z_total, nz2_scaled, label=f'{tracer2} scaled (b={b_opt:.3f})', color='orange')
+        plt.plot(z_total, joint_nz, label='Combined', color='green', linestyle='--')
+        plt.xlabel('Redshift')
+        plt.ylabel('n(z)')
+        plt.title(f'Normalized n(z) combination for {tracer1} + {tracer2} (bin {tomo_bin})\nArea = {norm_check:.4f}')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
 
     return a_opt, b_opt
 
@@ -278,12 +305,32 @@ def get_norm_corr_interp(
     tracer1,
     tracer2,
     tomo_bin,
+    threshold=0.2,
+    show_plots=True
 ):
     """
     Compute relative scaling factors for two tracers in a given tomographic bin by
     matching their n(z) values in the overlapping redshift region.
     One tracer is fixed (a=1), and the other is scaled by b.
+    Overlap regions with weak signal are masked.
     The final combined n(z) is normalized to have unit integral.
+
+    Parameters
+    ----------
+    path_dictionary : dict
+        Dictionary containing paths to the DESI NGC correlation files (at least).
+    nzs_per_tracer : dict
+        Dictionary containing n(z) distributions for each tracer and tomographic bin.
+    tracer1 : str
+        Name of the first tracer (e.g., 'BGS_ANY').
+    tracer2 : str
+        Name of the second tracer (e.g., 'LRG').
+    tomo_bin : int
+        Tomographic bin number (1 to 4).
+    threshold : float, optional
+        Threshold for masking weak n(z) values (default is 0.1, compared to peaks).
+    show_plots : bool, optional
+        Whether to show the resulting plots (default is True).
     """
 
     desi_fr = cf.CorrFileReader(path_dictionary['DESI_NGC'])
@@ -295,8 +342,8 @@ def get_norm_corr_interp(
     nz1, nz1_err = nzs_per_tracer[tracer1][tomo_bin]
     nz2, nz2_err = nzs_per_tracer[tracer2][tomo_bin]
 
-    interp1 = lambda arr: interp1d(z1_centers, arr, kind='linear', bounds_error=False, fill_value=0)
-    interp2 = lambda arr: interp1d(z2_centers, arr, kind='linear', bounds_error=False, fill_value=0)
+    interp1 = lambda arr: interp1d(z1_centers, arr, kind='cubic', bounds_error=False)
+    interp2 = lambda arr: interp1d(z2_centers, arr, kind='cubic', bounds_error=False)
 
     zmin_overlap = max(z1_centers.min(), z2_centers.min())
     zmax_overlap = min(z1_centers.max(), z2_centers.max())
@@ -307,6 +354,15 @@ def get_norm_corr_interp(
     nz1_err_overlap = interp1(nz1_err)(z_overlap)
     nz2_err_overlap = interp2(nz2_err)(z_overlap)
 
+    peak1 = np.max(nz1_overlap)
+    peak2 = np.max(nz2_overlap)
+    mask = (nz1_overlap > threshold * peak1) & (nz2_overlap > threshold * peak2)
+
+    nz1_overlap_masked = nz1_overlap[mask]
+    nz2_overlap_masked = nz2_overlap[mask]
+    nz1_err_masked = nz1_err_overlap[mask]
+    nz2_err_masked = nz2_err_overlap[mask]
+
     z_total = np.linspace(
         min(z1_centers.min(), z2_centers.min()),
         max(z1_centers.max(), z2_centers.max()),
@@ -316,9 +372,9 @@ def get_norm_corr_interp(
     nz_interp1 = interp1(nz1)
     nz_interp2 = interp2(nz2)
 
-    def chi2(b):
-        diff = nz1_overlap - b * nz2_overlap
-        sigma2 = nz1_err_overlap**2 + (b * nz2_err_overlap)**2
+    def chi2(beta):
+        diff = nz1_overlap_masked - beta * nz2_overlap_masked
+        sigma2 = nz1_err_masked**2 + (beta * nz2_err_masked)**2
         return np.sum(diff**2 / sigma2)
 
     result = minimize(
@@ -328,11 +384,9 @@ def get_norm_corr_interp(
         tol=1e-8,
         options={'ftol': 1e-10, 'maxiter': 1000},
     )
-
     b_opt = result.x[0]
-    a_opt = 1.0
 
-    nz1_scaled = a_opt * nz_interp1(z_total)
+    nz1_scaled = nz_interp1(z_total)
     nz2_scaled = b_opt * nz_interp2(z_total)
 
     joint_nz = np.where(
@@ -344,28 +398,35 @@ def get_norm_corr_interp(
     norm_factor = simpson(joint_nz, x=z_total)
     joint_nz /= norm_factor
 
-    plt.figure(figsize=(4, 3))
-    plt.plot(z_total, nz1_scaled, label=f'{tracer1} scaled (a=1)', color='blue')
-    plt.plot(z_total, nz2_scaled, label=f'{tracer2} scaled (b={b_opt:.3f})', color='orange')
-    plt.plot(z_total, joint_nz, label='Combined (normalized)', color='green', linestyle='--')
-    plt.xlabel('Redshift')
-    plt.ylabel('n(z)')
-    plt.title(f'n(z) combination for {tracer1} + {tracer2} (bin {tomo_bin})\nArea normalized to 1')
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+    if show_plots:
+        plt.figure(figsize=(4, 3))
+        plt.plot(z_total, nz1_scaled, label=f'{tracer1} scaled (a=1)', color='blue')
+        plt.plot(z_total, nz2_scaled, label=f'{tracer2} scaled (b={b_opt:.3f})', color='orange')
+        plt.plot(z_total, joint_nz, label='Combined (normalized)', color='green', linestyle='--')
+        plt.xlabel('Redshift')
+        plt.ylabel('n(z)')
+        plt.title(f'n(z) combination for {tracer1} + {tracer2} (bin {tomo_bin})\nArea normalized to 1')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
 
-    return a_opt / norm_factor, b_opt / norm_factor
+    return 1 / norm_factor, b_opt / norm_factor
 
 
-def get_norm_per_tracer(path_dictionary, nz_per_tracer):
+def get_norm_per_tracer(path_dictionary, nz_per_tracer, method='interp', threshold=0.2):
     norm_per_tracer = {}
     for t in ['BGS_ANY', 'LRG', 'ELGnotqso', 'QSO']:
         norm_per_tracer[t] = {}
 
-    method = get_norm_corr_interp
-    #method = get_norm_corr
+    if method == 'interp':
+        method = get_norm_corr_interp
+    if method == 'interp_interg':
+        method = get_norm_corr_interp_interg
+    if method == 'standard':
+        method = get_norm_corr
+    if not callable(method):
+        raise ValueError(f"Method {method} is not callable. Please provide a valid method.")
 
     print(f'Bin 1')
     norm1, norm2 = method(
@@ -374,6 +435,7 @@ def get_norm_per_tracer(path_dictionary, nz_per_tracer):
         tracer1='BGS_ANY',
         tracer2='LRG',
         tomo_bin=1,
+        threshold=threshold,
     )
     norm_per_tracer['BGS_ANY'][1] = norm1
     norm_per_tracer['LRG'][1] = norm2
@@ -385,6 +447,7 @@ def get_norm_per_tracer(path_dictionary, nz_per_tracer):
         tracer1='LRG',
         tracer2='ELGnotqso',
         tomo_bin=2,
+        threshold=threshold,
     )
     norm_per_tracer['LRG'][2] = norm1
     norm_per_tracer['ELGnotqso'][2] = norm2
@@ -396,6 +459,7 @@ def get_norm_per_tracer(path_dictionary, nz_per_tracer):
         tracer1='LRG',
         tracer2='ELGnotqso',
         tomo_bin=3,
+        threshold=threshold,
     )
     norm_per_tracer['LRG'][3] = norm1
     norm_per_tracer['ELGnotqso'][3] = norm2
@@ -406,6 +470,7 @@ def get_norm_per_tracer(path_dictionary, nz_per_tracer):
         tracer1='ELGnotqso',
         tracer2='QSO',
         tomo_bin=3,
+        threshold=threshold,
     )
     norm_per_tracer['ELGnotqso'][3] = norm1
     norm_per_tracer['QSO'][3] = norm2
@@ -417,6 +482,7 @@ def get_norm_per_tracer(path_dictionary, nz_per_tracer):
         tracer1='ELGnotqso',
         tracer2='QSO',
         tomo_bin=4,
+        threshold=threshold,
     )
     norm_per_tracer['ELGnotqso'][4] = norm1
     norm_per_tracer['QSO'][4] = norm2
