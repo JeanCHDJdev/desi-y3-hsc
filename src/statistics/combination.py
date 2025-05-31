@@ -110,14 +110,25 @@ def get_norm_corr(
     '''
     # find the overlapping bins
     desi_fr = cf.CorrFileReader(path_dictionary['DESI_NGC'])
-    
-    tracer1_redshift = np.sort(desi_fr.get_bins(tracer1))
-    tracer2_redshift = np.sort(desi_fr.get_bins(tracer2))
-    z1_centers = 0.5 * (tracer1_redshift[:-1] + tracer1_redshift[1:])
-    z2_centers = 0.5 * (tracer2_redshift[:-1] + tracer2_redshift[1:])
 
     nz1, nz1_err = nzs_per_tracer[tracer1][tomo_bin]
     nz2, nz2_err = nzs_per_tracer[tracer2][tomo_bin]
+
+    mask1 = np.isfinite(nz1) & (~np.isnan(nz1))
+    mask2 = np.isfinite(nz2) & (~np.isnan(nz2))
+    nz1 = nz1[mask1]
+    nz2 = nz2[mask2]
+    nz1_err = nz1_err[mask1]
+    nz2_err = nz2_err[mask2]
+    if len(nz1) == 0 or len(nz2) == 0:
+        raise ValueError(
+            f"Tracers {tracer1} and {tracer2} have no overlapping bins in tomo bin {tomo_bin}."
+        )
+    
+    tracer1_redshift = np.sort(desi_fr.get_bins(tracer1))
+    tracer2_redshift = np.sort(desi_fr.get_bins(tracer2))
+    z1_centers = desi_fr.get_zeff(tracer1, tracer1)[mask1]
+    z2_centers = desi_fr.get_zeff(tracer2, tracer2)[mask2]
 
     t1_to_t2_bin_indices = np.digitize(z1_centers, tracer2_redshift)
     t2_to_t1_bin_indices = np.digitize(z2_centers, tracer1_redshift)
@@ -135,9 +146,6 @@ def get_norm_corr(
     #print('t1_to_t2_bin_indices :', t1_to_t2_bin_indices)
     #print(f"Redshift centers for {tracer1} : {z1_centers}")
     #print(f"Redshift centers for {tracer2} : {z2_centers}")
-
-    nz1, nz1_err = nzs_per_tracer[tracer1][tomo_bin]
-    nz2, nz2_err = nzs_per_tracer[tracer2][tomo_bin]
     
     mask1 = np.zeros(len(nz1), dtype=bool)
     mask2 = np.zeros(len(nz2), dtype=bool)
@@ -160,7 +168,7 @@ def get_norm_corr(
     # x1 \approx alpha * x2
     mini_alpha = minimize_scalar(
         chi2_func, 
-        bounds=(0., 5), 
+        bounds=(0., 10), 
         method='bounded'
     )
     if not mini_alpha.success:
@@ -182,6 +190,7 @@ def get_norm_corr(
     joint_z2 = list(z1_centers[~mask1]) + list(z2_centers)
     norm2 = simpson(joint_nz2, x=joint_z2)
 
+    plt.figure(figsize=(4, 3))
     plt.plot(joint_z1, joint_nz1, label=f'{tracer1} + {tracer2} n(z)', color='blue')
     plt.plot(joint_z2, joint_nz2, label=f'{tracer2} + {tracer1} n(z)', color='orange')
     plt.xlabel('Redshift')
@@ -451,6 +460,16 @@ def get_norm_per_tracer(path_dictionary, nz_per_tracer, method='interp', thresho
     )
     norm_per_tracer['LRG'][2] = norm1
     norm_per_tracer['ELGnotqso'][2] = norm2
+
+    norm1, norm2 = method(
+        path_dictionary=path_dictionary,
+        nzs_per_tracer=nz_per_tracer,
+        tracer1='LRG',
+        tracer2='QSO',
+        tomo_bin=2,
+        threshold=threshold,
+    )
+    norm_per_tracer['QSO'][2] = norm2
 
     print(f'Bin 3')
     norm1, norm2 = method(

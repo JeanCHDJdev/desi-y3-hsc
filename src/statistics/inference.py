@@ -171,7 +171,8 @@ def combine_estimators(estimators, ratios=None, skipped_ids=None, rebin=1):
     if len(estimators) > 1:
         # we also checked this is consistent if e.g merged=estimators[1] 
         # (best estimator for HSC as performed on largest patch of sky)
-        merged = np.sum([est.normalize() for est in estimators])   
+        merged = np.sum([est.normalize() for est in estimators])  
+        #merged = estimators[1].copy() 
     else:
         merged = estimators[0]
     if rebin > 1:

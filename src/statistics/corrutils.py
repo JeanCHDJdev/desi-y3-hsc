@@ -60,7 +60,7 @@ class CorrelationMeta(ABC):
 
     # ----------Defining fiducial bins here---------- 
     # We define the required bins in Mpc/h units (comoving)
-    bins_rp = np.logspace(math.log(0.1, 10), math.log(20, 10), 26, base=10)
+    bins_rp = np.logspace(math.log(0.09, 10), math.log(20, 10), 33, base=10)
 
     bins_rppi_s = np.linspace(0., 200., 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
@@ -320,7 +320,7 @@ class CorrelationMeta(ABC):
         if not self.sims:
             # use onle the first 6 random files for now, it's fine... 
             # could do more but not really worth the hassle
-            ranf = ranf[:4]
+            ranf = ranf[:5]
 
         tid = time.time()
         cat = sample_file_on_moc(
@@ -765,7 +765,7 @@ class JackknifeCrossCorrelation(CorrelationMeta):
     def __init__(
         self,
         nside: int = 256,
-        nsamples: int = 64,
+        nsamples: int = 80,
         seed: int = 42,
         **kwargs
     ):
@@ -835,6 +835,8 @@ class JackknifeCrossCorrelation(CorrelationMeta):
 
         self.subsampler = subsampler
         self.logger.info(f'Labels from {labels.min()} to {labels.max()}.')
+        self.logger.info(f'Number of samples : {self.nsamples}')
+        self.logger.info(f'Using nside {self.nside} for subsampling')
 
     def run_corr(self):
         dp1, dp2, rp1, rp2, dw1, dw2, rw1, rw2 = self.make_corr_data()

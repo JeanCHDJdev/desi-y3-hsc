@@ -29,7 +29,7 @@ Number of random files used for DESI : 5
     - bins : `np.arange(0.4, 1.125, 0.025)`
     - python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 250 -t1 LRG -w PIP -k
 * QSO:
-   - bins : `np.arange(0.9, 2.95, 0.15)`
+   - bins : `np.arange(0.9, 5.95, 0.15)`
    - python run_corr.py -o results/autos_j64_ns256_NGC -s 0 -c 250 -t1 QSO -w PIP -k
 * BGS:
    - bins : `np.arange(0, 0.525, 0.025)`
@@ -66,7 +66,7 @@ with z-bins :
 setcc && python run_corr.py -o outputs/results/autos_j64_ns256_zbin -s 0 -c 250 -t1 HSC -ns 64 -re 256 -r1 5 -r2 5 -z -j
 ```
 with mini-bins :
-NOTE : not excluding "calibration cut" which is bad for first 2 bins D:
+NOTE : not excluding "calibration cut" which is bad for first 5 bins D:
 ```bash
 setcc && python run_corr.py -o outputs/results_hsc/minibins_j64_ns256 -s 0 -c 250 -t1 HSC -ns 64 -re 256 -r1 40 -r2 40 -z
 ```
@@ -82,11 +82,11 @@ setcc && python run_corr.py -o outputs/results_sims/cross_j64_ns256_zbin -s 5 -c
 Same bins as previous settings. 
 Command :
 ```bash
-setcc && python run_corr.py -o outputs/results_2/cross_j64_ns256_zbin -s 0 -c 250 -t1 ELGnotqso -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 250 -t1 LRG -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j
+setcc && python run_corr.py -o outputs/results_2/cross_j64_ns256_zbin -s 0 -c 250 -t1 ELGnotqso -t2 HSC -ns 64 -re 256 -r2 15 -r2 5 -z -w PIP -j && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 250 -t1 LRG -t2 HSC -ns 64 -re 256 -r2 15 -r2 5 -z -w PIP -j
 ```
 
 ```bash
-setcc && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 250 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 250 -t1 QSO -t2 HSC -ns 64 -re 256 -r2 15 -r2 2 -z -w PIP -j
+setcc && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 250 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r2 15 -r2 5 -z -w PIP -j && python run_corr.py -o outputs/results/cross_j64_ns256_zbin -s 0 -c 250 -t1 QSO -t2 HSC -ns 64 -re 256 -r2 15 -r2 5 -z -w PIP -j
 ```
 
 ## HSC-DESI cross correlation nonKP FKP davis peebles
@@ -117,10 +117,15 @@ setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_z
 
 ### Real Data
 - Cross correlations :outputs/current5/cross_j64_ns256
-OUTDIR="outputs/test2_zeff/" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 QSO -t2 HSC -ns 64 -re 256 -r1 5 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 LRG -t2 HSC -ns 64 -re 256 -r1 5 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -r1 5 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 ElGnotqso -t2 HSC -ns 64 -re 256 -r1 5 -r2 50 -z -j
+OUTDIR="outputs/v2/cross" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 QSO -t2 HSC -r1 4   -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 LRG -t2 HSC -r1 4 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 BGS_ANY -t2 HSC -r1 4 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 ELGnotqso -t2 HSC -r1 4 -r2 50 -z -j
 
 - Auto correlation :
-OUTDIR="outputs/current5/auto_j64_ns256_NGC" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 ELGnotqso -ns 64 -re 256 -r1 5 -r2 50 -z -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 LRG -ns 64 -re 256 -r1 5 -r2 50 -z -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 BGS_ANY -ns 64 -re 256 -r1 5 -r2 50 -z -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 QSO -ns 64 -re 256 -r1 5 -r2 50 -z -j -k -a 1 && python run_corr.py -o outputs/current4/auto_j64_ns256_HSC -s 0 -c 250 -t1 HSC -ns 64 -re 256 -r1 50 -r2 50 -z -j
+OUTDIR="outputs/v2/autos_NGC" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 ELGnotqso -ns 50 -re 256 -r1 4 -r2 50 -z -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 LRG -ns 64 -re 256 -r1 4 -r2 50 -z -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 BGS_ANY -ns 64 -re 256 -r1 4 -r2 50 -z -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 QSO -ns 64 -re 256 -r1 4 -r2 50 -z -j -k -a 1
+
+# no jk
+OUTDIR="outputs/samez_nojk/cross" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 QSO -t2 HSC -ns 64 -re 256 -z && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 LRG -t2 HSC -ns 64 -re 256 -z && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -z && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 ElGnotqso -t2 HSC -ns 64 -re 256 -z
+
+OUTDIR="outputs/samez_nojk/autos" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 ELGnotqso -ns 64 -re 256 -z -k -a 1 -r1 5 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 LRG -ns 64 -re 256 -z -k -a 1 -r1 5 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 BGS_ANY -ns 64 -re 256 -z -k -a 1 -r1 5 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 QSO -ns 64 -re 256 -z -k -a 1 -r1 5 && python run_corr.py -o outputs/current4/auto_j64_ns256_HSC -s 0 -c 250 -t1 HSC -ns 64 -re 256 -r1 20
 
 ### Simulations :
 - Autos :

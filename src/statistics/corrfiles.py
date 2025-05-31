@@ -24,7 +24,9 @@ class CorrFileReader():
         '''
         Get the effective redshift for given redshift bins.
         '''
-        zeff_files = list(Path(self.ROOT / f'{tgt1}x{tgt2}').glob(f'zeff_{tgt1}x{tgt2}_*.npy'))
+        zeff_files = list(
+            Path(self.ROOT / f'{tgt1}x{tgt2}' / 'zeff').glob(f'zeff_{tgt1}x{tgt2}_*.npy')
+            )
         if len(zeff_files) == 0:
             raise FileNotFoundError(f"No zeff files found for {tgt1}x{tgt2}")
         elif len(zeff_files) == 1:
