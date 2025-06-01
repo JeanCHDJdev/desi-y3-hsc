@@ -127,7 +127,7 @@ def calibrate_tomo_bin(path_dictionary:dict, nzs_per_tracer:dict, tomo_bin:int, 
         fun=lambda p: model(nzdata=(nzs_tomo, nzs_err_tomo), optparams=p),
         x0=init_params,
         method='SLSQP',
-        bounds=[(0, None)] * n_z + [(0.05, 0.05)] * 4,  # bounds for pi and x parameters. we enforce positivity
+        bounds=[(0, None)] * n_z + [(0.04, 0.06)] * 4,  # bounds for pi and x parameters. we enforce positivity
         constraints=[{'type': 'eq', 'fun': lambda p: np.trapz(p[:n_z], x=zgrid) - 1}],  # normalization constraint
         options={'disp': True, 'maxiter': 1000}
     )
