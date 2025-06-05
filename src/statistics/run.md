@@ -117,7 +117,7 @@ setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_z
 
 ### Real Data
 - Cross correlations :outputs/current5/cross_j64_ns256
-OUTDIR="outputs/v2/cross" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 QSO -t2 HSC -r1 4   -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 LRG -t2 HSC -r1 4 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 BGS_ANY -t2 HSC -r1 4 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 ELGnotqso -t2 HSC -r1 4 -r2 50 -z -j
+OUTDIR="outputs/v3_anticalcut/cross" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 QSO -t2 HSC -r1 4   -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 LRG -t2 HSC -r1 4 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 BGS_ANY -t2 HSC -r1 4 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 ELGnotqso -t2 HSC -r1 4 -r2 50 -z -j
 
 - Auto correlation :
 OUTDIR="outputs/v2/autos_NGC" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 ELGnotqso -ns 50 -re 256 -r1 4 -r2 50 -z -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 LRG -ns 64 -re 256 -r1 4 -r2 50 -z -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 BGS_ANY -ns 64 -re 256 -r1 4 -r2 50 -z -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 QSO -ns 64 -re 256 -r1 4 -r2 50 -z -j -k -a 1

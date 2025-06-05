@@ -11,7 +11,7 @@ from src.statistics import cosmotools as ct
 from src.statistics import corrutils as cu
 from src.statistics import corrfiles as cf
 
-def model(nzdata, optparams):
+def model(nzdata: tuple[dict, dict], optparams:list[float]):
     '''
     Our parameterized model function, per
     tomographic bin. Integral must be 1.
@@ -58,24 +58,78 @@ def model(nzdata, optparams):
         'QSO': x_qso
     }
 
-    nzsum = np.sum([
-        ((fitparams[i] * x_tracers[t] - nz[t][i])**2) / (nzerr[t][i]**2)
-        if nzerr[t][i] > 0 else 0
-        for t in x_tracers for i in range(n_z)
-    ])
-    main_constraint = nzsum
+    return np.sum(
+            [
+                ((fitparams[i] * x_tracers[t] - nz[t][i])**2) / (nzerr[t][i]**2)
+                if nzerr[t][i] > 0 else 0
+                for t in x_tracers 
+                for i in range(n_z)
+        ]
+    )
 
-    #int_constraint = np.sum([
-    #    (pi - x)**2 / dint**2
-    #    for pi in fitparams
-    #])
+def logmodel(nzdata: tuple[dict, dict], optparams:list[float]):
+    '''
+    Our parameterized model function, per
+    tomographic bin. Integral must be 1.
 
-    return main_constraint #+ int_constraint
+    Parameters:
+    nzdata : tuple[dict, dict]
+        A tuple containing the n(z) data:
+        - nz : dict
+            Dictionary with keys as tracers and values as the number density
+            for each tracer over the redshift grid. Is 0 if there is no coverage
+            for that tracer in that redshift bin.
+        - nzerr : dict
+            Dictionary with keys as tracers and values as the error on the
+            number density for each tracer over the redshift grid.
+    optparams : list[float]
+        A list of parameters to fit, which includes:
+        xparams : tuple[float, float, float, float, float]
+            A tuple containing the fixed parameters:
+            - x : float
+                The normalization factor for the number density.
+            - x_bgs : float
+                The normalization factor for the BGS tracer. 
+            - etc for the other tracers.
+        fitparams : list[float]
+            A list of the parameters to fit, which are the pi values for each
+            redshift bin. These are the parameters we want to optimize.
+    dint : float
+        - A sequence converging to 0 to impose a normalization constraint
+        on the model, ensuring that the integral of the model is equal to x,
+        our normalization factor.
+    '''
+    nz, nzerr = nzdata
+    # assumes all tracers have same redshift grid size which is true 
+    # given the way we construct the n(z) data
+    n_z = len(nz[list(nz.keys())[0]])
+    fitparams = optparams[:n_z]
 
-def calibrate_tomo_bin(path_dictionary:dict, nzs_per_tracer:dict, tomo_bin:int, only_nz:bool=False):
+    x_bgs, x_lrg, x_elg, x_qso = optparams[n_z:]
+
+    x_tracers = {
+        'BGS_ANY': x_bgs,
+        'LRG': x_lrg,
+        'ELGnotqso': x_elg,
+        'QSO': x_qso
+    }
+
+    return np.sum(
+            [
+                ((np.exp(fitparams[i]) * x_tracers[t] - nz[t][i])**2) / (nzerr[t][i]**2)
+                if nzerr[t][i] > 0 else 0
+                for t in x_tracers 
+                for i in range(n_z)
+        ]
+    )
+
+def calibrate_tomo_bin(path_dictionary:dict, nzs_per_tracer:dict, tomo_bin:int, only_nz:bool=False, method:str='standard'):
     '''
 
     '''
+    if method not in ['standard', 'log']:
+        raise ValueError("Method must be 'standard' or 'log'")
+
     assert tomo_bin > 0 and tomo_bin < 5, 'tomo_bin should be between 1 and 4 (HSC bins)'
 
     nz_nzerr_tomo = {}
@@ -118,17 +172,35 @@ def calibrate_tomo_bin(path_dictionary:dict, nzs_per_tracer:dict, tomo_bin:int, 
         
     n_z = len(zgrid)
 
-    pi0 = np.zeros(n_z) / n_z 
-    x0 = [0.05, 0.05, 0.05, 0.05]  # start guesses for x_bgs, x_lrg, ...
-    x0[tomo_bin - 1] = 0.2  # set the x for the current tomo bin to 1.0
+    pi0 = np.zeros(n_z) 
+    x0 = [1, 1, 1, 1]  # start guesses for x_bgs, x_lrg, ...
     init_params = np.concatenate([pi0, x0])
 
+    # constraints for x parameters
+    bds_x = {
+        1: [(0.1, 9), (0.1, 9), (1,1), (1,1)],  # BGS_ANY
+        2: [(0.1, 9), (0.1, 9), (0.1, 9), (0.1, 9)],  # LRG
+        3: [(0.1, 9), (0.1, 9), (0.1, 9), (0.1, 9)],  # ELGnotqso
+        4: [(1,1), (0.1, 9), (0.1, 9), (0.1, 9)]   # QSO
+    }
+
+    if method == 'standard':
+        func = lambda p: model(nzdata=(nzs_tomo, nzs_err_tomo), optparams=p)
+        constraint = lambda p: np.trapz(p[:n_z], x=zgrid) - 1
+        bds = [(0, None)] * n_z + bds_x[tomo_bin]
+        init_params = np.concatenate([pi0, x0])
+    if method == 'log':
+        func = lambda p: logmodel(nzdata=(nzs_tomo, nzs_err_tomo), optparams=p)
+        constraint = lambda g: np.exp(g)*dz - 1
+        bds = [(None, None)] * n_z + bds_x[tomo_bin]
+        init_params = np.concatenate([np.log(pi0 + 1e-10), x0])
+
     result = minimize(
-        fun=lambda p: model(nzdata=(nzs_tomo, nzs_err_tomo), optparams=p),
+        fun=func,
         x0=init_params,
         method='SLSQP',
-        bounds=[(0, None)] * n_z + [(0.04, 0.06)] * 4,  # bounds for pi and x parameters. we enforce positivity
-        constraints=[{'type': 'eq', 'fun': lambda p: np.trapz(p[:n_z], x=zgrid) - 1}],  # normalization constraint
+        bounds=bds,  # bounds for pi and x parameters
+        constraints=[{'type': 'eq', 'fun': constraint}],  # normalization constraint
         options={'disp': True, 'maxiter': 1000}
     )
 

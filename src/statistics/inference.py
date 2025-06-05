@@ -614,8 +614,8 @@ def compute_npz(
         xerr=wsp_err, 
         y=wss_meas, 
         yerr=wss_err
-        )
-    result = wsp_meas / (np.sqrt((wss_meas) * (wpp_meas * sigmaj_correction)))
+        ) / deltaz
+    result = wsp_meas / (deltaz * np.sqrt((wss_meas) * (wpp_meas * sigmaj_correction)))
     if return_chunks:
         return wsp_meas, wsp_err, wpp_meas, wpp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
     return result, combined_err
