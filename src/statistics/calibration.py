@@ -62,7 +62,7 @@ def model(nzdata: tuple[dict, dict], optparams:list[float]):
             [
                 ((fitparams[i] * x_tracers[t] - nz[t][i])**2) / (nzerr[t][i]**2)
                 if nzerr[t][i] > 0 else 0
-                for t in x_tracers 
+                for t in nzerr.keys()
                 for i in range(n_z)
         ]
     )
@@ -118,7 +118,7 @@ def logmodel(nzdata: tuple[dict, dict], optparams:list[float]):
             [
                 ((np.exp(fitparams[i]) * x_tracers[t] - nz[t][i])**2) / (nzerr[t][i]**2)
                 if nzerr[t][i] > 0 else 0
-                for t in x_tracers 
+                for t in nzerr.keys()
                 for i in range(n_z)
         ]
     )
@@ -143,6 +143,22 @@ def calibrate_tomo_bin(path_dictionary:dict, nzs_per_tracer:dict, tomo_bin:int, 
     zmax = 2.5
     dz = 0.05
     zgrid = np.arange(zmin+dz/2, zmax + 3*dz/2, dz)
+
+    tracer_list = list(nz_nzerr_tomo.keys())
+    # constraints for x parameters
+    bds_x = {
+        1: [(0.5, 2), (0.5, 2), (1, 1), (1, 1)],  
+        2: [(0.5, 2), (0.5, 2), (1, 1), (0.5, 2)], 
+        3: [(0.5, 2), (0.5, 2), (0.5, 2), (0.5, 2)],  
+        4: [(1,1), (0.5, 2), (0.5, 2), (0.5, 2)]
+    }
+    tracer_to_remove = []
+    for tracer_index, b_tuple in enumerate(bds_x[tomo_bin]):
+
+        if b_tuple[0] == b_tuple[1]:
+            tracer_to_remove.append(tracer_index)
+    for tracer in tracer_to_remove:
+        nz_nzerr_tomo.pop(tracer_list[tracer])
 
     # nzdata preparation : select on tomo bin
     # we want to evaluate chi2 on each z bin and fit our constants per tracer
@@ -175,14 +191,6 @@ def calibrate_tomo_bin(path_dictionary:dict, nzs_per_tracer:dict, tomo_bin:int, 
     pi0 = np.zeros(n_z) 
     x0 = [1, 1, 1, 1]  # start guesses for x_bgs, x_lrg, ...
     init_params = np.concatenate([pi0, x0])
-
-    # constraints for x parameters
-    bds_x = {
-        1: [(0.1, 9), (0.1, 9), (1,1), (1,1)],  # BGS_ANY
-        2: [(0.1, 9), (0.1, 9), (0.1, 9), (0.1, 9)],  # LRG
-        3: [(0.1, 9), (0.1, 9), (0.1, 9), (0.1, 9)],  # ELGnotqso
-        4: [(1,1), (0.1, 9), (0.1, 9), (0.1, 9)]   # QSO
-    }
 
     if method == 'standard':
         func = lambda p: model(nzdata=(nzs_tomo, nzs_err_tomo), optparams=p)

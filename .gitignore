@@ -149,3 +149,5 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+src/photoz_cuts/outputs/**

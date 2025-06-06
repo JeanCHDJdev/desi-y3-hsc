@@ -60,7 +60,7 @@ class CorrelationMeta(ABC):
 
     # ----------Defining fiducial bins here---------- 
     # We define the required bins in Mpc/h units (comoving)
-    bins_rp = np.logspace(math.log(0.09, 10), math.log(20, 10), 33, base=10)
+    bins_rp = np.logspace(math.log(0.1, 10), math.log(10, 10), 33, base=10)
 
     bins_rppi_s = np.linspace(0., 200., 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
@@ -73,7 +73,7 @@ class CorrelationMeta(ABC):
 
     # use_zbin will override this choice
     #bins_hsc = np.arange(0, 2.9, 0.1) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
-    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    bins_hsc = np.arange(0., 3.05, 0.08) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     # if mini_bins : 
     #bins_hsc = np.arange(0, 2.825, 0.025)
 
@@ -455,6 +455,7 @@ class CorrelationMeta(ABC):
             bad_quality = zmask_bins == 0
 
             # Zero out these values
+            # for this test only keep bad quality values in bins 1 and bins 2
             zmask_data[inside_tomo_range & bad_quality] = 0
 
         else:
