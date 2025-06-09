@@ -73,7 +73,7 @@ class CorrelationMeta(ABC):
 
     # use_zbin will override this choice
     #bins_hsc = np.arange(0, 2.9, 0.1) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
-    bins_hsc = np.arange(0., 3.05, 0.08) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    bins_hsc = np.arange(0.9, 1.5, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     # if mini_bins : 
     #bins_hsc = np.arange(0, 2.825, 0.025)
 
@@ -421,7 +421,8 @@ class CorrelationMeta(ABC):
             z_col=self.z_hsc_col if not self.use_zbin else [self.z_hsc_col, self.z_bin_hsc_col], 
             moc=self.moc if not self.skip_moc else None,
             distance_col=self.distance_col,
-            operator=self.w_operator
+            operator=self.w_operator,
+            extra_cols=['dnnz_photoz_std_best', 'dnnz_photoz_mean', 'dnnz_photoz_mode'] if not self.sims else None
             )
         self.logger.info(f'Read HSC data in {time.time()-tih:.2f} seconds ({len(cat)} rows)')
 
@@ -438,7 +439,21 @@ class CorrelationMeta(ABC):
         #    zmask_data = cat[self.z_bin_hsc_col]
 
         if self.use_zbin:
-            # TODO
+            # symbolic model to regress out the tail if necessary 
+            stddnnz = cat['dnnz_photoz_std_best'][:]
+            mean_mode = cat['dnnz_photoz_mean'][:] - cat['dnnz_photoz_mode'][:]
+            symexpr = ((mean_mode + stddnnz) * 0.5395833) - 0.043832403
+            #import ipdb; ipdb.set_trace()
+            assert len(symexpr) == len(cat), 'symexpr and cat have different lengths'
+
+            self.logger.info(f'Calculating symbolic expression for HSC data {symexpr[:5]}')
+            pct = 80 # remove 20%
+            rm_threshold = np.percentile(symexpr[~np.isnan(symexpr)], pct)
+            assert not np.isnan(rm_threshold), 'rm_threshold is NaN, check the symbolic expression'
+            
+            self.logger.info(f'Removing {pct}th percentile: {rm_threshold:.4f}')
+            rm_tail = symexpr >= rm_threshold
+            
             # zbins in HSC are 1-indexed. 0 = outside of the binning scheme
             zmask_bins = cat[self.z_bin_hsc_col]
             # here we do a second digitize to get the binning scheme complete
@@ -448,15 +463,17 @@ class CorrelationMeta(ABC):
                 bin_redshift, 
                 right=True
                 )
-            # which bins are in the tomographic range ?
+            # which zvalues are in the tomographic range ?
             ztomographic = [0.3, 1.5]
             # Mask redshifts inside tomographic range but with bad quality (tldr : calibration cut)
             inside_tomo_range = (zvalues > ztomographic[0]) & (zvalues <= ztomographic[1])
             bad_quality = zmask_bins == 0
 
+            self.logger.info(f'Removed sources because of bad quality : {np.sum(inside_tomo_range & bad_quality)/len(cat):.2%} of the data')
+            self.logger.info(f'Removed sources because of tail : {np.sum(rm_tail)/len(cat):.2%} of the data')
             # Zero out these values
-            # for this test only keep bad quality values in bins 1 and bins 2
-            zmask_data[inside_tomo_range & bad_quality] = 0
+            zmask_data[(inside_tomo_range & bad_quality) | rm_tail] = 0
+            assert len(zmask_data[zmask_data > 0]) > 0, 'No data left after masking HSC data'
 
         else:
             zmask_data = np.digitize(
@@ -997,7 +1014,8 @@ def sample_file_on_moc(
         z_col=None, 
         moc=None, 
         operator=None,
-        distance_col=None
+        distance_col=None,
+        extra_cols=None
         ):
     '''
     Read a file and filter it using a MOC. Multiply the weights if needed.
@@ -1013,7 +1031,8 @@ def sample_file_on_moc(
             weight_cols_to_operate=weight_cols_to_operate, 
             z_col=z_col, 
             operator=operator,
-            distance_col=distance_col
+            distance_col=distance_col,
+            extra_cols=extra_cols
         )
 
         if moc is not None:
@@ -1035,7 +1054,8 @@ def _get_data_to_read(
         weight_cols_to_operate, 
         z_col, 
         operator=None, 
-        distance_col=None
+        distance_col=None,
+        extra_cols=None
     ):
     # if HSC + zbin we can have an edge case where the z_col is two values, so flatten and unpack first
     requested_cols = [ra_col, dec_col, main_weight_col]
@@ -1062,6 +1082,10 @@ def _get_data_to_read(
             cols_to_read += weight_cols_to_operate
 
     assert all(c in tbl.get_colnames() for c in cols_to_read), f"Columns {cols_to_read} not in {tbl}"
+    if extra_cols is not None:
+        # if extra_cols is provided, we add them to the columns to read
+        cols_to_read += [col for col in extra_cols if col in tbl.get_colnames()]
+        logging.info(f"Extra columns to read: {extra_cols}")
     data = Table(tbl.read(columns=cols_to_read))
 
     if main_weight_col is not None:

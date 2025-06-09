@@ -928,3 +928,135 @@ def full_rcc(
             print(e)
             continue
     return rcc
+
+def merge_estimators(path_dictionary):
+    '''
+    For overlapping redshift bins (where there are two tracers) combine them into a single estimator,
+    and save them to the provided paths. Also combine on MOCs.
+    '''
+    tracers = ['LRG', 'QSO', 'BGS_ANY'] # TODO : add ELGnotqso when available
+
+    fr_cross = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
+    ngc = path_dictionary['DESI_NGC']
+    if ngc is not None:
+        fr_auto_NGC = corrf.CorrFileReader(path_dictionary['DESI_NGC'])
+    else:
+        fr_auto_NGC = None
+    sgc = path_dictionary['DESI_SGC']
+    if sgc is not None:
+        fr_auto_SGC = corrf.CorrFileReader(path_dictionary['DESI_SGC'])
+    else:
+        fr_auto_SGC = None
+    assert fr_cross is not None, 'cross must be provided.'
+    assert fr_auto_NGC is not None or fr_auto_SGC is not None, (
+        'At least one of auto_NGC or auto_SGC must be provided.'
+    )
+
+    tracer_bins = {t: fr_cross.get_bins(t) for t in tracers}
+
+    redshift_range = [
+        np.min([np.min(tracer_bins[t]) for t in tracers]), 
+        np.max([np.max(tracer_bins[t]) for t in tracers])
+    ]
+    tracer_width = []
+    for t in tracers:
+        redshift_width = np.diff(tracer_bins[t])
+        assert np.all(np.isclose(redshift_width, redshift_width[0])), (
+            f'redshift bins for tracer {t} are not the same size : {redshift_width}'
+        )
+        tracer_width.append(redshift_width[0])
+    assert np.all(np.isclose(tracer_width, tracer_width[0])), (
+        f'tracer widths are not the same size : {tracer_width}'
+    )
+    dz = tracer_width[0]
+    redshift_bins = np.arange(
+        redshift_range[0], 
+        redshift_range[1] + dz, 
+        dz
+    )
+
+    estimators_cross = []
+    estimators_autos = []
+    for zr in redshift_bins:
+        print(f'Processing redshift bin {zr:.2f} with width {dz:.2f}')
+        # paths_cross also has to respect tomographic bins, so we will have a list of lists
+        paths_cross = [[] for _ in range(4)]  # 4 tomographic bins for HSC
+        paths_autos = []
+        for t in tracers:
+            # find the index of bint where the two tracers match
+            for zindt, zt in enumerate(tracer_bins[t]):
+                if zindt == len(tracer_bins[t]) - 1:
+                    continue
+                if np.isclose(zt, zr, atol=dz/5):
+                    # first deal with DESI autos :
+                    paths_autos_z = []
+                    if fr_auto_NGC is not None:
+                        paths_autos_z.extend(fr_auto_NGC.get_file(zindt+1, zindt+1, t, t, None))
+                    if fr_auto_SGC is not None:
+                        paths_autos_z.extend(fr_auto_SGC.get_file(zindt+1, zindt+1, t, t, None))
+                    assert len(paths_autos_z) > 0, "No valid autocorrelations. got "
+                    f"{fr_auto_NGC.get_file(zindt+1, zindt+1, t, t, None)}"
+                    paths_autos.extend(paths_autos_z)
+                    del paths_autos_z
+
+                    # now deal with cross-correlations
+                    # for each tomographic bin
+                    for hsc_tomo in range(0, 4):
+                        # grab all paths on MOC
+                        paths_tomo_cross = fr_cross.get_file(zindt+1, hsc_tomo+1, t, "HSC", None)
+                        # combine on MOCs for this tomo bin
+                        paths_cross[hsc_tomo].extend(paths_tomo_cross)   
+
+        #print("Paths for cross-correlations:", paths_cross)
+        print("Paths for auto-correlations:", paths_autos)
+        estimators_cross.append([
+            np.sum(
+                [TwoPointEstimator.load(p).normalize() for p in paths]
+            ) for paths in paths_cross
+        ])
+        estimators_autos.append(
+            np.sum(
+                [TwoPointEstimator.load(p).normalize() for p in paths_autos]
+            )
+        )
+
+    assert len(estimators_cross[-1]) == 4, (
+        f'estimators_cross[-1] should have 4 tomographic bins, got {len(estimators_cross[-1])}'
+    )
+    assert len(estimators_autos) == len(estimators_cross), (
+        f'estimators_autos should have the same length as estimators_cross, got {len(estimators_autos)} != {len(estimators_cross)}'
+    )
+
+    cross_dir = Path(path_dictionary['DESIxHSC']).parent / 'DESIxHSC'
+    cross_dir.mkdir(parents=True, exist_ok=True)
+    autos_dir = Path(path_dictionary['DESIxHSC']).parent / 'DESIxDESI' 
+    autos_dir.mkdir(parents=True, exist_ok=True)
+
+    # now save the estimators to the provided paths
+    for i, zr in enumerate(redshift_bins):
+        if i == len(redshift_bins) - 1:
+            continue
+        for j, est in enumerate(estimators_cross[i]):
+            # save the cross-correlations
+            file_path = cross_dir / f'MergedxHSC_b1x{i+1}_b2x{j+1}.npy'
+            if isinstance(est, float):
+                print(f'Skipping empty cross-correlation estimator for b1x{i+1}_b2x{j+1}')
+                print("It's likely this estimator has no data for the given redshift bin")
+                continue
+            est.save(file_path)
+            print(f'Saved cross-correlation estimator to {file_path}')
+
+        # save the auto-correlations
+        file_path = autos_dir / f'MergedxHSC_b1x{i+1}_b2x{i+1}.npy'
+        if isinstance(estimators_autos[i], float):
+            print(f'Skipping empty auto-correlation estimator for b1x{i+1}')
+            print("It's likely this estimator has no data for the given redshift bin")
+            continue
+        estimators_autos[i].save(file_path)
+        print(f'Saved auto-correlation estimator to {file_path}')
+    
+    return 
+
+        
+       
+    
