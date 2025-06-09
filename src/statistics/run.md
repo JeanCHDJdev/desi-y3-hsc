@@ -122,6 +122,8 @@ OUTDIR="outputs/v3_anticalcut/cross" && setcc && python run_corr.py -o $OUTDIR -
 - Auto correlation :
 OUTDIR="outputs/v2/autos_NGC" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 ELGnotqso -ns 50 -re 256 -r1 4 -r2 50 -z -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 LRG -ns 64 -re 256 -r1 4 -r2 50 -z -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 BGS_ANY -ns 64 -re 256 -r1 4 -r2 50 -z -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 QSO -ns 64 -re 256 -r1 4 -r2 50 -z -j -k -a 1
 
+OUTDIR="outputs/v4_hsc_0_08/auto" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 HSC -ns 50 -re 256 -r1 30 -z -j
+
 # no jk
 OUTDIR="outputs/samez_nojk/cross" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 QSO -t2 HSC -ns 64 -re 256 -z && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 LRG -t2 HSC -ns 64 -re 256 -z && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -z && python run_corr.py -o $OUTDIR -s 0 -c 250 -t1 ElGnotqso -t2 HSC -ns 64 -re 256 -z
 

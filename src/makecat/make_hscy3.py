@@ -46,7 +46,7 @@ def make_hscy3_cat(
         fpath_primcats = "catalog_obs_reGaus_public/",
         fpath_secondary = "/global/cfs/cdirs/desicollab/science/c3/DESI-Lensing/prelim_hscy3/gfarm.ipmu.jp/~surhud/S19ACatalogs/catalog_tracts/",
         field_names = ["GAMA09H", "GAMA15H", "HECTOMAP", "VVDS", "WIDE12H", "XMM"],
-        use_bmode_mask = True, #True
+        use_bmode_mask = True,
         add_photz = True,
         photoz_method = "dnnz",
         check_all_galaxies = False,
@@ -71,6 +71,9 @@ def make_hscy3_cat(
                 pz_prefix + "err95_max",
                 pz_prefix + "risk_best",
                 pz_prefix + "std_best",
+                pz_prefix + "mode",
+                pz_prefix + "mean",
+                pz_prefix + "median"
             ]
             mag_columns = [
                 'object_id',
@@ -173,7 +176,10 @@ def make_hscy3_cat(
             f"{photoz_method}_photoz_err95_min",
             f"{photoz_method}_photoz_err95_max",
             f"{photoz_method}_photoz_risk_best",
-            f"{photoz_method}_photoz_std_best"
+            f"{photoz_method}_photoz_std_best",
+            f"{photoz_method}_photoz_mode",
+            f"{photoz_method}_photoz_mean",
+            f"{photoz_method}_photoz_median"
         ]
     final_lenscat.keep_columns(all_columns)
 
@@ -186,6 +192,6 @@ def make_hscy3_cat(
 if __name__=="__main__":
     final_lenscat = make_hscy3_cat()
     final_lenscat.write(
-        "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat_with_grizy.fits",
+        "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat_with_mode_etc.fits",
         overwrite=True
         )

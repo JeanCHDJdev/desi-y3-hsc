@@ -147,10 +147,10 @@ def calibrate_tomo_bin(path_dictionary:dict, nzs_per_tracer:dict, tomo_bin:int, 
     tracer_list = list(nz_nzerr_tomo.keys())
     # constraints for x parameters
     bds_x = {
-        1: [(0.5, 2), (0.5, 2), (1, 1), (1, 1)],  
-        2: [(0.5, 2), (0.5, 2), (1, 1), (0.5, 2)], 
-        3: [(0.5, 2), (0.5, 2), (0.5, 2), (0.5, 2)],  
-        4: [(1,1), (0.5, 2), (0.5, 2), (0.5, 2)]
+        1: [(0.01, 10), (0.01, 10), (0.01, 10), (1, 1)],  
+        2: [(0.01, 10), (0.01, 10),  (0.01, 10), (0.01, 10)], 
+        3: [(0.01, 10), (0.01, 10), (0.01, 10), (0.01, 10)],  
+        4: [(1,1), (0.01, 10), (0.01, 10), (0.01, 10)]
     }
     tracer_to_remove = []
     for tracer_index, b_tuple in enumerate(bds_x[tomo_bin]):
