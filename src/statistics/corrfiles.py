@@ -48,6 +48,8 @@ class CorrFileReader():
         Get the file name for given redshift bins and MOC.
         """
         DIR = self.ROOT / f'{tgt1}x{tgt2}'
+        if moc == "Merged":
+            return f'{DIR}/{tgt1}x{tgt2}_b1x{b1}_b2x{b2}.npy'
         if moc is None:
             return sorted(list(Path(f'{DIR}').glob(f'{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc*.npy')))
         return f'{DIR}/{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{moc}.npy'

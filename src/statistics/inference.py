@@ -159,9 +159,6 @@ def combine_estimators(estimators, ratios=None, skipped_ids=None, rebin=1):
 
     ratios = ratios / np.sum(ratios)
 
-    assert len(estimators) == len(ratios), (
-        f'len(estimators) = {len(estimators)} != len(ratios) = {len(ratios)}'
-    )
     assert len(estimators) > 0, 'No estimators found.'
 
     sep = estimators[0].sep
@@ -360,8 +357,6 @@ def wss(
         The integration method to use. Can be 'single-bin', 'euclid' or 'none'.
     '''
 
-    assert tracer1 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer1} not a DESI tracer.'
-    assert tracer2 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer2} not a DESI tracer.'
 
     if path_NGC is not None:
         path_NGC = Path(path_NGC)
@@ -568,12 +563,17 @@ def compute_npz(
     verbose : bool
         If verbose is True, will print the values used to compute the n(z) for the tracer.
     '''
-    assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer} not a DESI tracer.'
+    assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'Merged'], f'tracer {tracer} not a DESI tracer.'
     assert tomo_bin in [1, 2, 3, 4], f'tomo_bin {tomo_bin} not a valid bin.'
     
     # let's grab the binning scheme that we are using
     fr = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
-    fine_redshift = fr.get_bins(tracer)
+    if tracer == 'Merged':
+        fine_redshift = np.arange(
+            0.0, 2.7 + 0.05, 0.05
+            )
+    else:
+        fine_redshift = fr.get_bins(tracer)
 
     # this is the redshift we are at with the desi tracer
     zloc = (fine_redshift[fine_bin-1] + fine_redshift[fine_bin])/2
@@ -620,15 +620,75 @@ def compute_npz(
         return wsp_meas, wsp_err, wpp_meas, wpp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
     return result, combined_err
 
+def compute_npz_merged(
+        path_dictionary, 
+        tracer, 
+        fine_bin, 
+        hsc_correction_bin, 
+        tomo_bin, 
+        scale_cuts, 
+        sigmaj_correction,
+        rebin=1,
+        return_chunks=False, 
+        verbose=False
+        ):
+
+    assert tomo_bin in [1, 2, 3, 4], f'tomo_bin {tomo_bin} not a valid bin.'
+    
+    fine_redshift = np.arange(0.0, 2.7 + 0.05, 0.05)
+
+    # this is the redshift we are at with the desi tracer
+    zloc = (fine_redshift[fine_bin-1] + fine_redshift[fine_bin])/2
+    deltaz = fine_redshift[fine_bin] - fine_redshift[fine_bin-1]
+
+    wpp_meas = 1
+    wpp_err = 1
+
+    frss = corrf.CorrFileReader(path_dictionary['MergedxMerged'])
+    file_ss = frss.get_file(fine_bin, fine_bin, tracer, tracer, "Merged")
+    estimators_ss = [TwoPointEstimator.load(file_ss)]
+    wss_meas, wss_err, _ = single_bin_corr(
+        estimators_ss, 
+        rebin=rebin, 
+        z=zloc, 
+        beta=-1, 
+        method='landy-szalay', 
+        scale_cuts=scale_cuts
+    )
+
+    frsp = corrf.CorrFileReader(path_dictionary['MergedxHSC'])
+    file_sp = frsp.get_file(fine_bin, tomo_bin, tracer, 'HSC', "Merged")
+    estimators_sp = [TwoPointEstimator.load(file_sp)]
+    wsp_meas, wsp_err, _  = single_bin_corr(
+        estimators_sp, 
+        rebin=rebin, 
+        z=zloc, 
+        beta=-1, 
+        method='landy-szalay', 
+        scale_cuts=scale_cuts
+    )
+
+    combined_err = comb.combine_error_bars(
+        x=wsp_meas, 
+        xerr=wsp_err, 
+        y=wss_meas, 
+        yerr=wss_err
+        ) / deltaz
+    
+    result = wsp_meas / (deltaz * np.sqrt((wss_meas) * (wpp_meas * sigmaj_correction)))
+    if return_chunks:
+        return wsp_meas, wsp_err, wpp_meas, wpp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
+    return result, combined_err
+
 def full_npz_tomo(
         path_dictionary, 
         tracer, 
         tomo_bin, 
         scale_cuts, 
-        sigmaj_corrections,
+        sigmaj_corrections=None,
         rebin=1,
         verbose=False, 
-        return_chunks=False
+        return_chunks=False,
         ):
     '''
     Computes n(z) for the provided tracer and specific tomographic. Returns the array of n(z) values
@@ -667,11 +727,17 @@ def full_npz_tomo(
     # let's grab the binning scheme that we are using
     fr = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
 
-    # calibration samples from HSC
+    # calibration samples from HSC, if needed
     fr_hsc = corrf.CorrFileReader(path_dictionary['HSC'])
 
-    fine_redshift = fr.get_bins(tracer)
+    if tracer == 'Merged':
+        fine_redshift = np.arange(
+            0.0, 2.5 + 0.05, 0.05
+            )
+    else:
+        fine_redshift = fr.get_bins(tracer)
     hsc_redshift = fr_hsc.get_bins('HSC')
+
     # our calibration sample (wpp at zj where j is the fine bin index)
     # get the indices corresponding to the fine bins in the hsc_redshift
     hsc_bins = np.zeros(len(fine_redshift), dtype=int)
@@ -681,6 +747,10 @@ def full_npz_tomo(
         f'len(hsc_bins) = {len(hsc_bins)} != len(fine_redshift) = {len(fine_redshift)}'
     )
     
+    if sigmaj_corrections is None:
+        # if no sigmaj corrections are provided, we assume they are all 1
+        sigmaj_corrections = np.ones(len(fine_redshift))
+
     sjcorr = np.zeros(len(fine_redshift))
     for i in range(len(fine_redshift)):
         index = int(np.argmin(np.abs(hsc_redshift - fine_redshift[i])))
@@ -690,9 +760,15 @@ def full_npz_tomo(
     nz_err = []
 
     data = []
+
+    if tracer == 'Merged':
+        print(f'Using merged method for tracer {tracer} and tomo bin {tomo_bin}.')
+        func = compute_npz_merged
+    else:
+        func = compute_npz
     for i in range(1, len(fine_redshift)):
         if return_chunks:
-            d = compute_npz(
+            d = func(
                 path_dictionary, 
                 tracer=tracer,  
                 fine_bin=i, 
@@ -706,7 +782,7 @@ def full_npz_tomo(
             )
             data.append(d)
         else:
-            nz_s, nz_err_s = compute_npz(
+            nz_s, nz_err_s = func(
                     path_dictionary, 
                     tracer=tracer,  
                     fine_bin=i, 
@@ -934,7 +1010,7 @@ def merge_estimators(path_dictionary):
     For overlapping redshift bins (where there are two tracers) combine them into a single estimator,
     and save them to the provided paths. Also combine on MOCs.
     '''
-    tracers = ['LRG', 'QSO', 'BGS_ANY'] # TODO : add ELGnotqso when available
+    tracers = ['LRG', 'QSO', 'ELGnotqso', 'BGS_ANY'] # TODO : add ELGnotqso when available
 
     fr_cross = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
     ngc = path_dictionary['DESI_NGC']
@@ -1027,9 +1103,9 @@ def merge_estimators(path_dictionary):
         f'estimators_autos should have the same length as estimators_cross, got {len(estimators_autos)} != {len(estimators_cross)}'
     )
 
-    cross_dir = Path(path_dictionary['DESIxHSC']).parent / 'DESIxHSC'
+    cross_dir = Path(path_dictionary['DESIxHSC']).parent / 'MergedxHSC'
     cross_dir.mkdir(parents=True, exist_ok=True)
-    autos_dir = Path(path_dictionary['DESIxHSC']).parent / 'DESIxDESI' 
+    autos_dir = Path(path_dictionary['DESIxHSC']).parent / 'MergedxMerged' 
     autos_dir.mkdir(parents=True, exist_ok=True)
 
     # now save the estimators to the provided paths
@@ -1047,7 +1123,7 @@ def merge_estimators(path_dictionary):
             print(f'Saved cross-correlation estimator to {file_path}')
 
         # save the auto-correlations
-        file_path = autos_dir / f'MergedxHSC_b1x{i+1}_b2x{i+1}.npy'
+        file_path = autos_dir / f'MergedxMerged_b1x{i+1}_b2x{i+1}.npy'
         if isinstance(estimators_autos[i], float):
             print(f'Skipping empty auto-correlation estimator for b1x{i+1}')
             print("It's likely this estimator has no data for the given redshift bin")

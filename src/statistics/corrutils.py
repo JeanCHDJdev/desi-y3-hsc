@@ -447,7 +447,7 @@ class CorrelationMeta(ABC):
             assert len(symexpr) == len(cat), 'symexpr and cat have different lengths'
 
             self.logger.info(f'Calculating symbolic expression for HSC data {symexpr[:5]}')
-            pct = 80 # remove 20%
+            pct = 60 # remove 40%
             rm_threshold = np.percentile(symexpr[~np.isnan(symexpr)], pct)
             assert not np.isnan(rm_threshold), 'rm_threshold is NaN, check the symbolic expression'
             
