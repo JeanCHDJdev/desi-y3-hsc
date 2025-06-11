@@ -643,6 +643,7 @@ class CorrelationMeta(ABC):
             )
             self.logger.info(
                 f'Using DESI redshift binning for {self.tgt1} : {self.bin_redshift1[self.bin_index1-1]} - {self.bin_redshift1[self.bin_index1]}'
+                f' (zeff={z1}) in {time.time()-tz:.2f} seconds'
             )
             if self.corr_type == 'rp' or self.corr_type == 'rppi':
                 # autocorrelation case : rp1, dp1 are not used

@@ -345,22 +345,30 @@ def get_zeff(zlow, zhigh, type='DESI', **file_settings):
     }
     file_settings = {**file_settings_defaults, **file_settings}
     if type == 'DESI':
-        tracers = ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY']
-        z = []
-        for t in tracers:
-            for cap in ['NGC', 'SGC']:
-                file = fetch_desi_files(
-                    t, 
-                    randoms=False, 
-                    sims=file_settings['sims'], 
-                    sims_version=file_settings['sims_version'],
-                    cap=cap
-                )
-                ztbl = fio.FITS(Path(file))[1]['Z'][:]
-                mask = (ztbl >= zlow) & (ztbl < zhigh)
-                z.append(ztbl[mask])
-        z = np.concatenate(z)
-        zeff = np.mean(z)
+        sv = file_settings["sims_version"]
+        jointz = f"desi_z_clustering_catalogs{f'_simsv{sv}' if  sv > 0 else ''}.fits"
+        if Path(jointz).exists():
+            ztbl = Table.read(jointz)
+        else:
+            print(f"File {jointz} does not exist, fetching DESI files...")
+            tracers = ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY']
+            zall = []
+            for t in tracers:
+                for cap in ['NGC', 'SGC']:
+                    file = fetch_desi_files(
+                        t, 
+                        randoms=False, 
+                        sims=file_settings['sims'], 
+                        sims_version=file_settings['sims_version'],
+                        cap=cap
+                    )
+                    ztbl = fio.FITS(Path(file))[1]['Z'][:]
+                    #
+                    zall.append(ztbl)
+            ztbl = vstack([Table(z) for z in zall])
+            ztbl.write(jointz)
+
+        zeff = np.mean(ztbl[(ztbl >= zlow) & (ztbl < zhigh)])
         print(f"Effective redshift for DESI from {zlow} to {zhigh}: {zeff:.4f}")
         return zeff
     
