@@ -7,7 +7,10 @@ import fitsio as fio
 import logging
 import time
 import psutil
+
 from pathlib import Path
+from astropy.table import Table, vstack
+
 import src.statistics.cosmotools as ct
 
 class CorrFileReader():
@@ -20,9 +23,9 @@ class CorrFileReader():
         assert self.ROOT.exists(), f"Path {self.ROOT} does not exist"
         self.dndz_file = None
 
-    def get_zeff(self, tgt1, tgt2):
+    def get_zeff_prev(self, tgt1, tgt2):
         '''
-        Get the effective redshift for given redshift bins.
+        Get the effective redshift for given redshift bins. (Outdated method)
         '''
         zeff_files = list(
             Path(self.ROOT / f'{tgt1}x{tgt2}' / 'zeff').glob(f'zeff_{tgt1}x{tgt2}_*.npy')
@@ -331,3 +334,38 @@ def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=0
     except FileNotFoundError:
         logging.error(f"HSC catalog file not found and randoms = {randoms}") 
         raise
+
+def get_zeff(zlow, zhigh, type='DESI', **file_settings):
+    '''
+    Get the effective redshift for a given distribution, concatenating over all tracers.
+    '''
+    file_settings_defaults = {
+        'sims': False,
+        'sims_version': 0
+    }
+    file_settings = {**file_settings_defaults, **file_settings}
+    if type == 'DESI':
+        tracers = ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY']
+        z = []
+        for t in tracers:
+            for cap in ['NGC', 'SGC']:
+                file = fetch_desi_files(
+                    t, 
+                    randoms=False, 
+                    sims=file_settings['sims'], 
+                    sims_version=file_settings['sims_version'],
+                    cap=cap
+                )
+                ztbl = fio.FITS(Path(file))[1]['Z'][:]
+                mask = (ztbl >= zlow) & (ztbl < zhigh)
+                z.append(ztbl[mask])
+        z = np.concatenate(z)
+        zeff = np.mean(z)
+        print(f"Effective redshift for DESI from {zlow} to {zhigh}: {zeff:.4f}")
+        return zeff
+    
+    elif type == 'HSC':
+        raise NotImplementedError(
+            "HSC effective redshift calculation is not implemented yet. "
+            "Please provide a valid type."
+            )

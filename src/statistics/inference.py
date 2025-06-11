@@ -7,19 +7,18 @@ import pandas as pd
 import fitsio as fio
 
 from pathlib import Path
-from pycorr import TwoPointEstimator, utils
+from pycorr import TwoPointEstimator
 from astropy.coordinates import SkyCoord
 from mocpy import MOC
 from scipy.stats import multivariate_normal
 from scipy.integrate import simpson
-from scipy.interpolate import interp1d
 
 import src.statistics.corrfiles as corrf
 import src.statistics.combination as comb
 import src.statistics.corrutils as cu
 import src.statistics.cosmotools as ct
 
-def get_desi_ns(tracer, cap=None, **fetch_desi_kw):
+def get_desi_ns(tracer, cap=None, fetch_desi_kw={}):
     '''
     Get the number of sources per cap, per tracer. If cap is None,
     return the number of sources for the tracer by summing both caps.
@@ -732,7 +731,7 @@ def full_npz_tomo(
 
     if tracer == 'Merged':
         fine_redshift = np.arange(
-            0.0, 2.5 + 0.05, 0.05
+            0.0, 2.4 + 0.05, 0.05
             )
     else:
         fine_redshift = fr.get_bins(tracer)
@@ -758,7 +757,6 @@ def full_npz_tomo(
 
     nz = []
     nz_err = []
-
     data = []
 
     if tracer == 'Merged':
@@ -1005,7 +1003,13 @@ def full_rcc(
             continue
     return rcc
 
-def merge_estimators(path_dictionary):
+def merge_estimators(
+        path_dictionary, 
+        outdir, 
+        tomo_interest=[1, 2, 3, 4], 
+        verbose=False,
+        show_progress=True
+        ):
     '''
     For overlapping redshift bins (where there are two tracers) combine them into a single estimator,
     and save them to the provided paths. Also combine on MOCs.
@@ -1050,45 +1054,50 @@ def merge_estimators(path_dictionary):
         redshift_range[1] + dz, 
         dz
     )
+    redshift_bin_centers = 0.5 * (redshift_bins[:-1] + redshift_bins[1:])
 
     estimators_cross = []
     estimators_autos = []
-    for zr in redshift_bins:
-        print(f'Processing redshift bin {zr:.2f} with width {dz:.2f}')
+    for zindr, zr in enumerate(redshift_bin_centers):
+        if show_progress:
+            if (zindr) % (len(redshift_bins) // 10) == 0:
+                print(f'Processing redshift bin {zindr} (Completion : {(zindr+1)/len(redshift_bin_centers):.2%})')
         # paths_cross also has to respect tomographic bins, so we will have a list of lists
         paths_cross = [[] for _ in range(4)]  # 4 tomographic bins for HSC
         paths_autos = []
         for t in tracers:
             # find the index of bint where the two tracers match
-            for zindt, zt in enumerate(tracer_bins[t]):
-                if zindt == len(tracer_bins[t]) - 1:
-                    continue
+            tracer_bin_centers = 0.5 * (tracer_bins[t][:-1] + tracer_bins[t][1:])
+            for zindt, zt in enumerate(tracer_bin_centers, start=1):
                 if np.isclose(zt, zr, atol=dz/5):
                     # first deal with DESI autos :
                     paths_autos_z = []
                     if fr_auto_NGC is not None:
-                        paths_autos_z.extend(fr_auto_NGC.get_file(zindt+1, zindt+1, t, t, None))
+                        paths_autos_z.extend(fr_auto_NGC.get_file(zindt, zindt, t, t, None))
                     if fr_auto_SGC is not None:
-                        paths_autos_z.extend(fr_auto_SGC.get_file(zindt+1, zindt+1, t, t, None))
+                        paths_autos_z.extend(fr_auto_SGC.get_file(zindt, zindt, t, t, None))
                     assert len(paths_autos_z) > 0, "No valid autocorrelations. got "
-                    f"{fr_auto_NGC.get_file(zindt+1, zindt+1, t, t, None)}"
+                    f"{fr_auto_NGC.get_file(zindt, zindt, t, t, None)}"
                     paths_autos.extend(paths_autos_z)
                     del paths_autos_z
 
                     # now deal with cross-correlations
                     # for each tomographic bin
-                    for hsc_tomo in range(0, 4):
+                    for hsc_tomo in tomo_interest:
                         # grab all paths on MOC
-                        paths_tomo_cross = fr_cross.get_file(zindt+1, hsc_tomo+1, t, "HSC", None)
+                        paths_tomo_cross = fr_cross.get_file(zindt, hsc_tomo, t, "HSC", None)
                         # combine on MOCs for this tomo bin
-                        paths_cross[hsc_tomo].extend(paths_tomo_cross)   
+                        paths_cross[hsc_tomo-1].extend(paths_tomo_cross)   
 
-        #print("Paths for cross-correlations:", paths_cross)
-        print("Paths for auto-correlations:", paths_autos)
+        if verbose:
+            print("Paths for cross-correlations:", paths_cross)
+            print("Paths for auto-correlations:", paths_autos)
         estimators_cross.append([
             np.sum(
                 [TwoPointEstimator.load(p).normalize() for p in paths]
-            ) for paths in paths_cross
+            ) 
+            if len(paths) > 0 else 0.0 # if no paths, return 0.0 (to be skipped later)
+            for paths in paths_cross
         ])
         estimators_autos.append(
             np.sum(
@@ -1102,34 +1111,44 @@ def merge_estimators(path_dictionary):
     assert len(estimators_autos) == len(estimators_cross), (
         f'estimators_autos should have the same length as estimators_cross, got {len(estimators_autos)} != {len(estimators_cross)}'
     )
+    if outdir is None:
+        outdir = Path(path_dictionary['DESIxHSC']).parent
+    else:
+        outdir = Path(outdir)
+        if not outdir.exists():
+            outdir.mkdir(parents=True, exist_ok=True)
 
-    cross_dir = Path(path_dictionary['DESIxHSC']).parent / 'MergedxHSC'
+    cross_dir = outdir / 'MergedxHSC'
     cross_dir.mkdir(parents=True, exist_ok=True)
-    autos_dir = Path(path_dictionary['DESIxHSC']).parent / 'MergedxMerged' 
+    autos_dir = outdir / 'MergedxMerged' 
     autos_dir.mkdir(parents=True, exist_ok=True)
 
     # now save the estimators to the provided paths
-    for i, zr in enumerate(redshift_bins):
-        if i == len(redshift_bins) - 1:
-            continue
+    for i in range(len(redshift_bin_centers)):
         for j, est in enumerate(estimators_cross[i]):
             # save the cross-correlations
+            if j not in tomo_interest:
+                if verbose:
+                    print(f'Skipping tomo bin {j+1} for redshift bin {zr:.2f}')
+                continue
             file_path = cross_dir / f'MergedxHSC_b1x{i+1}_b2x{j+1}.npy'
             if isinstance(est, float):
-                print(f'Skipping empty cross-correlation estimator for b1x{i+1}_b2x{j+1}')
-                print("It's likely this estimator has no data for the given redshift bin")
+                print(f"It's likely the b1x{i+1}_b2x{j+1} estimator has no data for the given redshift bin,\nor is not in the tomo bins of interest.")
                 continue
             est.save(file_path)
-            print(f'Saved cross-correlation estimator to {file_path}')
+            if verbose:
+                print(f'Saved cross-correlation estimator to {file_path}')
 
         # save the auto-correlations
         file_path = autos_dir / f'MergedxMerged_b1x{i+1}_b2x{i+1}.npy'
         if isinstance(estimators_autos[i], float):
-            print(f'Skipping empty auto-correlation estimator for b1x{i+1}')
-            print("It's likely this estimator has no data for the given redshift bin")
+            if verbose:
+                print(f'Skipping empty auto-correlation estimator for b1x{i+1}')
+                print("It's likely this estimator has no data for the given redshift bin")
             continue
         estimators_autos[i].save(file_path)
-        print(f'Saved auto-correlation estimator to {file_path}')
+        if verbose:
+            print(f'Saved auto-correlation estimator to {file_path}')
     
     return 
 

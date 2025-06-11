@@ -20,7 +20,7 @@ from astropy.coordinates import SkyCoord
 from pycorr import TwoPointCorrelationFunction, KMeansSubsampler
 
 import src.statistics.cosmotools as ct
-from src.statistics.corrfiles import fetch_desi_files, fetch_hsc_files, setup_crosscorr_logging
+from src.statistics.corrfiles import fetch_desi_files, fetch_hsc_files, get_zeff, setup_crosscorr_logging
 
 class CorrelationMeta(ABC):
     '''
@@ -452,7 +452,9 @@ class CorrelationMeta(ABC):
             assert not np.isnan(rm_threshold), 'rm_threshold is NaN, check the symbolic expression'
             
             self.logger.info(f'Removing {pct}th percentile: {rm_threshold:.4f}')
-            rm_tail = symexpr >= rm_threshold
+            # >= to remove the tail
+            # < to only keep the tail
+            rm_tail = symexpr < rm_threshold
             
             # zbins in HSC are 1-indexed. 0 = outside of the binning scheme
             zmask_bins = cat[self.z_bin_hsc_col]
@@ -577,7 +579,10 @@ class CorrelationMeta(ABC):
             self.logger.info(f'File {outfile} already exists, skipping')
             return
         self.outfile = outfile
-        
+
+        self.bin_index1 = bin_index1
+        self.bin_index2 = bin_index2
+
         self.set_current_redshift_masks(
             bin1=bin_index1, 
             bin2=bin_index2
@@ -624,7 +629,21 @@ class CorrelationMeta(ABC):
                 self.randoms1[self.ra_desi_col][self.z_bool_r1],
                 self.randoms1[self.dec_desi_col][self.z_bool_r1]
                 ]
-            z1 = np.mean(self.data1[self.z_desi_col][self.z_bool_d1])
+            #previously we used the mean redshift of the bin on the moc, but it's likely better to use
+            # the mean redshift of the data in the bin on the entire footprint 
+            #z1 = np.mean(self.data1[self.z_desi_col][self.z_bool_d1])
+            tz = time.time()
+            z1 = get_zeff(
+                zlow=self.bin_redshift1[self.bin_index1-1],
+                zhigh=self.bin_redshift1[self.bin_index1],
+                file_settings={
+                    'sims': self.sims,
+                    'sims_version': self.sims_version,
+                }
+            )
+            self.logger.info(
+                f'Using DESI redshift binning for {self.tgt1} : {self.bin_redshift1[self.bin_index1-1]} - {self.bin_redshift1[self.bin_index1]}'
+            )
             if self.corr_type == 'rp' or self.corr_type == 'rppi':
                 # autocorrelation case : rp1, dp1 are not used
                 dp1.append(

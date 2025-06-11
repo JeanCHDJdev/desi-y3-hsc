@@ -213,3 +213,28 @@ def calibrate_tomo_bin(path_dictionary:dict, nzs_per_tracer:dict, tomo_bin:int, 
     )
 
     return result
+
+def logit(x):
+    return np.log(x / (1 - x))
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+def compute_zk(yk, K, k):
+    return sigmoid(yk - np.log(K - (k - 1)))
+
+def compute_xk(xk_prev, zk):
+    return zk * (1 - np.sum(xk_prev))
+
+def compute_pz(nz, nzerr):
+    ## the yk here are the nz
+    ## first, compute the zk
+    zk = [compute_zk(nz[i], len(nz)-1, i) for i in range(len(nz))]
+    ## then, compute the xk
+    for i in range(len(nz)):
+        if i == 0:
+            xk = [compute_xk([0], zk[i])]
+        else:
+            xk.append(compute_xk(xk, zk[i]))
+    return xk
+
