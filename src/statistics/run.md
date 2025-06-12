@@ -119,14 +119,16 @@ setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_z
 - Cross correlations :
 OUTDIR="outputs/v7_symexpr/cross" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 QSO -t2 HSC -r1 4 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 LRG -t2 HSC -r1 4 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 BGS_ANY -t2 HSC -r1 4 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 ELGnotqso -t2 HSC -r1 4 -r2 50 -z -j
 
-OUTDIR="outputs/v8_symexpr_40/cross" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 QSO -t2 HSC -r1 4 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 LRG -t2 HSC -r1 4 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 BGS_ANY -t2 HSC -r1 4 -r2 50 -z -j && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 ELGnotqso -t2 HSC -r1 4 -r2 50 -z -j
+OUTDIR="outputs/v10/cross" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 QSO -t2 HSC -r1 4 -r2 50 -z -j -ns 64 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 LRG -t2 HSC -r1 4 -r2 50 -z -j -ns 64
+
+OUTDIR="outputs/v10/cross" && setcc&& python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 BGS_ANY -t2 HSC -r1 4 -r2 50 -z -j -ns 64 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 ELGnotqso -t2 HSC -r1 4 -r2 50 -z -j -ns 64
 
 - Auto correlation :
 NGC:
-OUTDIR="outputs/v7/autos_NGC" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 -ns 64 ELGnotqso -re 256 -r1 4 -r2 50 -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 LRG -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 BGS_ANY -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 QSO -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 1
+OUTDIR="outputs/v10/autos_NGC" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 ELGnotqso -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 LRG -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 BGS_ANY -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 1 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 QSO -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 1
 
 SGC:
-OUTDIR="outputs/v7/autos_SGC" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 -ns 64 ELGnotqso -re 256 -r1 4 -r2 50 -j -k -a 3 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 LRG -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 3 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 BGS_ANY -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 3 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 QSO -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 3
+OUTDIR="outputs/v10/autos_SGC" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 ELGnotqso -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 3 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 LRG -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 3 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 BGS_ANY -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 3 && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 QSO -ns 64 -re 256 -r1 4 -r2 50 -j -k -a 3
 
 # no jk
 OUTDIR="outputs/samez_nojk/cross" && setcc && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 QSO -t2 HSC -ns 64 -re 256 -z && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 LRG -t2 HSC -ns 64 -re 256 -z && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 BGS_ANY -t2 HSC -ns 64 -re 256 -z && python run_corr.py -o $OUTDIR -s 0 -c 200 -t1 ElGnotqso -t2 HSC -ns 64 -re 256 -z

@@ -346,14 +346,15 @@ def get_zeff(zlow, zhigh, type='DESI', **file_settings):
     file_settings = {**file_settings_defaults, **file_settings}
     if type == 'DESI':
         sv = file_settings["sims_version"]
-        jointz = f"desi_z_clustering_catalogs{f'_simsv{sv}' if  sv > 0 else ''}.fits"
+        jointz = f"/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/src/statistics/zeff/desi_z_clustering_catalogs{f'_simsv{sv}' if  sv > 0 else ''}.npy"
         if Path(jointz).exists():
-            ztbl = Table.read(jointz)
+            ztbl = np.load(jointz)
         else:
             print(f"File {jointz} does not exist, fetching DESI files...")
             tracers = ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY']
             zall = []
             for t in tracers:
+                print(f"Fetching DESI files for tracer {t}...")
                 for cap in ['NGC', 'SGC']:
                     file = fetch_desi_files(
                         t, 
@@ -363,12 +364,12 @@ def get_zeff(zlow, zhigh, type='DESI', **file_settings):
                         cap=cap
                     )
                     ztbl = fio.FITS(Path(file))[1]['Z'][:]
-                    #
                     zall.append(ztbl)
-            ztbl = vstack([Table(z) for z in zall])
-            ztbl.write(jointz)
+            ztbl = np.concatenate(zall)
+            print(f"Writing concatenated redshift table to {jointz}")
+            np.save(jointz, ztbl)
 
-        zeff = np.mean(ztbl[(ztbl >= zlow) & (ztbl < zhigh)])
+        zeff = np.mean(ztbl[(ztbl > zlow) & (ztbl < zhigh)])
         print(f"Effective redshift for DESI from {zlow} to {zhigh}: {zeff:.4f}")
         return zeff
     

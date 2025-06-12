@@ -215,13 +215,15 @@ def calibrate_tomo_bin(path_dictionary:dict, nzs_per_tracer:dict, tomo_bin:int, 
     return result
 
 def logit(x):
+    # sigmoid inverse
     return np.log(x / (1 - x))
 
 def sigmoid(x):
+    # also logit inverse
     return 1 / (1 + np.exp(-x))
 
 def compute_zk(yk, K, k):
-    return sigmoid(yk - np.log(K - (k - 1)))
+    return sigmoid(yk - np.log(K - k))
 
 def compute_xk(xk_prev, zk):
     return zk * (1 - np.sum(xk_prev))
@@ -229,7 +231,7 @@ def compute_xk(xk_prev, zk):
 def compute_pz(nz, nzerr):
     ## the yk here are the nz
     ## first, compute the zk
-    zk = [compute_zk(nz[i], len(nz)-1, i) for i in range(len(nz))]
+    zk = [compute_zk(nz[i], len(nz), i) for i in range(len(nz))]
     ## then, compute the xk
     for i in range(len(nz)):
         if i == 0:
@@ -238,3 +240,14 @@ def compute_pz(nz, nzerr):
             xk.append(compute_xk(xk, zk[i]))
     return xk
 
+def compute_pz_lowerbound(Y):
+    """
+    
+    """
+    # X = exp(Y)
+    X = np.exp(Y)
+    # p_X(x) = p_Y(exp(y)) * exp(y)
+    px = np.zeros_like(X)
+    px
+
+    return 

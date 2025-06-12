@@ -1014,7 +1014,7 @@ def merge_estimators(
     For overlapping redshift bins (where there are two tracers) combine them into a single estimator,
     and save them to the provided paths. Also combine on MOCs.
     '''
-    tracers = ['LRG', 'QSO', 'ELGnotqso', 'BGS_ANY'] # TODO : add ELGnotqso when available
+    tracers = ['LRG', 'QSO', 'ELGnotqso', 'BGS_ANY']
 
     fr_cross = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
     ngc = path_dictionary['DESI_NGC']
@@ -1124,29 +1124,29 @@ def merge_estimators(
     autos_dir.mkdir(parents=True, exist_ok=True)
 
     # now save the estimators to the provided paths
-    for i in range(len(redshift_bin_centers)):
-        for j, est in enumerate(estimators_cross[i]):
+    for i in range(1, len(redshift_bin_centers)+1):
+        for j, est in enumerate(estimators_cross[i-1], start=1):
             # save the cross-correlations
             if j not in tomo_interest:
                 if verbose:
-                    print(f'Skipping tomo bin {j+1} for redshift bin {zr:.2f}')
+                    print(f'Skipping tomo bin {j} for redshift bin {zr:.2f}')
                 continue
-            file_path = cross_dir / f'MergedxHSC_b1x{i+1}_b2x{j+1}.npy'
+            file_path = cross_dir / f'MergedxHSC_b1x{i}_b2x{j}.npy'
             if isinstance(est, float):
-                print(f"It's likely the b1x{i+1}_b2x{j+1} estimator has no data for the given redshift bin,\nor is not in the tomo bins of interest.")
+                print(f"It's likely the b1x{i}_b2x{j} estimator has no data for the given redshift bin,\nor is not in the tomo bins of interest.")
                 continue
             est.save(file_path)
             if verbose:
                 print(f'Saved cross-correlation estimator to {file_path}')
 
         # save the auto-correlations
-        file_path = autos_dir / f'MergedxMerged_b1x{i+1}_b2x{i+1}.npy'
-        if isinstance(estimators_autos[i], float):
+        file_path = autos_dir / f'MergedxMerged_b1x{i}_b2x{i}.npy'
+        if isinstance(estimators_autos[i-1], float):
             if verbose:
                 print(f'Skipping empty auto-correlation estimator for b1x{i+1}')
                 print("It's likely this estimator has no data for the given redshift bin")
             continue
-        estimators_autos[i].save(file_path)
+        estimators_autos[i-1].save(file_path)
         if verbose:
             print(f'Saved auto-correlation estimator to {file_path}')
     

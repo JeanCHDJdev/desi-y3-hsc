@@ -73,7 +73,7 @@ class CorrelationMeta(ABC):
 
     # use_zbin will override this choice
     #bins_hsc = np.arange(0, 2.9, 0.1) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
-    bins_hsc = np.arange(0.9, 1.5, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     # if mini_bins : 
     #bins_hsc = np.arange(0, 2.825, 0.025)
 
@@ -440,21 +440,24 @@ class CorrelationMeta(ABC):
 
         if self.use_zbin:
             # symbolic model to regress out the tail if necessary 
-            stddnnz = cat['dnnz_photoz_std_best'][:]
-            mean_mode = cat['dnnz_photoz_mean'][:] - cat['dnnz_photoz_mode'][:]
-            symexpr = ((mean_mode + stddnnz) * 0.5395833) - 0.043832403
-            #import ipdb; ipdb.set_trace()
-            assert len(symexpr) == len(cat), 'symexpr and cat have different lengths'
+            use_symexpr = False
+            if use_symexpr:
+                self.logger.info('Calculating symbolic expression for HSC data')
+                stddnnz = cat['dnnz_photoz_std_best'][:]
+                mean_mode = cat['dnnz_photoz_mean'][:] - cat['dnnz_photoz_mode'][:]
+                symexpr = ((mean_mode + stddnnz) * 0.5395833) - 0.043832403
+                #import ipdb; ipdb.set_trace()
+                assert len(symexpr) == len(cat), 'symexpr and cat have different lengths'
 
-            self.logger.info(f'Calculating symbolic expression for HSC data {symexpr[:5]}')
-            pct = 60 # remove 40%
-            rm_threshold = np.percentile(symexpr[~np.isnan(symexpr)], pct)
-            assert not np.isnan(rm_threshold), 'rm_threshold is NaN, check the symbolic expression'
-            
-            self.logger.info(f'Removing {pct}th percentile: {rm_threshold:.4f}')
-            # >= to remove the tail
-            # < to only keep the tail
-            rm_tail = symexpr < rm_threshold
+                self.logger.info(f'Calculating symbolic expression for HSC data {symexpr[:5]}')
+                pct = 60 # remove 40%
+                rm_threshold = np.percentile(symexpr[~np.isnan(symexpr)], pct)
+                assert not np.isnan(rm_threshold), 'rm_threshold is NaN, check the symbolic expression'
+                
+                self.logger.info(f'Removing {pct}th percentile: {rm_threshold:.4f}')
+                # >= to remove the tail
+                # < to only keep the tail
+                rm_tail = symexpr < rm_threshold
             
             # zbins in HSC are 1-indexed. 0 = outside of the binning scheme
             zmask_bins = cat[self.z_bin_hsc_col]
@@ -472,9 +475,13 @@ class CorrelationMeta(ABC):
             bad_quality = zmask_bins == 0
 
             self.logger.info(f'Removed sources because of bad quality : {np.sum(inside_tomo_range & bad_quality)/len(cat):.2%} of the data')
-            self.logger.info(f'Removed sources because of tail : {np.sum(rm_tail)/len(cat):.2%} of the data')
             # Zero out these values
-            zmask_data[(inside_tomo_range & bad_quality) | rm_tail] = 0
+            if use_symexpr:
+                # if we skip the symbolic expression, we just remove the bad quality sources
+                self.logger.info(f'Removed sources because of tail : {np.sum(rm_tail)/len(cat):.2%} of the data')
+                zmask_data[(inside_tomo_range & bad_quality) | rm_tail] = 0
+            else:
+                zmask_data[inside_tomo_range & bad_quality] = 0
             assert len(zmask_data[zmask_data > 0]) > 0, 'No data left after masking HSC data'
 
         else:
