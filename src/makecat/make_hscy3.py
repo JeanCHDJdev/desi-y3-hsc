@@ -48,7 +48,7 @@ def make_hscy3_cat(
         field_names = ["GAMA09H", "GAMA15H", "HECTOMAP", "VVDS", "WIDE12H", "XMM"],
         use_bmode_mask = True,
         add_photz = True,
-        photoz_method = "dnnz",
+        photoz_method = ["dnnz", "mizuki"],
         check_all_galaxies = False,
     ):
     final_lenscat = Table()
@@ -59,22 +59,23 @@ def make_hscy3_cat(
         if use_bmode_mask:
             lenscat = lenscat[lenscat["b_mode_mask"]]
         if add_photz:
-            secondary_cats = glob(f"{fpath_secondary}{field_name}_tracts/*_pz.fits")
+            columns_pz = ['object_id']
+            for method in photoz_method:
+                secondary_cats = glob(f"{fpath_secondary}{field_name}_tracts/*_pz.fits")
 
-            pz_prefix = f"{photoz_method}_photoz_"
-            columns_pz = [
-                'object_id',
-                pz_prefix + "best",
-                pz_prefix + "err68_min",
-                pz_prefix + "err68_max",
-                pz_prefix + "err95_min",
-                pz_prefix + "err95_max",
-                pz_prefix + "risk_best",
-                pz_prefix + "std_best",
-                pz_prefix + "mode",
-                pz_prefix + "mean",
-                pz_prefix + "median"
-            ]
+                pz_prefix = f"{method}_photoz_"
+                columns_pz.extend([
+                    pz_prefix + "best",
+                    pz_prefix + "err68_min",
+                    pz_prefix + "err68_max",
+                    pz_prefix + "err95_min",
+                    pz_prefix + "err95_max",
+                    pz_prefix + "risk_best",
+                    pz_prefix + "std_best",
+                    pz_prefix + "mode",
+                    pz_prefix + "mean",
+                    pz_prefix + "median"
+                ])
             mag_columns = [
                 'object_id',
                 'i_cmodel_mag',
@@ -169,18 +170,19 @@ def make_hscy3_cat(
             f'forced_{mag}_cm_flag'
         ]
     if add_photz:
-        all_columns += [
-            f"{photoz_method}_photoz_best",
-            f"{photoz_method}_photoz_err68_min",
-            f"{photoz_method}_photoz_err68_max",
-            f"{photoz_method}_photoz_err95_min",
-            f"{photoz_method}_photoz_err95_max",
-            f"{photoz_method}_photoz_risk_best",
-            f"{photoz_method}_photoz_std_best",
-            f"{photoz_method}_photoz_mode",
-            f"{photoz_method}_photoz_mean",
-            f"{photoz_method}_photoz_median"
-        ]
+        for method in photoz_method:
+            all_columns += [
+                f"{method}_photoz_best",
+                f"{method}_photoz_err68_min",
+                f"{method}_photoz_err68_max",
+                f"{method}_photoz_err95_min",
+                f"{method}_photoz_err95_max",
+                f"{method}_photoz_risk_best",
+                f"{method}_photoz_std_best",
+                f"{method}_photoz_mode",
+                f"{method}_photoz_mean",
+                f"{method}_photoz_median"
+            ]
     final_lenscat.keep_columns(all_columns)
 
     final_lenscat['e_2'] = -final_lenscat['e_2']
@@ -192,6 +194,6 @@ def make_hscy3_cat(
 if __name__=="__main__":
     final_lenscat = make_hscy3_cat()
     final_lenscat.write(
-        "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat_with_mode_etc.fits",
+        "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat_mizuki_dnnz.fits",
         overwrite=True
         )
