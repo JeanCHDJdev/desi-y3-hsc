@@ -4,6 +4,7 @@ Inference pipeline for the results.
 
 import numpy as np
 import pandas as pd
+import astropy.cosmology as acosmo
 import fitsio as fio
 
 from pathlib import Path
@@ -1143,7 +1144,7 @@ def merge_estimators(
         file_path = autos_dir / f'MergedxMerged_b1x{i}_b2x{i}.npy'
         if isinstance(estimators_autos[i-1], float):
             if verbose:
-                print(f'Skipping empty auto-correlation estimator for b1x{i+1}')
+                print(f'Skipping empty auto-correlation estimator for b1x{i}')
                 print("It's likely this estimator has no data for the given redshift bin")
             continue
         estimators_autos[i-1].save(file_path)
@@ -1151,6 +1152,39 @@ def merge_estimators(
             print(f'Saved auto-correlation estimator to {file_path}')
     
     return 
+
+def magnification_correction(
+        cosmology : acosmo, 
+        alpha_model_p : callable, 
+        alpha_model_s : callable, 
+        bias_model_p : callable, 
+        bias_model_s : callable, 
+        np_z : np.ndarray, 
+        zindex : int, 
+        zvalues : np.ndarray
+        ):
+    
+    def _Dn_ij(zi, zj):
+        c = 299792.458  # speed of light in km/s
+        chi = cosmology.comoving_transverse_distance
+        cosmofactor = (3 * cosmology.H0.value**2 * cosmology.Om0.value / (c**2))
+        cosmotrans = ((chi(zi)-chi(zj))/chi(zi))*chi(zj) # todo : include delta_chi_j ? (Gatti. et al.)
+        return  cosmofactor * (1+zi) * cosmotrans # 1+zi = 1/a(zi)
+    
+    zi = zvalues[zindex]
+    magnification = 0
+    magnification += np_z[zindex] 
+    sum1 = 0
+    for j in range(len(np_z)):
+        if j > zindex:
+            sum1 += np_z[j] * _Dn_ij(cosmology, zi, zvalues[j])
+    sum2 = 0
+    for j in range(len(np_z)):
+        if j > zindex:
+            sum2 += np_z[zindex] * _Dn_ij(cosmology, zi, zvalues[j])
+    magnification += alpha_model_p(zi) * sum1 / bias_model_p(zi)
+    magnification += alpha_model_s(zi) * sum2 / bias_model_s(zi)
+    return magnification
 
         
        
