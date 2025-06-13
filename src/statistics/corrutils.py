@@ -65,15 +65,15 @@ class CorrelationMeta(ABC):
     bins_rppi_s = np.linspace(0., 200., 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
-    bins_bgs = np.arange(0.0, 0.55, 0.05) # 0 < z < 0.5
-    bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.1
-    bins_elg = np.arange(0.8, 1.65, 0.05) # 0.8 < z < 1.6 in redshift distribution
+    bins_bgs = np.arange(0.0, 0.54, 0.04) # 0 < z < 0.5
+    bins_lrg = np.arange(0.4, 1.14, 0.04) # 0.4 < z < 1.1
+    bins_elg = np.arange(0.8, 1.64, 0.04) # 0.8 < z < 1.6 in redshift distribution
     #bins_elg = np.array([0.8, 0.9, 1.0, 1.1]) # for now reduce bin for compute power
-    bins_qso = np.arange(0.8, 2.85, 0.05) # 0.9 < z < 2.8
+    bins_qso = np.arange(0.8, 2.54, 0.04) # 0.9 < z < 2.8
 
     # use_zbin will override this choice
     #bins_hsc = np.arange(0, 2.9, 0.1) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
-    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    bins_hsc = np.arange(0., 2.412, 0.012) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     # if mini_bins : 
     #bins_hsc = np.arange(0, 2.825, 0.025)
 
@@ -422,7 +422,12 @@ class CorrelationMeta(ABC):
             moc=self.moc if not self.skip_moc else None,
             distance_col=self.distance_col,
             operator=self.w_operator,
-            extra_cols=['dnnz_photoz_std_best', 'dnnz_photoz_mean', 'dnnz_photoz_mode'] if not self.sims else None
+            extra_cols=[
+                'mizuki_photoz_err95_max', 
+                'mizuki_photoz_err95_min',
+                'dnnz_photoz_err95_max',
+                'dnnz_photoz_err95_min'
+                ] if not self.sims else None
             )
         self.logger.info(f'Read HSC data in {time.time()-tih:.2f} seconds ({len(cat)} rows)')
 
@@ -446,7 +451,7 @@ class CorrelationMeta(ABC):
                 stddnnz = cat['dnnz_photoz_std_best'][:]
                 mean_mode = cat['dnnz_photoz_mean'][:] - cat['dnnz_photoz_mode'][:]
                 symexpr = ((mean_mode + stddnnz) * 0.5395833) - 0.043832403
-                #import ipdb; ipdb.set_trace()
+
                 assert len(symexpr) == len(cat), 'symexpr and cat have different lengths'
 
                 self.logger.info(f'Calculating symbolic expression for HSC data {symexpr[:5]}')
@@ -472,16 +477,29 @@ class CorrelationMeta(ABC):
             ztomographic = [0.3, 1.5]
             # Mask redshifts inside tomographic range but with bad quality (tldr : calibration cut)
             inside_tomo_range = (zvalues > ztomographic[0]) & (zvalues <= ztomographic[1])
+            inside_bin1and2 = (zvalues > 0.3) & (zvalues <= 0.9)
             bad_quality = zmask_bins == 0
 
-            self.logger.info(f'Removed sources because of bad quality : {np.sum(inside_tomo_range & bad_quality)/len(cat):.2%} of the data')
+            # implementing the fiducial cut with the difference in
+            diffmizuki = cat['mizuki_photoz_err95_max'][:] - cat['mizuki_photoz_err95_min'][:]
+            diffdnnz = cat['dnnz_photoz_err95_max'][:] - cat['dnnz_photoz_err95_min'][:]
+            quality_mask = (diffmizuki < 2.7) & (diffdnnz < 2.7)
+
+            # TODO : figure this out ???????
+            #assert inside_bin1and2 & bad_quality == inside_bin1and2 & quality_mask, (
+            #    'inside_tomo_range & bad_quality does not match quality_mask, check the calibration cut'
+            #    )
+            self.logger.info(f'Removed sources because of bad quality from cat : {np.sum(inside_bin1and2 & bad_quality)/len(cat[inside_bin1and2]):.2%} of the data')
+            self.logger.info(f'Removed sources because of bad quality mask : {np.sum(inside_bin1and2 & ~quality_mask)/len(cat[inside_bin1and2]):.2%} of the data')
+
             # Zero out these values
             if use_symexpr:
                 # if we skip the symbolic expression, we just remove the bad quality sources
                 self.logger.info(f'Removed sources because of tail : {np.sum(rm_tail)/len(cat):.2%} of the data')
                 zmask_data[(inside_tomo_range & bad_quality) | rm_tail] = 0
             else:
-                zmask_data[inside_tomo_range & bad_quality] = 0
+                # Apply the quality cut only if z <= 0.9 (e.g bin 1, 2 or below)
+                zmask_data[~quality_mask & (zvalues <= 0.9)] = 0
             assert len(zmask_data[zmask_data > 0]) > 0, 'No data left after masking HSC data'
 
         else:
