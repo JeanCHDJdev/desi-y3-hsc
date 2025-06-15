@@ -73,7 +73,7 @@ class CorrelationMeta(ABC):
 
     # use_zbin will override this choice
     #bins_hsc = np.arange(0, 2.9, 0.1) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
-    bins_hsc = np.arange(0., 2.412, 0.012) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    bins_hsc = np.arange(0., 2.4, 0.1) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
     # if mini_bins : 
     #bins_hsc = np.arange(0, 2.825, 0.025)
 
@@ -661,6 +661,7 @@ class CorrelationMeta(ABC):
             z1 = get_zeff(
                 zlow=self.bin_redshift1[self.bin_index1-1],
                 zhigh=self.bin_redshift1[self.bin_index1],
+                type='DESI',
                 file_settings={
                     'sims': self.sims,
                     'sims_version': self.sims_version,
@@ -687,7 +688,15 @@ class CorrelationMeta(ABC):
                 self.randoms1[self.ra_hsc_randoms_col],
                 self.randoms1[self.dec_hsc_randoms_col]
                 ]   
-            z1 = np.mean(self.data1[self.z_hsc_col][self.z_bool_d1])
+            z1 = get_zeff(
+                zlow=self.bin_redshift1[self.bin_index1-1],
+                zhigh=self.bin_redshift1[self.bin_index1],
+                type='HSC',
+                file_settings={
+                    'sims': self.sims,
+                    'sims_version': self.sims_version,
+                }
+            )
             if self.corr_type == 'rp' or self.corr_type == 'rppi':
                 # autocorrelation case : rp1, dp1 are not used
                 dp1.append(

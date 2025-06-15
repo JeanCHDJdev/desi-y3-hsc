@@ -475,7 +475,6 @@ def wpp(path:str | Path, bin_index:int, scale_cuts:list, rebin:int=1, integratio
         beta=-1, 
         rebin=rebin,
         integration=integration,
-        method='landy-szalay', 
         skipped_ids=skipped_ids,
         scale_cuts=scale_cuts
         )
@@ -506,7 +505,6 @@ def wsp(path:str | Path, tracer:str, tomo_bin:int, fine_bin:int, scale_cuts:list
             skipped_ids.append(i)
             continue
     zloc = (bins_tracer[fine_bin-1] + bins_tracer[fine_bin])/2
-    #print(f'wsp : bin_index : {fine_bin}, zloc : {zloc}')
 
     assert len(estimators) > 0, 'HSCxDESI estimators not found'
     return single_bin_corr(
@@ -524,7 +522,6 @@ def compute_npz(
         path_dictionary, 
         tracer, 
         fine_bin, 
-        hsc_correction_bin, 
         tomo_bin, 
         scale_cuts, 
         sigmaj_correction,
@@ -569,25 +566,13 @@ def compute_npz(
     # let's grab the binning scheme that we are using
     fr = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
     if tracer == 'Merged':
-        fine_redshift = np.arange(
-            0.0, 2.7 + 0.05, 0.05
-            )
+        fine_redshift = _get_fine_redshift_bins(fr)
     else:
         fine_redshift = fr.get_bins(tracer)
 
     # this is the redshift we are at with the desi tracer
-    zloc = (fine_redshift[fine_bin-1] + fine_redshift[fine_bin])/2
+    zloc = (fine_redshift[fine_bin] + fine_redshift[fine_bin-1])/2
     deltaz = fine_redshift[fine_bin] - fine_redshift[fine_bin-1]
-
-    #TODO : implement micro corrections on this ?
-    #wpp_meas, wpp_err, _ = wpp(
-    #    path=path_dictionary['HSC'], 
-    #    scale_cuts=ct.arcsec2hMpc(np.array(scale_cuts)*3600, zloc),#/(1 + zloc),
-    #    bin_index=hsc_correction_bin,
-    #    rebin=rebin,
-    #    )
-    wpp_meas = 1
-    wpp_err = 1
 
     wss_meas, wss_err, _ = wss(
         path_NGC=path_dictionary['DESI_NGC'], 
@@ -596,7 +581,7 @@ def compute_npz(
         tracer2=tracer, 
         bin_index1=fine_bin,
         bin_index2=fine_bin,
-        scale_cuts=scale_cuts, #ct.arcsec2hMpc(np.array(scale_cuts)*3600, zloc),#/(1 + zloc),
+        scale_cuts=scale_cuts,
         rebin=rebin,
         integration='single-bin'
     )
@@ -615,16 +600,28 @@ def compute_npz(
         y=wss_meas, 
         yerr=wss_err
         ) / deltaz
-    result = wsp_meas / (deltaz * np.sqrt((wss_meas) * (wpp_meas * sigmaj_correction)))
+
+    #scale cut = [1, 5]
+    gamma = 0.4539423871141212
+    delta_gamma = 0.03450372293660535
+
+    # if no correction
+    gamma = 0
+    delta_gamma = 0
+
+    result = wsp_meas / (deltaz * np.sqrt((wss_meas)) * (1 + zloc) ** gamma)
+    combined_err = np.sqrt(
+        (combined_err / ((1 + zloc) ** gamma))**2 
+        + np.log(1+zloc) * combined_err * delta_gamma /((1 + zloc) ** gamma)
+        )
     if return_chunks:
-        return wsp_meas, wsp_err, wpp_meas, wpp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
+        return wsp_meas, wsp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
     return result, combined_err
 
 def compute_npz_merged(
         path_dictionary, 
         tracer, 
-        fine_bin, 
-        hsc_correction_bin, 
+        fine_bin,  
         tomo_bin, 
         scale_cuts, 
         sigmaj_correction,
@@ -632,10 +629,8 @@ def compute_npz_merged(
         return_chunks=False, 
         verbose=False
         ):
-
-    assert tomo_bin in [1, 2, 3, 4], f'tomo_bin {tomo_bin} not a valid bin.'
     
-    fine_redshift = np.arange(0.0, 2.7 + 0.05, 0.05)
+    fine_redshift = _get_fine_redshift_bins(corrf.CorrFileReader(path_dictionary['DESIxHSC']))
 
     # this is the redshift we are at with the desi tracer
     zloc = (fine_redshift[fine_bin-1] + fine_redshift[fine_bin])/2
@@ -675,9 +670,21 @@ def compute_npz_merged(
         yerr=wss_err
         ) / deltaz
     
-    result = wsp_meas / (deltaz * np.sqrt((wss_meas) * (wpp_meas * sigmaj_correction)))
+    #scale cut = [1, 5]
+    gamma = 0.4539423871141212
+    delta_gamma = 0.03450372293660535
+
+    # if no correction
+    # gamma = 0
+    # delta_gamma = 0
+
+    result = wsp_meas / (deltaz * np.sqrt((wss_meas)) * (1 + zloc) ** gamma)
+    combined_err = np.sqrt(
+        (combined_err / ((1 + zloc) ** gamma))**2 
+        + np.log(1+zloc) * combined_err * delta_gamma /((1 + zloc) ** gamma)
+        )
     if return_chunks:
-        return wsp_meas, wsp_err, wpp_meas, wpp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
+        return wsp_meas, wsp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
     return result, combined_err
 
 def full_npz_tomo(
@@ -731,12 +738,12 @@ def full_npz_tomo(
     fr_hsc = corrf.CorrFileReader(path_dictionary['HSC'])
 
     if tracer == 'Merged':
-        fine_redshift = np.arange(
-            0.0, 2.4 + 0.05, 0.05
-            )
+        fine_redshift = _get_fine_redshift_bins(fr)
     else:
         fine_redshift = fr.get_bins(tracer)
     hsc_redshift = fr_hsc.get_bins('HSC')
+    if verbose:
+        print(f"Using fine redshift : {fine_redshift}")
 
     # our calibration sample (wpp at zj where j is the fine bin index)
     # get the indices corresponding to the fine bins in the hsc_redshift
@@ -759,19 +766,20 @@ def full_npz_tomo(
     nz = []
     nz_err = []
     data = []
+    fine_zvalues = (fine_redshift[1:] + fine_redshift[:-1])/2
 
     if tracer == 'Merged':
         print(f'Using merged method for tracer {tracer} and tomo bin {tomo_bin}.')
         func = compute_npz_merged
     else:
         func = compute_npz
-    for i in range(1, len(fine_redshift)):
+    for i in range(1, len(fine_zvalues)):
         if return_chunks:
             d = func(
                 path_dictionary, 
                 tracer=tracer,  
                 fine_bin=i, 
-                hsc_correction_bin=hsc_bins[i],
+                #hsc_correction_bin=hsc_bins[i],
                 sigmaj_correction=sjcorr[i],
                 tomo_bin=tomo_bin,
                 scale_cuts=scale_cuts,
@@ -785,7 +793,7 @@ def full_npz_tomo(
                     path_dictionary, 
                     tracer=tracer,  
                     fine_bin=i, 
-                    hsc_correction_bin=hsc_bins[i],
+                    #hsc_correction_bin=hsc_bins[i],
                     sigmaj_correction=1,
                     tomo_bin=tomo_bin,
                     scale_cuts=scale_cuts,
@@ -800,6 +808,26 @@ def full_npz_tomo(
     else:
         return np.array(nz), np.array(nz_err)
     
+def _get_fine_redshift_bins(fr: corrf.CorrFileReader):
+    dzall = []
+    mint = 1089 # cmb redshift should be high enough
+    maxt = 0
+    for t in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']:
+        bin_t = fr.get_bins(t)
+        mint = min(mint, min(bin_t))
+        maxt = max(maxt, max(bin_t)) 
+        dz_t = np.diff(bin_t)
+        assert all(np.isclose(dz_t, dz_t[0]))
+        dzall.append(dz_t[0])
+        del dz_t
+    assert all(np.isclose(dzall, dzall[0]))
+    dz = dzall[0]
+    del dzall
+    fine_redshift = np.arange(
+        mint, maxt + dz, dz
+        )
+    return fine_redshift
+    
 def compute_rcc(
         path_dictionary, 
         tracer1,
@@ -813,7 +841,6 @@ def compute_rcc(
     '''
     Computes r_cc coefficient for the provided tracer and binning.
     This is broadly similar to n(z) but there is no integration, we grab all scales.
-    There is also no sigmaj correction applied to the wpp measurement.
 
     Refer to full_rcc for the parameters.
     '''
@@ -882,9 +909,6 @@ def compute_rcc(
             rebin=rebin,
             scale_cuts=scale_cuts
         )
-
-    if verbose:
-        pass
     
     wsp_meas = np.array(w12_meas)
     wss_meas = np.array(w11_meas)
@@ -999,15 +1023,16 @@ def full_rcc(
                 )
             )
         except AssertionError as e:
-            #print(f'AssertionError for tracer1_bins {tracer1_bins[i]} and tracer2_bins {tracer2_bins[i]}')
+            # debug
             print(e)
-            continue
+            pass
+
     return rcc
 
 def merge_estimators(
         path_dictionary, 
         outdir, 
-        tomo_interest=[1, 2, 3, 4], 
+        tomo_interest='all', 
         verbose=False,
         show_progress=True
         ):
@@ -1033,29 +1058,18 @@ def merge_estimators(
         'At least one of auto_NGC or auto_SGC must be provided.'
     )
 
-    tracer_bins = {t: fr_cross.get_bins(t) for t in tracers}
+    if tomo_interest == 'all':
+        ## get all tomgraphic bins available in the cross-correlations
+        tomo_interest = fr_cross.get_bins('HSC')
+        # transform to 1-indexed bins
+        tomo_interest = np.arange(1, len(tomo_interest), dtype=int)
+        if verbose:
+            print(f'Using all tomographic bins : {tomo_interest}')
 
-    redshift_range = [
-        np.min([np.min(tracer_bins[t]) for t in tracers]), 
-        np.max([np.max(tracer_bins[t]) for t in tracers])
-    ]
-    tracer_width = []
-    for t in tracers:
-        redshift_width = np.diff(tracer_bins[t])
-        assert np.all(np.isclose(redshift_width, redshift_width[0])), (
-            f'redshift bins for tracer {t} are not the same size : {redshift_width}'
-        )
-        tracer_width.append(redshift_width[0])
-    assert np.all(np.isclose(tracer_width, tracer_width[0])), (
-        f'tracer widths are not the same size : {tracer_width}'
-    )
-    dz = tracer_width[0]
-    redshift_bins = np.arange(
-        redshift_range[0], 
-        redshift_range[1] + dz, 
-        dz
-    )
+    redshift_bins = _get_fine_redshift_bins(fr_cross)
+    tracer_bins = {t: fr_cross.get_bins(t) for t in tracers}
     redshift_bin_centers = 0.5 * (redshift_bins[:-1] + redshift_bins[1:])
+    dz = redshift_bins[1] - redshift_bins[0]
 
     estimators_cross = []
     estimators_autos = []
@@ -1064,7 +1078,7 @@ def merge_estimators(
             if (zindr) % (len(redshift_bins) // 10) == 0:
                 print(f'Processing redshift bin {zindr} (Completion : {(zindr+1)/len(redshift_bin_centers):.2%})')
         # paths_cross also has to respect tomographic bins, so we will have a list of lists
-        paths_cross = [[] for _ in range(4)]  # 4 tomographic bins for HSC
+        paths_cross = [[] for _ in range(len(tomo_interest))]  # 4 tomographic bins for HSC
         paths_autos = []
         for t in tracers:
             # find the index of bint where the two tracers match
@@ -1090,9 +1104,10 @@ def merge_estimators(
                         # combine on MOCs for this tomo bin
                         paths_cross[hsc_tomo-1].extend(paths_tomo_cross)   
 
-        if verbose:
-            print("Paths for cross-correlations:", paths_cross)
-            print("Paths for auto-correlations:", paths_autos)
+        #if verbose:
+        #    print("Paths for cross-correlations:", paths_cross)
+        #    print("Paths for auto-correlations:", paths_autos)
+        
         estimators_cross.append([
             np.sum(
                 [TwoPointEstimator.load(p).normalize() for p in paths]
@@ -1106,7 +1121,7 @@ def merge_estimators(
             )
         )
 
-    assert len(estimators_cross[-1]) == 4, (
+    assert len(estimators_cross[-1]) == len(tomo_interest), (
         f'estimators_cross[-1] should have 4 tomographic bins, got {len(estimators_cross[-1])}'
     )
     assert len(estimators_autos) == len(estimators_cross), (
@@ -1182,6 +1197,7 @@ def magnification_correction(
     for j in range(len(np_z)):
         if j > zindex:
             sum2 += np_z[zindex] * _Dn_ij(cosmology, zi, zvalues[j])
+    # TODO: finer implementation ?
     magnification += alpha_model_p(zi) * sum1 / bias_model_p(zi)
     magnification += alpha_model_s(zi) * sum2 / bias_model_s(zi)
     return magnification

@@ -370,11 +370,14 @@ def get_zeff(zlow, zhigh, type='DESI', **file_settings):
             np.save(jointz, ztbl)
 
         zeff = np.mean(ztbl[(ztbl > zlow) & (ztbl < zhigh)])
-        print(f"Effective redshift for DESI from {zlow} to {zhigh}: {zeff:.4f}")
-        return zeff
     
     elif type == 'HSC':
-        raise NotImplementedError(
-            "HSC effective redshift calculation is not implemented yet. "
-            "Please provide a valid type."
-            )
+        ztbl = np.load(
+            '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/src/statistics/zeff/hsc_z_clustering_catalogs.npy'
+        )
+        zeff = np.mean(
+            ztbl[(ztbl > zlow) & (ztbl < zhigh)]
+        )
+
+    print(f"Effective redshift for DESI from {zlow} to {zhigh}: {zeff:.4f}")
+    return zeff

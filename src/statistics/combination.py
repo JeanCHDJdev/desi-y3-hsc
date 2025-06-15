@@ -68,12 +68,29 @@ def trapz_weights(x):
 def combine_error_bars(x, xerr, y, yerr):
     '''
     Combine error bars for two samples with z+/-zerr=(x+/-xerr)/sqrt(y+/-yerr)
-    Returns z, zerr.
+    Returns zerr.
     '''
+    x = np.asarray(x)
+    y = np.asarray(y)
+    xerr = np.asarray(xerr)
+    yerr = np.asarray(yerr)
     return np.sqrt(
         (xerr/np.sqrt(y))**2
          + (((x/(2*np.sqrt(y)))/np.abs(y))*yerr)**2
         )
+
+def combine_error_bars_mult(x, xerr, y, yerr):
+    '''
+    Combine error bars for two samples with z+/-zerr=sqrt((x+/-xerr)*(y+/-yerr))
+    Returns z, zerr.
+    '''
+    x = np.asarray(x)
+    y = np.asarray(y)
+    xerr = np.asarray(xerr)
+    yerr = np.asarray(yerr)
+    return np.sqrt(
+        1/(4*x*y)*(x*yerr + y*xerr)**2
+    )
 
 
 ### ------------------------------------------- ###
