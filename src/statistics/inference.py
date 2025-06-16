@@ -524,7 +524,8 @@ def compute_npz(
         fine_bin, 
         tomo_bin, 
         scale_cuts, 
-        sigmaj_correction,
+        do_bias_correction=True,
+        sigmaj_correction=None,
         rebin=1,
         return_chunks=False, 
         verbose=False
@@ -599,15 +600,15 @@ def compute_npz(
         xerr=wsp_err, 
         y=wss_meas, 
         yerr=wss_err
-        ) / deltaz
+        )
+    combined_err /= deltaz
 
-    #scale cut = [1, 5]
-    gamma = 0.4539423871141212
-    delta_gamma = 0.03450372293660535
-
-    # if no correction
-    gamma = 0
-    delta_gamma = 0
+    if do_bias_correction:
+        gamma, delta_gamma = _get_bias_correction(scale_cuts)
+    else:
+        # if no bias correction, we assume gamma = 0
+        gamma = 0
+        delta_gamma = 0
 
     result = wsp_meas / (deltaz * np.sqrt((wss_meas)) * (1 + zloc) ** gamma)
     combined_err = np.sqrt(
@@ -624,7 +625,8 @@ def compute_npz_merged(
         fine_bin,  
         tomo_bin, 
         scale_cuts, 
-        sigmaj_correction,
+        do_bias_correction=True,
+        sigmaj_correction=None,
         rebin=1,
         return_chunks=False, 
         verbose=False
@@ -635,9 +637,6 @@ def compute_npz_merged(
     # this is the redshift we are at with the desi tracer
     zloc = (fine_redshift[fine_bin-1] + fine_redshift[fine_bin])/2
     deltaz = fine_redshift[fine_bin] - fine_redshift[fine_bin-1]
-
-    wpp_meas = 1
-    wpp_err = 1
 
     frss = corrf.CorrFileReader(path_dictionary['MergedxMerged'])
     file_ss = frss.get_file(fine_bin, fine_bin, tracer, tracer, "Merged")
@@ -650,6 +649,13 @@ def compute_npz_merged(
         method='landy-szalay', 
         scale_cuts=scale_cuts
     )
+    
+    if do_bias_correction:
+        gamma, delta_gamma = _get_bias_correction(scale_cuts)
+    else:
+        # if no bias correction, we assume gamma = 0
+        gamma = 0
+        delta_gamma = 0
 
     frsp = corrf.CorrFileReader(path_dictionary['MergedxHSC'])
     file_sp = frsp.get_file(fine_bin, tomo_bin, tracer, 'HSC', "Merged")
@@ -675,8 +681,8 @@ def compute_npz_merged(
     delta_gamma = 0.03450372293660535
 
     # if no correction
-    # gamma = 0
-    # delta_gamma = 0
+    gamma = 0
+    delta_gamma = 0
 
     result = wsp_meas / (deltaz * np.sqrt((wss_meas)) * (1 + zloc) ** gamma)
     combined_err = np.sqrt(
@@ -692,6 +698,7 @@ def full_npz_tomo(
         tracer, 
         tomo_bin, 
         scale_cuts, 
+        do_bias_correction=True,
         sigmaj_corrections=None,
         rebin=1,
         verbose=False, 
@@ -766,19 +773,19 @@ def full_npz_tomo(
     nz = []
     nz_err = []
     data = []
-    fine_zvalues = (fine_redshift[1:] + fine_redshift[:-1])/2
 
     if tracer == 'Merged':
         print(f'Using merged method for tracer {tracer} and tomo bin {tomo_bin}.')
         func = compute_npz_merged
     else:
         func = compute_npz
-    for i in range(1, len(fine_zvalues)):
+    for i in range(1, len(fine_redshift)):
         if return_chunks:
             d = func(
                 path_dictionary, 
                 tracer=tracer,  
                 fine_bin=i, 
+                do_bias_correction=do_bias_correction,
                 #hsc_correction_bin=hsc_bins[i],
                 sigmaj_correction=sjcorr[i],
                 tomo_bin=tomo_bin,
@@ -793,6 +800,7 @@ def full_npz_tomo(
                     path_dictionary, 
                     tracer=tracer,  
                     fine_bin=i, 
+                    do_bias_correction=do_bias_correction,
                     #hsc_correction_bin=hsc_bins[i],
                     sigmaj_correction=1,
                     tomo_bin=tomo_bin,
@@ -824,9 +832,19 @@ def _get_fine_redshift_bins(fr: corrf.CorrFileReader):
     dz = dzall[0]
     del dzall
     fine_redshift = np.arange(
-        mint, maxt + dz, dz
+        # we don't append dz because maxt+dz is the true max of the bins
+        mint, maxt, dz
         )
     return fine_redshift
+
+def _get_bias_correction(scale_cuts):
+    if scale_cuts == [1, 5]:
+        #scale cut = [1, 5]
+        gamma = 0.4539423871141212
+        delta_gamma = 0.03450372293660535
+    else:
+        raise NotImplementedError
+    return gamma, delta_gamma
     
 def compute_rcc(
         path_dictionary, 
@@ -1069,7 +1087,7 @@ def merge_estimators(
     redshift_bins = _get_fine_redshift_bins(fr_cross)
     tracer_bins = {t: fr_cross.get_bins(t) for t in tracers}
     redshift_bin_centers = 0.5 * (redshift_bins[:-1] + redshift_bins[1:])
-    dz = redshift_bins[1] - redshift_bins[0]
+    dz = np.mean(np.diff(redshift_bins))
 
     estimators_cross = []
     estimators_autos = []
@@ -1078,7 +1096,7 @@ def merge_estimators(
             if (zindr) % (len(redshift_bins) // 10) == 0:
                 print(f'Processing redshift bin {zindr} (Completion : {(zindr+1)/len(redshift_bin_centers):.2%})')
         # paths_cross also has to respect tomographic bins, so we will have a list of lists
-        paths_cross = [[] for _ in range(len(tomo_interest))]  # 4 tomographic bins for HSC
+        paths_cross = [[] for _ in range(len(tomo_interest))]
         paths_autos = []
         for t in tracers:
             # find the index of bint where the two tracers match
@@ -1098,11 +1116,11 @@ def merge_estimators(
 
                     # now deal with cross-correlations
                     # for each tomographic bin
-                    for hsc_tomo in tomo_interest:
+                    for index_tomo, hsc_tomo in enumerate(tomo_interest, start=1):
                         # grab all paths on MOC
                         paths_tomo_cross = fr_cross.get_file(zindt, hsc_tomo, t, "HSC", None)
                         # combine on MOCs for this tomo bin
-                        paths_cross[hsc_tomo-1].extend(paths_tomo_cross)   
+                        paths_cross[index_tomo-1].extend(paths_tomo_cross)   
 
         #if verbose:
         #    print("Paths for cross-correlations:", paths_cross)
@@ -1141,15 +1159,15 @@ def merge_estimators(
 
     # now save the estimators to the provided paths
     for i in range(1, len(redshift_bin_centers)+1):
-        for j, est in enumerate(estimators_cross[i-1], start=1):
+        for j, (est, tomo_bin) in enumerate(zip(estimators_cross[i-1], tomo_interest), start=1):
             # save the cross-correlations
-            if j not in tomo_interest:
-                if verbose:
-                    print(f'Skipping tomo bin {j} for redshift bin {zr:.2f}')
-                continue
-            file_path = cross_dir / f'MergedxHSC_b1x{i}_b2x{j}.npy'
+            #if j not in tomo_interest:
+            #    if verbose:
+            #        print(f'Skipping tomo bin {tomo_bin} for redshift bin {zr:.2f}')
+            #    continue
+            file_path = cross_dir / f'MergedxHSC_b1x{i}_b2x{tomo_bin}.npy'
             if isinstance(est, float):
-                print(f"It's likely the b1x{i}_b2x{j} estimator has no data for the given redshift bin,\nor is not in the tomo bins of interest.")
+                print(f"It's likely the b1x{i}_b2x{tomo_bin} estimator has no data for the given redshift bin,\nor is not in the tomo bins of interest.")
                 continue
             est.save(file_path)
             if verbose:
