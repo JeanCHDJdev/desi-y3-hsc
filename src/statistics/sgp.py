@@ -4,12 +4,12 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern, ConstantKernel
 
 def gpfit(zval, meas, matern_nu=3/2, constant=1.):
-    dz = np.diff(zval)[0]
+    dz = np.mean(np.diff(zval))
     y = meas[0] / np.sum(meas[0] * dz)
     y_err = meas[1] / np.sum(meas[0] * dz)
 
     X = zval.reshape(-1, 1)
-    kernel = ConstantKernel(constant_value=constant) * Matern(nu=matern_nu, length_scale=dz/2)
+    kernel = ConstantKernel(constant_value=constant) * Matern(nu=matern_nu, length_scale=2*dz, length_scale_bounds='fixed')
     gp = GaussianProcessRegressor(kernel=kernel, alpha=(y_err**2))
 
     assert np.all(np.isfinite(X))
