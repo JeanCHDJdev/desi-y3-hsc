@@ -22,7 +22,7 @@ COSMO_ccl = ccl.Cosmology(
     Omega_c=omega_c, Omega_b=omega_b, h=h, sigma8=sigma8, n_s=n_s
 )
 # from astropy.cosmology
-cosmo = FlatLambdaCDM(
+COSMO_astropy = FlatLambdaCDM(
     H0=H0,
     Om0=omega_m,
     Ob0=omega_b,
@@ -40,9 +40,9 @@ def arcsec2hMpc(theta, z):
        Redshift
     """
     theta = theta * u.arcsec
-    d_pm = cosmo.comoving_transverse_distance(z) 
+    d_pm = COSMO_astropy.comoving_transverse_distance(z) 
     x = (theta * d_pm).to(u.Mpc, u.dimensionless_angles()) 
-    x /= cosmo.h 
+    x /= COSMO_astropy.h 
     return x.value
 
 def hMpc2arcsec(rp, z):
@@ -56,8 +56,8 @@ def hMpc2arcsec(rp, z):
     z: float
         Redshift
     """
-    d_pm = cosmo.comoving_transverse_distance(z)
-    rp_hMpc = rp * cosmo.h  # Convert h^-1 Mpc to Mpc
+    d_pm = COSMO_astropy.comoving_transverse_distance(z)
+    rp_hMpc = rp * COSMO_astropy.h  # Convert h^-1 Mpc to Mpc
     theta = (rp_hMpc * u.Mpc / d_pm).to(u.arcsec, u.dimensionless_angles())
     return theta.value
 
@@ -72,7 +72,7 @@ def z2dist(z):
         Redshift
     """
     return np.array(
-        cosmo.comoving_distance(z).value / cosmo.h, 
+        COSMO_astropy.comoving_distance(z).value / COSMO_astropy.h, 
         dtype=float
         )
 
@@ -110,3 +110,59 @@ def get_wCM(angular_bins, zbin_edges, zbin_counts):
         )
 
     return wtheta
+
+def magnification_correction( 
+        alpha_model_p : callable, 
+        alpha_model_s : callable, 
+        bias_model_p : callable, 
+        bias_model_s : callable, 
+        np_z : np.ndarray, 
+        zindex : int, 
+        zvalues : np.ndarray
+        ):
+    '''
+    Computes the magnification correction for a given redshift index and value and cosmology.
+
+    Parameters
+    ----------
+    cosmology : acosmo
+        The cosmology to use for the magnification correction.
+    alpha_model_p : callable
+        The alpha model for the photometric tracer.
+    alpha_model_s : callable
+        The alpha model for the spectroscopic tracer.
+    bias_model_p : callable
+        The bias model for the photometric tracer.
+    bias_model_s : callable
+        The bias model for the spectroscopic tracer.
+    np_z : np.ndarray
+        The n(z) values for the redshift bins.
+    zindex : int
+        The index of the redshift bin to compute the magnification correction for.
+    zvalues : np.ndarray
+        The redshift values corresponding to the n(z) values.
+    '''
+    
+    def _Dn_ij(zi, zj):
+        c = 299792.458  # speed of light in km/s
+        chi = COSMO_astropy.comoving_transverse_distance
+        cosmofactor = (3 * COSMO_astropy.H0.value**2 * COSMO_astropy.Om0.value / (c**2))
+        cosmotransverse = ((chi(zi)-chi(zj))/chi(zi))*chi(zj) # todo : include delta_chi_j ? (Gatti. et al.)
+        return  cosmofactor * (1+zi) * cosmotransverse # 1+zi = 1/a(zi)
+    
+    zi = zvalues[zindex]
+    magnification = 0
+    magnification += np_z[zindex] 
+    sum1 = 0
+    for j in range(len(np_z)):
+        if j > zindex:
+            sum1 += np_z[j] * _Dn_ij(COSMO_astropy, zi, zvalues[j])
+    sum2 = 0
+    for j in range(len(np_z)):
+        if j > zindex:
+            sum2 += np_z[zindex] * _Dn_ij(COSMO_astropy, zi, zvalues[j])
+
+    magnification += alpha_model_p(zi) * sum1 / bias_model_p(zi)
+    magnification += alpha_model_s(zi) * sum2 / bias_model_s(zi)
+
+    return magnification
