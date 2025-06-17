@@ -19,157 +19,23 @@ import src.statistics.combination as comb
 import src.statistics.corrutils as cu
 import src.statistics.cosmotools as ct
 
-def get_desi_ns(tracer, cap=None, fetch_desi_kw={}):
-    '''
-    Get the number of sources per cap, per tracer. If cap is None,
-    return the number of sources for the tracer by summing both caps.
-
-    Parameters
-    ----------
-    cap : str
-        The cap to get the number of sources for. If None, return the
-        number of sources for the tracer by summing both caps.
-    tracer : str
-        The tracer to get the number of sources for.
-    '''
-    assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
-    if cap is None:
-        caps = ['NGC', 'SGC']
-    else:
-        caps = [cap]
-    ncols = 0
-    for c in caps:
-        if c not in ['NGC', 'SGC']:
-            raise ValueError(f'cap must be one of NGC, SGC, or None. Got {c}.')
-        desi_f = corrf.fetch_desi_files(tgt=tracer, cap=c, **fetch_desi_kw)
-        ncols += fio.FITS(desi_f)[1].get_nrows()
-    return ncols
-
-def get_hsc_ns(moc=None, **fetch_hsc_kw):
-    '''
-    Get the number of sources in the HSC MOC.
-    If moc is None, return the number of sources in the HSC
-    catalog. Defaults to None.
-
-    Parameters
-    ----------
-    moc : MOC
-        The MOC to get the number of sources for. If None,
-        return the number of sources in the HSC catalog. Defaults to None.
-    fetch_hsc_kw : dict
-        Keyword arguments to pass to the fetch_hsc_files function.
-        See the function for more details.
-    '''
-    hsc_f = corrf.fetch_hsc_files(**fetch_hsc_kw)
-    hsc_hdu = fio.FITS(hsc_f)[1]
-
-    if moc is not None:
-        coords = hsc_hdu.read(columns=['RA', 'DEC'])
-        hsc_moc = MOC.from_fits(moc)
-        ra, dec = coords['ra'], coords['dec']
-        hsc_coords = SkyCoord(ra, dec, unit='deg', frame='icrs')
-        hsc_moc_mask = hsc_moc.contains_skycoords(hsc_coords)
-        return np.sum(hsc_moc_mask)
-    else:
-        return hsc_hdu.get_nrows()
-    
-def get_desi_ratios(tracer):
-    '''
-    Get the ratios of the number of sources in NGC/SGC compared to the full
-    sample.
-    '''
-    assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
-    ntot = get_desi_ns(tracer=tracer)
-    nngc = get_desi_ns(tracer=tracer, cap='NGC')
-    nsgc = get_desi_ns(tracer=tracer, cap='SGC')
-    return np.array([nngc / ntot, nsgc / ntot])
-
-def get_hsc_ratios(path):
-    '''
-    Get the ratios of the number of sources in MOCs compared 
-    '''
-    assert isinstance(path, str) or isinstance(path, Path) or path is None, (
-        'path must be a string or Path object, or None'
-    )
-    save_path = None
-    if path is not None:
-        save_path = Path(path, 'hsc_moc_ratios.txt')
-        if save_path.exists():
-            return np.loadtxt(save_path, dtype=float)
-
-    moc_list = cu.CorrelationMeta.moc_list
-    ntot = get_hsc_ns()
-    ns = []
-    for moc in moc_list:
-        ns.append(get_hsc_ns(moc=moc))
-
-    result = np.array(ns) / ntot
-    if save_path is not None and not save_path.exists():
-        np.savetxt(save_path, result, fmt='%f')
-    
-    return result
-
-def desi_bias_evolution(z, tracer='QSO'):
-    """
-    Bias model fitted from DR1 unblinded data 
-    (the formula from Laurent et al. 2016 (1705.04718))
-    """
-    if tracer == 'QSO':
-        alpha = 0.237
-        beta = 2.328
-    elif tracer == 'LRG':
-        alpha = 0.209
-        beta = 2.790
-    #elif tracer == 'ELG_LOPnotqso':
-    #! WARNING: This is not the same as the LOP sample
-    elif tracer == 'ELGnotqso': 
-        alpha = 0.153
-        beta = 1.541
-    elif tracer == 'BGS_ANY':
-        #! WARNING: Not too sure what to do here just yet, no model provided
-        return 1.0 * np.ones_like(z)
-    else:
-        raise NotImplementedError(f'{tracer} not implemented.')
-    return alpha * ((1+z)**2 - 6.565) + beta
-
-def hsc_bias_evolution(z, b):
-    '''
-    Assume it's a ~constant bias of b*growth factor D(z)~1/(1+z)
-    '''
-    return b / (1 / (1 + z))
-
-def combine_estimators(estimators, ratios=None, skipped_ids=None, rebin=1):
+def combine_estimators(estimators, which_patches=None, rebin=1):
     '''
     From the provided path, collate the measurements on each of the MOCs
     and return a dictionary of the results.
     '''
-    if ratios is None:
-        # hardcoded MOC ratios by source counts in HSC
-        ratios = [
-            0.107665,
-            0.584270,
-            0.075393,
-            0.232669,
-        ]
-    if skipped_ids is None:
-        skipped_ids = []
-    else:
-        ratios = [ratios[i] for i in range(len(ratios)) if i not in skipped_ids]
-        ratios = ratios / np.sum(ratios)
-
-    ratios = ratios / np.sum(ratios)
-
-    assert len(estimators) > 0, 'No estimators found.'
-
     sep = estimators[0].sep
     # sep is just here to get the size of the arrays
     allcov = np.zeros((len(sep), len(sep)))
 
     if len(estimators) > 1:
-        # we also checked this is consistent if e.g merged=estimators[1] 
-        # (best estimator for HSC as performed on largest patch of sky)
-        merged = np.sum([est.normalize() for est in estimators])  
-        #merged = estimators[1].copy() 
+        merged = np.sum(
+                [
+                est.normalize() 
+                for est_i, est in enumerate(estimators, start=1)
+                if which_patches is None or est_i in which_patches
+            ]
+        )  
     else:
         merged = estimators[0]
     if rebin > 1:
@@ -186,18 +52,15 @@ def single_bin_corr(
         estimators : list[TwoPointEstimator], 
         scale_cuts:list, 
         z:float, 
-        beta:float = -1,
+        beta:float=-1,
         rebin:int=1,
-        method='landy-szalay',
+        which_patches:list[int]=None,
         integration='single-bin',
-        skipped_ids=None,
-        ratios=None,
         ):
     '''
     Computes the single bin Landy-Szalay estimator (Schmidt+2013, Ménard+2013)
     for the wpp, wss and wsp measurements. 
     '''
-    assert z is not None, 'z must be provided'
     ## single bin integration
     # for now assume all estimators have the same binning
     # as estimator.sep
@@ -208,24 +71,9 @@ def single_bin_corr(
     
     sep, corr, cov = combine_estimators(
         estimators, 
-        ratios=ratios, 
-        skipped_ids=skipped_ids, 
+        which_patches=which_patches, 
         rebin=rebin
         )
-
-    # debug plot to compare with the first estimator and check consistency
-    '''
-    sep_compare = estimators[0].sep
-    corr_compare = estimators[0].corr
-    import matplotlib.pyplot as plt
-    plt.figure()
-    plt.plot(sep_compare, corr_compare, label='compare')
-    plt.plot(sep, corr, label='combined')
-    plt.grid()
-    plt.xscale('log')
-    plt.legend()
-    plt.show()
-    '''
     comovsep = ct.arcsec2hMpc(sep*3600, z)
 
     if scale_cuts is not None :
@@ -260,74 +108,23 @@ def single_bin_corr(
         v = wkernel * delta_r
 
         # v @ cov_sc @ v = v^T*\Sigma*v
+        # where \Sigma is the covariance matrix
         w_err = np.sqrt(v @ cov_sc @ v)
         return w_bar, w_err, comovsep_sc
-        
-    elif integration == 'euclid':
-        # weird integration scheme I can't really get to work
-        
-        Nd1 = 0
-        Nd2 = 0
-        Nr1 = 0
-        Nr2 = 0
-        for est in estimators:
-            Nd1 += est.D1D2.size1
-            Nd2 += est.D1D2.size2
-            Nr1 += est.R1R2.size1
-            Nr2 += est.R1R2.size2
-        
-        d1d2_counts = np.zeros_like(sep)
-        r1d2_counts = np.zeros_like(sep)
-        d1r2_counts = np.zeros_like(sep)
-        r1r2_counts = np.zeros_like(sep)
-
-        for est in estimators:
-            d1d2_counts += est.D1D2.ncounts
-            r1d2_counts += est.R1D2.ncounts
-            d1r2_counts += est.D1R2.ncounts
-            r1r2_counts += est.R1R2.ncounts
-        
-        rr = _integrate_over_pairs(
-            wkernel, r1r2_counts[scale_mask], comovsep
-        ) / (Nr1 + Nr2)
-        dd = _integrate_over_pairs(
-            wkernel, d1d2_counts[scale_mask], comovsep
-        ) / (Nd1 + Nd2)
-        rd = _integrate_over_pairs(
-            wkernel, r1d2_counts[scale_mask], comovsep
-        ) / (Nr1 + Nd2)
-        dr = _integrate_over_pairs(
-            wkernel, d1r2_counts[scale_mask], comovsep
-        ) / (Nd1 + Nr2)
-
-        if method=='landy-szalay':
-            w_avg = 1/rr * (dd - rd - dr) + 1
-        if method=='davis-peebles':
-            w_avg = dd / (dr + rd) - 1
-        if method=='peebles-hauser':
-            w_avg = dd / rr - 1
-
-        return w_avg
     
-    else:
-        raise NotImplementedError(f'integration method {integration} not implemented.')
-
-def _integrate_over_pairs(weights, ncounts, sep):
-    #! todo : maybe interpolate to acccount for border effects due to the scale cut ?
-    # we integrate only on the scale cut because of weights being null
-    # outside of the scale cut
-    return simpson(np.multiply(weights, ncounts), x=sep)
+    raise NotImplementedError(f'integration method {integration} not implemented.')
 
 def wss(
         bin_index1, 
         bin_index2, 
-        tracer1='LRG',
-        tracer2='LRG',
+        tracer1=None,
+        tracer2=None,
         path_NGC=None, 
         path_SGC=None, 
         scale_cuts=[], 
         rebin:int=1, 
-        integration='single-bin'
+        integration='single-bin',
+        which_patches:list[int]=None
     ):
     '''
     From the provided path, collate the wss measurements for DESI
@@ -356,7 +153,6 @@ def wss(
     integration : str
         The integration method to use. Can be 'single-bin', 'euclid' or 'none'.
     '''
-
 
     if path_NGC is not None:
         path_NGC = Path(path_NGC)
@@ -412,36 +208,26 @@ def wss(
         f'zloc1 {zloc1} != zloc2 {zloc2}, bin_index1 {bin_index1} | bin_index2 {bin_index2}'
     )
     zloc = (zloc1 + zloc2)/2
-    #print(f'wss : bin_index1,2 : {bin_index1}, {bin_index2}, zloc1,2 : {zloc}, 1:{zloc1}, 2:{zloc2}')
-
-    if len(estimators) == 0:
-        raise ValueError('No estimators found for the provided paths.')
-
-    skipped_ids = []
-    if estimatorNGC is None:
-        skipped_ids.append(0)
-    if estimatorSGC is None:
-        skipped_ids.append(1)
 
     assert len(estimators) > 0, 'desi ngc/sgc estimators not found'
-
-    # for security let's get the mean of tracers
-    ratios = (get_desi_ratios(tracer1) + get_desi_ratios(tracer2))/2
     return single_bin_corr(
         estimators, 
         beta=-1, 
         z=zloc, 
         rebin=rebin,
         integration=integration,
-        method='landy-szalay', 
-        # this should be okay most of the time, the ratios should be very similar 
-        # with each tracer
-        ratios=ratios, 
-        skipped_ids=skipped_ids,
-        scale_cuts=scale_cuts
+        scale_cuts=scale_cuts,
+        which_patches=which_patches,
         )
             
-def wpp(path:str | Path, bin_index:int, scale_cuts:list, rebin:int=1, integration='single-bin'):
+def wpp(
+        path:str | Path, 
+        bin_index:int, 
+        scale_cuts:list, 
+        rebin:int=1, 
+        integration='single-bin',
+        which_patches:list[int]=None
+        ):
     '''
     From the provided path, collate the wpp measurements for HSC over
     the MOCs and return an array for the results.
@@ -452,21 +238,12 @@ def wpp(path:str | Path, bin_index:int, scale_cuts:list, rebin:int=1, integratio
     estimators = []
     fr = corrf.CorrFileReader(path)
     bins_hsc = fr.get_bins('HSC')
-    moc_list = cu.CorrelationMeta.moc_list
 
-    skipped_ids = []
-    for i in range(len(moc_list)):
-        try:
-            estimators.append(
-                TwoPointEstimator.load(
-                    fr.get_file(bin_index, bin_index, 'HSC', 'HSC', i)
-                )
-            )
-        except FileNotFoundError:
-            skipped_ids.append(i)
-            continue
+    files = fr.get_file(bin_index, bin_index, 'HSC', 'HSC', moc=None)
+    estimators = [
+        TwoPointEstimator.load(f) for f in files
+    ]
     zloc = (bins_hsc[bin_index-1] + bins_hsc[bin_index])/2
-    #print(f'wpp : bin_index : {bin_index}, zloc : {zloc}')
 
     assert len(estimators) > 0, 'hsc estimators not found'
     return single_bin_corr(
@@ -475,35 +252,36 @@ def wpp(path:str | Path, bin_index:int, scale_cuts:list, rebin:int=1, integratio
         beta=-1, 
         rebin=rebin,
         integration=integration,
-        skipped_ids=skipped_ids,
-        scale_cuts=scale_cuts
+        scale_cuts=scale_cuts,
+        which_patches=which_patches
         )
     
-def wsp(path:str | Path, tracer:str, tomo_bin:int, fine_bin:int, scale_cuts:list, rebin:int=1, integration='single-bin'):
+def wsp(
+        path:str | Path, 
+        tracer:str, 
+        tomo_bin:int, 
+        fine_bin:int, 
+        scale_cuts:list, 
+        rebin:int=1, 
+        integration='single-bin',
+        which_patches:list[int]=None
+        ):
     '''
     From the provided path, collate the wsp measurements for HSC and DESI
     cross-correlations and return the measurement.
     s : spectroscopic
     p : photometric
     '''
-    assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer} not a DESI tracer.'
 
     fr = corrf.CorrFileReader(path)
     estimators = []
     bins_tracer = fr.get_bins(tracer)
-    moc_list = cu.CorrelationMeta.moc_list
-    skipped_ids = []
 
-    for i in range(len(moc_list)):
-        try:
-            estimators.append(
-                TwoPointEstimator.load(
-                    fr.get_file(fine_bin, tomo_bin, tracer, 'HSC', i)
-                )
-            )
-        except FileNotFoundError:
-            skipped_ids.append(i)
-            continue
+    files = fr.get_file(fine_bin, tomo_bin, tracer, 'HSC', moc=None)
+
+    estimators = [
+        TwoPointEstimator.load(f) for f in files
+    ]
     zloc = (bins_tracer[fine_bin-1] + bins_tracer[fine_bin])/2
 
     assert len(estimators) > 0, 'HSCxDESI estimators not found'
@@ -513,9 +291,8 @@ def wsp(path:str | Path, tracer:str, tomo_bin:int, fine_bin:int, scale_cuts:list
         z=zloc, 
         beta=-1, 
         integration=integration,
-        method='landy-szalay', 
-        skipped_ids=skipped_ids, 
-        scale_cuts=scale_cuts
+        scale_cuts=scale_cuts,
+        which_patches=which_patches,
         )
 
 def compute_npz(
@@ -525,7 +302,6 @@ def compute_npz(
         tomo_bin, 
         scale_cuts, 
         do_bias_correction=True,
-        sigmaj_correction=None,
         rebin=1,
         return_chunks=False, 
         verbose=False
@@ -554,7 +330,15 @@ def compute_npz(
         down the dN/dz. Convention being that all bins are 1-indexed.
     tomo_bin : int
         The bin index for the tomographic binning. This bin is specific to the HSC tracer used to track
-        down the dN/dz. This can be from 1 to 4. Convention being that all bins are 1-indexed.
+        down the dN/dz. This can be from 1 to 4 if using the conventional binning scheme. 
+        Convention being that all bins are 1-indexed and these are the default tomographic bins of HSC.
+    scale_cuts : list
+        The scale cuts to apply to the measurements. This is a list of two values, the lower and upper
+        bounds of the scale cuts, in comoving Mpc/h.
+    do_bias_correction : bool
+        If do_bias_correction is True, will apply the bias correction to the measurement.
+        The bias correction is done using the gamma and delta_gamma values from the powerlaw fit.
+        If False, no bias correction is applied.
     return_chunks : bool
         If return_chunks is True, will return the individual values used to compute the n(z) for the tracer,
         in order : `wsp_meas, wpp_meas, wss_meas, hsc_bias, desi_bias, deltaz, zloc, result`.
@@ -603,18 +387,14 @@ def compute_npz(
         )
     combined_err /= deltaz
 
-    if do_bias_correction:
-        gamma, delta_gamma = _get_bias_correction(scale_cuts)
-    else:
-        # if no bias correction, we assume gamma = 0
-        gamma = 0
-        delta_gamma = 0
+    gamma, delta_gamma = _get_bias_correction(scale_cuts) if do_bias_correction else (0, 0)
 
     result = wsp_meas / (deltaz * np.sqrt((wss_meas)) * (1 + zloc) ** gamma)
     combined_err = np.sqrt(
         (combined_err / ((1 + zloc) ** gamma))**2 
         + np.log(1+zloc) * combined_err * delta_gamma /((1 + zloc) ** gamma)
         )
+    
     if return_chunks:
         return wsp_meas, wsp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
     return result, combined_err
@@ -626,7 +406,6 @@ def compute_npz_merged(
         tomo_bin, 
         scale_cuts, 
         do_bias_correction=True,
-        sigmaj_correction=None,
         rebin=1,
         return_chunks=False, 
         verbose=False
@@ -649,13 +428,6 @@ def compute_npz_merged(
         method='landy-szalay', 
         scale_cuts=scale_cuts
     )
-    
-    if do_bias_correction:
-        gamma, delta_gamma = _get_bias_correction(scale_cuts)
-    else:
-        # if no bias correction, we assume gamma = 0
-        gamma = 0
-        delta_gamma = 0
 
     frsp = corrf.CorrFileReader(path_dictionary['MergedxHSC'])
     file_sp = frsp.get_file(fine_bin, tomo_bin, tracer, 'HSC', "Merged")
@@ -676,13 +448,7 @@ def compute_npz_merged(
         yerr=wss_err
         ) / deltaz
     
-    #scale cut = [1, 5]
-    gamma = 0.4539423871141212
-    delta_gamma = 0.03450372293660535
-
-    # if no correction
-    gamma = 0
-    delta_gamma = 0
+    gamma, delta_gamma = _get_bias_correction(scale_cuts) if do_bias_correction else (0, 0)
 
     result = wsp_meas / (deltaz * np.sqrt((wss_meas)) * (1 + zloc) ** gamma)
     combined_err = np.sqrt(
@@ -699,7 +465,6 @@ def full_npz_tomo(
         tomo_bin, 
         scale_cuts, 
         do_bias_correction=True,
-        sigmaj_corrections=None,
         rebin=1,
         verbose=False, 
         return_chunks=False,
@@ -730,9 +495,10 @@ def full_npz_tomo(
     scale_cuts : list
         The scale cuts to apply to the measurements. This is a list of two values, the lower and upper
         bounds of the scale cuts, in comoving Mpc/h.
-    sigmaj_corrections : list
-        The sigmaj corrections to apply to the wpp measurement. This is a list of the same length as
-        the fine redshift bins. 
+    do_bias_correction : bool
+        If do_bias_correction is True, will apply the bias correction to the measurement.
+        The bias correction is done using the gamma and delta_gamma values from the powerlaw fit.
+        If False, no bias correction is applied.
     rebin : int
         Wether to rebin the measurements by a factor.
     verbose : bool
@@ -760,60 +526,36 @@ def full_npz_tomo(
     assert len(hsc_bins) == len(fine_redshift), (
         f'len(hsc_bins) = {len(hsc_bins)} != len(fine_redshift) = {len(fine_redshift)}'
     )
-    
-    if sigmaj_corrections is None:
-        # if no sigmaj corrections are provided, we assume they are all 1
-        sigmaj_corrections = np.ones(len(fine_redshift))
 
-    sjcorr = np.zeros(len(fine_redshift))
-    for i in range(len(fine_redshift)):
-        index = int(np.argmin(np.abs(hsc_redshift - fine_redshift[i])))
-        sjcorr[i] = sigmaj_corrections[index-1]
-
-    nz = []
-    nz_err = []
-    data = []
-
+    results = []
     if tracer == 'Merged':
         print(f'Using merged method for tracer {tracer} and tomo bin {tomo_bin}.')
         func = compute_npz_merged
     else:
         func = compute_npz
     for i in range(1, len(fine_redshift)):
+        out = func(
+            path_dictionary,
+            tracer=tracer,
+            fine_bin=i,
+            do_bias_correction=do_bias_correction,
+            tomo_bin=tomo_bin,
+            scale_cuts=scale_cuts,
+            rebin=rebin,
+            verbose=verbose,
+            return_chunks=return_chunks
+        )
+        
         if return_chunks:
-            d = func(
-                path_dictionary, 
-                tracer=tracer,  
-                fine_bin=i, 
-                do_bias_correction=do_bias_correction,
-                #hsc_correction_bin=hsc_bins[i],
-                sigmaj_correction=sjcorr[i],
-                tomo_bin=tomo_bin,
-                scale_cuts=scale_cuts,
-                rebin=rebin,
-                verbose=verbose,
-                return_chunks=True
-            )
-            data.append(d)
+            results.append(out)
         else:
-            nz_s, nz_err_s = func(
-                    path_dictionary, 
-                    tracer=tracer,  
-                    fine_bin=i, 
-                    do_bias_correction=do_bias_correction,
-                    #hsc_correction_bin=hsc_bins[i],
-                    sigmaj_correction=1,
-                    tomo_bin=tomo_bin,
-                    scale_cuts=scale_cuts,
-                    rebin=rebin,
-                    verbose=verbose,
-                    return_chunks=return_chunks
-                )
-            nz.append(nz_s)
-            nz_err.append(nz_err_s)
+            nz_s, nz_err_s = out
+            results.append((nz_s, nz_err_s))
+
     if return_chunks:
-        return np.array(data)
+        return np.array(results)
     else:
+        nz, nz_err = zip(*results)
         return np.array(nz), np.array(nz_err)
     
 def _get_fine_redshift_bins(fr: corrf.CorrFileReader):
@@ -1196,13 +938,35 @@ def magnification_correction(
         zindex : int, 
         zvalues : np.ndarray
         ):
+    '''
+    Computes the magnification correction for a given redshift index and value and cosmology.
+
+    Parameters
+    ----------
+    cosmology : acosmo
+        The cosmology to use for the magnification correction.
+    alpha_model_p : callable
+        The alpha model for the photometric tracer.
+    alpha_model_s : callable
+        The alpha model for the spectroscopic tracer.
+    bias_model_p : callable
+        The bias model for the photometric tracer.
+    bias_model_s : callable
+        The bias model for the spectroscopic tracer.
+    np_z : np.ndarray
+        The n(z) values for the redshift bins.
+    zindex : int
+        The index of the redshift bin to compute the magnification correction for.
+    zvalues : np.ndarray
+        The redshift values corresponding to the n(z) values.
+    '''
     
     def _Dn_ij(zi, zj):
         c = 299792.458  # speed of light in km/s
         chi = cosmology.comoving_transverse_distance
         cosmofactor = (3 * cosmology.H0.value**2 * cosmology.Om0.value / (c**2))
-        cosmotrans = ((chi(zi)-chi(zj))/chi(zi))*chi(zj) # todo : include delta_chi_j ? (Gatti. et al.)
-        return  cosmofactor * (1+zi) * cosmotrans # 1+zi = 1/a(zi)
+        cosmotransverse = ((chi(zi)-chi(zj))/chi(zi))*chi(zj) # todo : include delta_chi_j ? (Gatti. et al.)
+        return  cosmofactor * (1+zi) * cosmotransverse # 1+zi = 1/a(zi)
     
     zi = zvalues[zindex]
     magnification = 0
@@ -1215,11 +979,18 @@ def magnification_correction(
     for j in range(len(np_z)):
         if j > zindex:
             sum2 += np_z[zindex] * _Dn_ij(cosmology, zi, zvalues[j])
-    # TODO: finer implementation ?
+
     magnification += alpha_model_p(zi) * sum1 / bias_model_p(zi)
     magnification += alpha_model_s(zi) * sum2 / bias_model_s(zi)
+
     return magnification
 
+
+def solve_magnification():
+    '''
+
+    '''
+    pass
         
        
     
