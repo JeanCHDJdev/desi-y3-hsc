@@ -193,10 +193,10 @@ class CorrFileReader():
                 angular_bins = np.linspace(
                     angular_bins[0], angular_bins[-1], oversample_rate*len(angular_bins)
                     )
-                wDM = ct.get_wCM(
+                wDM = ct.get_wDM(
                     angular_bins=angular_bins,
                     zbin_edges=edges,
-                    zbin_counts=counts
+                    dndz=counts
                     )
                 tgts_save[f'{tgt}_wDM'].append(wDM)
                 dndz = np.sum(mask)/tbl_length

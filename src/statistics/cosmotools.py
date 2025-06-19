@@ -76,7 +76,7 @@ def z2dist(z):
         dtype=float
         )
 
-def get_wCM(angular_bins, zbin_edges, zbin_counts):
+def get_wDM(angular_bins, zbin_edges, dndz):
     '''
     Using CCL (Core Cosmology Library) to estimate wCM (the dark matter angular correlation function).
     NOTE : CCL uses Limber approximation to compute w(theta) from C_ell and 
@@ -92,7 +92,7 @@ def get_wCM(angular_bins, zbin_edges, zbin_counts):
     tracer = ccl.NumberCountsTracer(
         COSMO_ccl,
         has_rsd=False,
-        dndz=(dndz_zbins, zbin_counts / np.trapz(zbin_counts, dndz_zbins)),  # normalized PDF
+        dndz=(dndz_zbins, dndz),  # normalized PDF
         bias=bias
     )
 

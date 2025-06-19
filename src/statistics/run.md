@@ -119,7 +119,7 @@ setcc && python run_corr.py -o outputs/results_sims_rcc_v2_0_1/autos_j64_ns256_z
 - Cross correlations :
 OUTDIR="-o outputs/v12_correction/cross" && DEFAULT_FLAGS="-t2 HSC -ns 50 -r1 4 -r2 50 -s 0 -c 200 -z -j" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 LRG && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 BGS_ANY && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 ELGnotqso
 
-OUTDIR="-o outputs/v12_correction/cross" && DEFAULT_FLAGS="-t2 HSC -ns 50 -r1 4 -r2 50 -s 0 -c 200 -z -j" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 ELGnotqso && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO
+OUTDIR="-o outputs/v10/cross" && DEFAULT_FLAGS="-t2 HSC -ns 64 -r1 4 -r2 50 -s 0 -c 200 -z -j" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO
 
 - Auto correlation :
 HSC:
