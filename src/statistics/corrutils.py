@@ -662,7 +662,8 @@ class CorrelationMeta(ABC):
                 zlow=self.bin_redshift1[self.bin_index1-1],
                 zhigh=self.bin_redshift1[self.bin_index1],
                 type='DESI',
-                file_settings={
+                scheme="simple",
+                                file_settings={
                     'sims': self.sims,
                     'sims_version': self.sims_version,
                 }
@@ -692,7 +693,8 @@ class CorrelationMeta(ABC):
                 zlow=self.bin_redshift1[self.bin_index1-1],
                 zhigh=self.bin_redshift1[self.bin_index1],
                 type='HSC',
-                file_settings={
+                scheme="simple",
+                                file_settings={
                     'sims': self.sims,
                     'sims_version': self.sims_version,
                 }

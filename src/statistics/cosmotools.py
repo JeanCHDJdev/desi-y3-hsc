@@ -111,6 +111,17 @@ def get_wDM(angular_bins, zbin_edges, dndz):
 
     return wtheta
 
+def parametrize_magnification():
+    '''
+    Returns the alpha and bias models for the magnification correction.
+    These are the models used in the HSC WL-photoz tomographic analysis.
+    '''
+    alpha_model_p = lambda z: 0.5 * (1 + z) * (1 + 0.5 * z)
+    alpha_model_s = lambda z: 0.5 * (1 + z) * (1 + 0.5 * z)
+    bias_model_p = lambda z: 1 + 0.5 * z
+    bias_model_s = lambda z: 1 + 0.5 * z
+    return alpha_model_p, alpha_model_s, bias_model_p, bias_model_s
+
 def magnification_correction( 
         alpha_model_p : callable, 
         alpha_model_s : callable, 
@@ -142,9 +153,9 @@ def magnification_correction(
     zvalues : np.ndarray
         The redshift values corresponding to the n(z) values.
     '''
+    c = 299792.458  # speed of light in km/s
     
     def _Dn_ij(zi, zj):
-        c = 299792.458  # speed of light in km/s
         chi = COSMO_astropy.comoving_transverse_distance
         cosmofactor = (3 * COSMO_astropy.H0.value**2 * COSMO_astropy.Om0.value / (c**2))
         cosmotransverse = ((chi(zi)-chi(zj))/chi(zi))*chi(zj) # todo : include delta_chi_j ? (Gatti. et al.)

@@ -335,49 +335,56 @@ def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=0
         logging.error(f"HSC catalog file not found and randoms = {randoms}") 
         raise
 
-def get_zeff(zlow, zhigh, type='DESI', **file_settings):
+def get_zeff(zlow, zhigh, type='DESI', scheme=None, **file_settings):
     '''
     Get the effective redshift for a given distribution, concatenating over all tracers.
     '''
-    file_settings_defaults = {
-        'sims': False,
-        'sims_version': 0
-    }
-    file_settings = {**file_settings_defaults, **file_settings}
-    if type == 'DESI':
-        sv = file_settings["sims_version"]
-        jointz = f"/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/src/statistics/zeff/desi_z_clustering_catalogs{f'_simsv{sv}' if  sv > 0 else ''}.npy"
-        if Path(jointz).exists():
-            ztbl = np.load(jointz)
-        else:
-            print(f"File {jointz} does not exist, fetching DESI files...")
-            tracers = ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY']
-            zall = []
-            for t in tracers:
-                print(f"Fetching DESI files for tracer {t}...")
-                for cap in ['NGC', 'SGC']:
-                    file = fetch_desi_files(
-                        t, 
-                        randoms=False, 
-                        sims=file_settings['sims'], 
-                        sims_version=file_settings['sims_version'],
-                        cap=cap
-                    )
-                    ztbl = fio.FITS(Path(file))[1]['Z'][:]
-                    zall.append(ztbl)
-            ztbl = np.concatenate(zall)
-            print(f"Writing concatenated redshift table to {jointz}")
-            np.save(jointz, ztbl)
+    if scheme == "simple":
+        print("Using simple scheme for effective redshift calculation.")
+        return (zlow + zhigh) / 2
+    elif scheme == "weighted":    
+        file_settings_defaults = {
+            'sims': False,
+            'sims_version': 0
+        }
+        file_settings = {**file_settings_defaults, **file_settings}
+        if type == 'DESI':
+            sv = file_settings["sims_version"]
+            jointz = f"/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/src/statistics/zeff/desi_z_clustering_catalogs{f'_simsv{sv}' if  sv > 0 else ''}.npy"
+            if Path(jointz).exists():
+                ztbl = np.load(jointz)
+            else:
+                print(f"File {jointz} does not exist, fetching DESI files...")
+                tracers = ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY']
+                zall = []
+                for t in tracers:
+                    print(f"Fetching DESI files for tracer {t}...")
+                    for cap in ['NGC', 'SGC']:
+                        file = fetch_desi_files(
+                            t, 
+                            randoms=False, 
+                            sims=file_settings['sims'], 
+                            sims_version=file_settings['sims_version'],
+                            cap=cap
+                        )
+                        ztbl = fio.FITS(Path(file))[1]['Z'][:]
+                        zall.append(ztbl)
+                ztbl = np.concatenate(zall)
+                print(f"Writing concatenated redshift table to {jointz}")
+                np.save(jointz, ztbl)
 
-        zeff = np.mean(ztbl[(ztbl > zlow) & (ztbl < zhigh)])
+            zeff = np.mean(ztbl[(ztbl > zlow) & (ztbl < zhigh)])
+        
+        elif type == 'HSC':
+            ztbl = np.load(
+                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/src/statistics/zeff/hsc_z_clustering_catalogs.npy'
+            )
+            zeff = np.mean(
+                ztbl[(ztbl > zlow) & (ztbl < zhigh)]
+            )
+
+        print(f"Effective redshift for DESI from {zlow} to {zhigh}: {zeff:.4f}")
+        return zeff
     
-    elif type == 'HSC':
-        ztbl = np.load(
-            '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/src/statistics/zeff/hsc_z_clustering_catalogs.npy'
-        )
-        zeff = np.mean(
-            ztbl[(ztbl > zlow) & (ztbl < zhigh)]
-        )
-
-    print(f"Effective redshift for DESI from {zlow} to {zhigh}: {zeff:.4f}")
-    return zeff
+    else:
+        raise ValueError(f"Unknown scheme {scheme}. Available schemes are 'simple' and 'weighted'.")
