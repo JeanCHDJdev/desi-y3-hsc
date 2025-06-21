@@ -849,10 +849,11 @@ def merge_estimators(
                         paths_autos_z.extend(fr_auto_NGC.get_file(zindt, zindt, t, t, None))
                     if fr_auto_SGC is not None:
                         paths_autos_z.extend(fr_auto_SGC.get_file(zindt, zindt, t, t, None))
-                    assert len(paths_autos_z) > 0, "No valid autocorrelations. got "
-                    f"{fr_auto_NGC.get_file(zindt, zindt, t, t, None)}"
+                    assert len(paths_autos_z) > 0, (
+                        "No valid autocorrelations. got "
+                        f"{fr_auto_NGC.get_file(zindt, zindt, t, t, None)}"
+                    )
                     paths_autos.extend(paths_autos_z)
-                    del paths_autos_z
 
                     # now deal with cross-correlations
                     # for each tomographic bin
@@ -870,7 +871,6 @@ def merge_estimators(
             np.sum(
                 [TwoPointEstimator.load(p).normalize() for p in paths]
             ) 
-            if len(paths) > 0 else 0.0 # if no paths, return 0.0 (to be skipped later)
             for paths in paths_cross
         ])
         estimators_autos.append(
@@ -901,10 +901,6 @@ def merge_estimators(
     for i in range(1, len(redshift_bin_centers)+1):
         for j, (est, tomo_bin) in enumerate(zip(estimators_cross[i-1], tomo_interest), start=1):
             # save the cross-correlations
-            #if j not in tomo_interest:
-            #    if verbose:
-            #        print(f'Skipping tomo bin {tomo_bin} for redshift bin {zr:.2f}')
-            #    continue
             file_path = cross_dir / f'MergedxHSC_b1x{i}_b2x{tomo_bin}.npy'
             if isinstance(est, float):
                 print(f"It's likely the b1x{i}_b2x{tomo_bin} estimator has no data for the given redshift bin,\nor is not in the tomo bins of interest.")

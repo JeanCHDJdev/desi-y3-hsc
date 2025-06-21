@@ -116,21 +116,46 @@ def parametrize_magnification():
     Returns the alpha and bias models for the magnification correction.
     These are the models used in the HSC WL-photoz tomographic analysis.
     '''
-    alpha_model_p = lambda z: 0.5 * (1 + z) * (1 + 0.5 * z)
-    alpha_model_s = lambda z: 0.5 * (1 + z) * (1 + 0.5 * z)
-    bias_model_p = lambda z: 1 + 0.5 * z
-    bias_model_s = lambda z: 1 + 0.5 * z
+    alpha_model_p = lambda z: -1
+    alpha_model_s = lambda z: 1
+    bias_model_p = lambda z: 1
+    bias_model_s = lambda z: 1
     return alpha_model_p, alpha_model_s, bias_model_p, bias_model_s
 
-def magnification_correction( 
+def mag_coeffs( 
+        zindex : int, 
+        zvalues : np.ndarray,
+        contribution : str = 'all'
+    ) -> float:
+    '''
+    Returns the magnification correction function.
+    This is the function used in the HSC WL-photoz tomographic analysis.
+    '''
+    alpha_model_p, alpha_model_s, bias_model_p, bias_model_s = parametrize_magnification()
+    return _magnification_coefficients(
+        alpha_model_p, 
+        alpha_model_s, 
+        bias_model_p, 
+        bias_model_s, 
+        zindex, 
+        zvalues,
+        contribution=contribution
+    )
+    
+def _magnification_coefficients( 
         alpha_model_p : callable, 
         alpha_model_s : callable, 
         bias_model_p : callable, 
         bias_model_s : callable, 
-        np_z : np.ndarray, 
         zindex : int, 
-        zvalues : np.ndarray
+        zvalues : np.ndarray,
+        contribution : str = 'both'
         ):
+    if isinstance(contribution, str):
+        if contribution == 'all':
+            contribution = ['uD', 'Du', 'DD']
+        else:
+            contribution = [contribution]
     '''
     Computes the magnification correction for a given redshift index and value and cosmology.
 
@@ -146,34 +171,42 @@ def magnification_correction(
         The bias model for the photometric tracer.
     bias_model_s : callable
         The bias model for the spectroscopic tracer.
-    np_z : np.ndarray
-        The n(z) values for the redshift bins.
     zindex : int
         The index of the redshift bin to compute the magnification correction for.
     zvalues : np.ndarray
         The redshift values corresponding to the n(z) values.
     '''
-    c = 299792.458  # speed of light in km/s
-    
-    def _Dn_ij(zi, zj):
-        chi = COSMO_astropy.comoving_transverse_distance
-        cosmofactor = (3 * COSMO_astropy.H0.value**2 * COSMO_astropy.Om0.value / (c**2))
-        cosmotransverse = ((chi(zi)-chi(zj))/chi(zi))*chi(zj) # todo : include delta_chi_j ? (Gatti. et al.)
-        return  cosmofactor * (1+zi) * cosmotransverse # 1+zi = 1/a(zi)
-    
-    zi = zvalues[zindex]
-    magnification = 0
-    magnification += np_z[zindex] 
-    sum1 = 0
-    for j in range(len(np_z)):
-        if j > zindex:
-            sum1 += np_z[j] * _Dn_ij(COSMO_astropy, zi, zvalues[j])
-    sum2 = 0
-    for j in range(len(np_z)):
-        if j > zindex:
-            sum2 += np_z[zindex] * _Dn_ij(COSMO_astropy, zi, zvalues[j])
+    assert zindex < len(zvalues), "zindex must be less than the length of zvalues"
+    assert zindex >= 0, "zindex must be non-negative"
 
-    magnification += alpha_model_p(zi) * sum1 / bias_model_p(zi)
-    magnification += alpha_model_s(zi) * sum2 / bias_model_s(zi)
+    _c = 299792.458  # speed of light in km/s
+    chi = COSMO_astropy.comoving_transverse_distance # comoving transverse distance in Mpc
+    _H0 = COSMO_astropy.H0.value # Hubble constant in km/s/Mpc
+    _Om0 = COSMO_astropy.Om0 # matter density parameter
+    cosmofactor = (3 * _H0 **2 * _Om0 / _c)
+
+    zi = zvalues[zindex]
+
+    def _Dn_ij(zi, zj):
+        cosmotransverse = ((chi(zj)-chi(zi))/chi(zj))*chi(zi)
+        return cosmofactor * (1 + zi)**2 * cosmotransverse.value
+    
+    magnification = np.zeros_like(zvalues)
+
+    mag1_const = alpha_model_s(zi)/(bias_model_p(zi)*bias_model_s(zi))
+    mag2_const = 1 / bias_model_p(zi)
+    for j, zj in enumerate(zvalues):
+        if j < zindex and 'uD' in contribution:
+            Dn_ji = _Dn_ij(zj, zi)
+            magnification[j] = (
+               mag1_const * bias_model_p(zj) * Dn_ji
+            )
+        elif j == zindex and 'DD' in contribution:
+            magnification[j] = 1
+        elif j > zindex and 'Du' in contribution:
+            Dn_ij = _Dn_ij(zi, zj)
+            magnification[j] = (
+                mag2_const * alpha_model_p(zj) * Dn_ij
+            )
 
     return magnification
