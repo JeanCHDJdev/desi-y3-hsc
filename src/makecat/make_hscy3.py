@@ -45,8 +45,8 @@ def make_hscy3_cat(
         fpath_cats = "/pscratch/sd/x/xiangchl/data/catalog/hsc_year3_shape/",
         fpath_primcats = "catalog_obs_reGaus_public/",
         fpath_secondary = "/global/cfs/cdirs/desicollab/science/c3/DESI-Lensing/prelim_hscy3/gfarm.ipmu.jp/~surhud/S19ACatalogs/catalog_tracts/",
-        field_names = ["GAMA09H", "GAMA15H", "HECTOMAP", "VVDS", "WIDE12H", "XMM"],
-        use_bmode_mask = True,
+        field_names = ["XMM"], #["GAMA09H", "GAMA15H", "HECTOMAP", "VVDS", "WIDE12H", "XMM"],
+        use_bmode_mask = False,
         add_photz = True,
         photoz_method = ["dnnz", "mizuki"],
         check_all_galaxies = False,
@@ -101,7 +101,7 @@ def make_hscy3_cat(
                 joint_tab = join(lenscat, joint_pz_mag, keys='object_id', join_type='inner')
 
                 final_lenscat = vstack([final_lenscat, joint_tab])
-
+                print(final_lenscat.colnames)
             if check_all_galaxies:
                 assert set(lenscat['object_id']).issubset(set(final_lenscat['object_id']))
         else:
@@ -163,6 +163,33 @@ def make_hscy3_cat(
         'i_cm_mag',
         'i_cm_magerr',
         ]
+    '''
+    all_columns.extend(
+        [
+            "i_detect_isprimary",
+            "i_deblend_skipped",
+            "i_sdsscentroid_flag",
+            "i_pixelflags_interpolatedcenter",
+            "i_pixelflags_saturatedcenter",
+            "i_pixelflags_crcenter",
+            "i_pixelflags_bad",
+            "i_pixelflags_suspectcenter",
+            "i_pixelflags_clipped",
+            "i_pixelflags_edge",
+            "i_hmshaperegauss_sigma",
+            "i_extendedness_value",
+            "i_cmodel_flux",
+            "i_cmodel_fluxerr",
+            "i_hmshaperegauss_resolution",
+            "i_hmshaperegauss_e1",
+            "i_hmshaperegauss_e2",
+            "i_cmodel_mag",
+            "a_i",
+            "i_apertureflux_10_mag",
+            "i_blendedness_abs"
+        ]
+    )
+    '''
     for mag in ['g', 'r', 'i', 'z', 'y']:
         all_columns += [
             f'forced_{mag}_cm_mag',
