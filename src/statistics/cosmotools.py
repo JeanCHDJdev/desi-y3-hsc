@@ -78,16 +78,13 @@ def z2dist(z):
 
 def get_wDM(angular_bins, zbin_edges, dndz):
     '''
-    Using CCL (Core Cosmology Library) to estimate wCM (the dark matter angular correlation function).
+    Using CCL (Core Cosmology Library) to estimate wDM (the dark matter angular correlation function).
     NOTE : CCL uses Limber approximation to compute w(theta) from C_ell and 
     halofit model for the non-linear power spectrum.
     '''
     # instaniate tracer
     dndz_zbins = 0.5 * (zbin_edges[:-1] + zbin_edges[1:])
-    #if bias_with_growthfactor:
-        # bias with growth factor (0.95/D(z) growth factor)
-        #bias = (dndz_zbins, 0.95 / (1 / (1 + dndz_zbins)))
-    #else:
+
     bias = (dndz_zbins, np.ones_like(dndz_zbins))
     tracer = ccl.NumberCountsTracer(
         COSMO_ccl,
@@ -97,7 +94,7 @@ def get_wDM(angular_bins, zbin_edges, dndz):
     )
 
     # angular power spectrum from C_ells
-    ell = np.linspace(0.1, 30000, 5000)
+    ell = np.logspace(np.log10(10), np.log10(5000), 1000)
     cl = ccl.angular_cl(COSMO_ccl, tracer, tracer, ell)
 
     # w(theta) from C_ells using Limber approximation
@@ -111,14 +108,15 @@ def get_wDM(angular_bins, zbin_edges, dndz):
 
     return wtheta
 
-def parametrize_magnification():
+def parametrize_magnification(tracer):
     '''
     Returns the alpha and bias models for the magnification correction.
     These are the models used in the HSC WL-photoz tomographic analysis.
     '''
-    alpha_model_p = lambda z: -1
-    alpha_model_s = lambda z: 1
-    bias_model_p = lambda z: 1
+    alpha_model_p = lambda z: 2.5*0.379-1
+    # LRG / QSO alpha model
+    alpha_model_s = lambda z: 2.5*1-1 if z < 1.1 else 2.5*0.278-1
+    bias_model_p = lambda z: (1+z)**0.5
     bias_model_s = lambda z: 1
     return alpha_model_p, alpha_model_s, bias_model_p, bias_model_s
 
@@ -149,13 +147,8 @@ def _magnification_coefficients(
         bias_model_s : callable, 
         zindex : int, 
         zvalues : np.ndarray,
-        contribution : str = 'both'
+        contribution : str = 'all'
         ):
-    if isinstance(contribution, str):
-        if contribution == 'all':
-            contribution = ['uD', 'Du', 'DD']
-        else:
-            contribution = [contribution]
     '''
     Computes the magnification correction for a given redshift index and value and cosmology.
 
@@ -178,18 +171,28 @@ def _magnification_coefficients(
     '''
     assert zindex < len(zvalues), "zindex must be less than the length of zvalues"
     assert zindex >= 0, "zindex must be non-negative"
+    if isinstance(contribution, str):
+        if contribution == 'all':
+            contribution = ['uD', 'Du', 'DD']
+        else:
+            contribution = [contribution]
+    assert all(c in ['uD', 'Du', 'DD'] for c in contribution), (
+        "contribution must be 'uD', 'Du', 'DD' or 'all'"
+    )
 
     _c = 299792.458  # speed of light in km/s
     chi = COSMO_astropy.comoving_transverse_distance # comoving transverse distance in Mpc
     _H0 = COSMO_astropy.H0.value # Hubble constant in km/s/Mpc
     _Om0 = COSMO_astropy.Om0 # matter density parameter
+    _H = COSMO_astropy.H # Hubble parameter at redshift zvalues in km/s/Mpc
     cosmofactor = (3 * _H0 **2 * _Om0 / _c)
+    dz = np.mean(np.diff(zvalues))  # mean redshift interval
 
     zi = zvalues[zindex]
 
     def _Dn_ij(zi, zj):
         cosmotransverse = ((chi(zj)-chi(zi))/chi(zj))*chi(zi)
-        return cosmofactor * (1 + zi)**2 * cosmotransverse.value
+        return cosmofactor * ((1 + zi) / _H(zi).value) * cosmotransverse.value * dz
     
     magnification = np.zeros_like(zvalues)
 

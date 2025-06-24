@@ -12,7 +12,6 @@ from pycorr import TwoPointEstimator
 from astropy.coordinates import SkyCoord
 from mocpy import MOC
 from scipy.stats import multivariate_normal
-from scipy.integrate import simpson
 
 import src.statistics.corrfiles as corrf
 import src.statistics.combination as comb
@@ -93,7 +92,7 @@ def single_bin_corr(
     # now do the single bin integration with $W(r)\propto r^{\beta}$ (default $\beta$ = -1)$
     wkernel = comovsep_sc**(beta)
     # divide by the integral of the kernel to normalize it
-    wkernel /= simpson(wkernel, x=comovsep_sc)
+    wkernel /= np.trapz(wkernel, x=comovsep_sc)
 
     if integration == 'single-bin':
         # compute the error bars given the covariance matrix
@@ -187,17 +186,19 @@ def wss(
 
     if frNGC is not None:
         for moc_id in mocngc:
+            filengc = frNGC.get_file(bin_index1, bin_index2, tracer1, tracer2, moc_id)
             try:
                 estimatorNGC = TwoPointEstimator.load(
-                    frNGC.get_file(bin_index1, bin_index2, tracer1, tracer2, moc_id)
+                    filename = filengc
                 )
             except FileNotFoundError:
                 continue
     if frSGC is not None:
         for moc_id in mocsgc:
+            filesgc = frSGC.get_file(bin_index1, bin_index2, tracer1, tracer2, moc_id)
             try:
                 estimatorSGC = TwoPointEstimator.load(
-                    frSGC.get_file(bin_index1, bin_index2, tracer1, tracer2, moc_id)
+                    filename = filesgc
                 )
             except FileNotFoundError:
                 continue
@@ -341,7 +342,7 @@ def compute_npz(
         If False, no bias correction is applied.
     return_chunks : bool
         If return_chunks is True, will return the individual values used to compute the n(z) for the tracer,
-        in order : `wsp_meas, wpp_meas, wss_meas, hsc_bias, desi_bias, deltaz, zloc, result`.
+        in order : `wsp_meas, wpp_meas, wss_meas ...`.
     verbose : bool
         If verbose is True, will print the values used to compute the n(z) for the tracer.
     '''

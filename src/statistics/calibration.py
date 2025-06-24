@@ -67,65 +67,26 @@ def model(nzdata: tuple[dict, dict], optparams:list[float]):
         ]
     )
 
-def logmodel(nzdata: tuple[dict, dict], optparams:list[float]):
-    '''
-    Our parameterized model function, per
-    tomographic bin. Integral must be 1.
-
-    Parameters:
-    nzdata : tuple[dict, dict]
-        A tuple containing the n(z) data:
-        - nz : dict
-            Dictionary with keys as tracers and values as the number density
-            for each tracer over the redshift grid. Is 0 if there is no coverage
-            for that tracer in that redshift bin.
-        - nzerr : dict
-            Dictionary with keys as tracers and values as the error on the
-            number density for each tracer over the redshift grid.
-    optparams : list[float]
-        A list of parameters to fit, which includes:
-        xparams : tuple[float, float, float, float, float]
-            A tuple containing the fixed parameters:
-            - x : float
-                The normalization factor for the number density.
-            - x_bgs : float
-                The normalization factor for the BGS tracer. 
-            - etc for the other tracers.
-        fitparams : list[float]
-            A list of the parameters to fit, which are the pi values for each
-            redshift bin. These are the parameters we want to optimize.
-    dint : float
-        - A sequence converging to 0 to impose a normalization constraint
-        on the model, ensuring that the integral of the model is equal to x,
-        our normalization factor.
-    '''
-    nz, nzerr = nzdata
-    # assumes all tracers have same redshift grid size which is true 
-    # given the way we construct the n(z) data
-    n_z = len(nz[list(nz.keys())[0]])
-    fitparams = optparams[:n_z]
-
-    x_bgs, x_lrg, x_elg, x_qso = optparams[n_z:]
-
-    x_tracers = {
-        'BGS_ANY': x_bgs,
-        'LRG': x_lrg,
-        'ELGnotqso': x_elg,
-        'QSO': x_qso
-    }
-
-    return np.sum(
-            [
-                ((np.exp(fitparams[i]) * x_tracers[t] - nz[t][i])**2) / (nzerr[t][i]**2)
-                if nzerr[t][i] > 0 else 0
-                for t in nzerr.keys()
-                for i in range(n_z)
-        ]
-    )
-
 def calibrate_tomo_bin(path_dictionary:dict, nzs_per_tracer:dict, tomo_bin:int, only_nz:bool=False, method:str='standard'):
     '''
-
+    Calibrate the tomographic bin for the given tracers.
+    Parameters
+    ----------
+    path_dictionary : dict
+        A dictionary containing the paths to the correlation files for each tracer.
+    nzs_per_tracer : dict
+        A dictionary containing the n(z) data for each tracer.
+        The keys are the tracer names and the values are tuples of arrays
+        containing the n(z) values and the errors on the n(z) values.
+    tomo_bin : int
+        The tomographic bin to calibrate. Should be between 1 and 4.
+    only_nz : bool, optional
+        If True, only return the n(z) data for the tomographic bin.
+        If False, return the result of the calibration.
+        Default is False.
+    method : str, optional
+        The method to use for the calibration. Can be 'standard' or 'log'.
+        Default is 'standard'.
     '''
     if method not in ['standard', 'log']:
         raise ValueError("Method must be 'standard' or 'log'")
@@ -197,11 +158,13 @@ def calibrate_tomo_bin(path_dictionary:dict, nzs_per_tracer:dict, tomo_bin:int, 
         constraint = lambda p: np.trapz(p[:n_z], x=zgrid) - 1
         bds = [(0, None)] * n_z + bds_x[tomo_bin]
         init_params = np.concatenate([pi0, x0])
-    if method == 'log':
-        func = lambda p: logmodel(nzdata=(nzs_tomo, nzs_err_tomo), optparams=p)
-        constraint = lambda g: np.exp(g)*dz - 1
-        bds = [(None, None)] * n_z + bds_x[tomo_bin]
-        init_params = np.concatenate([np.log(pi0 + 1e-10), x0])
+    #if method == 'log':
+    #    func = lambda p: logmodel(nzdata=(nzs_tomo, nzs_err_tomo), optparams=p)
+    #    constraint = lambda g: np.exp(g)*dz - 1
+    #    bds = [(None, None)] * n_z + bds_x[tomo_bin]
+    #    init_params = np.concatenate([np.log(pi0 + 1e-10), x0])
+    else:
+        raise NotImplementedError("Method must be 'standard'")
 
     result = minimize(
         fun=func,
