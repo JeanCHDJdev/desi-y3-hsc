@@ -76,14 +76,17 @@ def z2dist(z):
         dtype=float
         )
 
-def get_wDM(angular_bins, zbin_edges, dndz):
+def get_wDM(angular_vals, zbin_edges, dndz):
     '''
     Using CCL (Core Cosmology Library) to estimate wDM (the dark matter angular correlation function).
     NOTE : CCL uses Limber approximation to compute w(theta) from C_ell and 
     halofit model for the non-linear power spectrum.
     '''
     # instaniate tracer
+    zbin_edges = np.asarray(zbin_edges, dtype=float)
     dndz_zbins = 0.5 * (zbin_edges[:-1] + zbin_edges[1:])
+    if isinstance(dndz_zbins, (float, int)):
+        dndz_zbins = np.array([dndz_zbins])
 
     bias = (dndz_zbins, np.ones_like(dndz_zbins))
     tracer = ccl.NumberCountsTracer(
@@ -94,7 +97,7 @@ def get_wDM(angular_bins, zbin_edges, dndz):
     )
 
     # angular power spectrum from C_ells
-    ell = np.logspace(np.log10(10), np.log10(5000), 1000)
+    ell = np.logspace(np.log10(1), np.log10(10000), 2000)
     cl = ccl.angular_cl(COSMO_ccl, tracer, tracer, ell)
 
     # w(theta) from C_ells using Limber approximation
@@ -102,20 +105,20 @@ def get_wDM(angular_bins, zbin_edges, dndz):
         COSMO_ccl, 
         ell=ell, 
         C_ell=cl, 
-        theta=angular_bins,
+        theta=angular_vals,
         type='NN'
         )
 
     return wtheta
 
-def parametrize_magnification(tracer):
+def parametrize_magnification():
     '''
     Returns the alpha and bias models for the magnification correction.
     These are the models used in the HSC WL-photoz tomographic analysis.
     '''
-    alpha_model_p = lambda z: 2.5*0.379-1
+    alpha_model_p = lambda z: 2.5*0.004-1
     # LRG / QSO alpha model
-    alpha_model_s = lambda z: 2.5*1-1 if z < 1.1 else 2.5*0.278-1
+    alpha_model_s = lambda z: 2.5*1.5-1 if z < 1.1 else 2.5*0.3-1
     bias_model_p = lambda z: (1+z)**0.5
     bias_model_s = lambda z: 1
     return alpha_model_p, alpha_model_s, bias_model_p, bias_model_s
