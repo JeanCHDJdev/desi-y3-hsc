@@ -202,15 +202,3 @@ def compute_pz(nz, nzerr):
         else:
             xk.append(compute_xk(xk, zk[i]))
     return xk
-
-def compute_pz_lowerbound(Y):
-    """
-    
-    """
-    # X = exp(Y)
-    X = np.exp(Y)
-    # p_X(x) = p_Y(exp(y)) * exp(y)
-    px = np.zeros_like(X)
-    px
-
-    return 

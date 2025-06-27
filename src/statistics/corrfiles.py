@@ -76,7 +76,7 @@ class CorrFileReader():
         Parameters
         ----------
         tgt : str
-            Target name (e.g. 'ELGnotqso', 'LRG', 'QSO', 'BGS_ANY', 'HSC')
+            Target name (e.g. 'ELG_LOPnotqso', 'LRG', 'QSO', 'BGS_ANY', 'HSC')
         get : str
             What to get from the dndz file. Default is 'dndz', can also be 'bin' or 'wDM'.
         bin_indice : int
@@ -143,7 +143,7 @@ class CorrFileReader():
                 print(f'Output file already exists and overwrite is set to False. ')
                 return
         
-        targets = ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY', 'HSC']
+        targets = ['ELG_LOPnotqso', 'LRG', 'QSO', 'BGS_ANY', 'HSC']
 
         if use_sims:
             hsc_z_col = 'Z'
@@ -257,7 +257,7 @@ def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_v
     if cap is None:
         raise ValueError("cap cannot be None. Please provide a value.")
     assert cap in ['NGC', 'SGC'], f"cap should be either NGC or SGC, not {cap}"
-    assert tgt in ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY'], f"Unknown target {tgt}"
+    assert tgt in ['ELG_LOPnotqso', 'ELG_LOPnotqso', 'LRG', 'QSO', 'BGS_ANY'], f"Unknown target {tgt}"
     assert weight_type in ['PIP', 'nonKP', 'base'], f"Unknown weight type {weight_type}"
 
     try:
@@ -355,7 +355,7 @@ def get_zeff(zlow, zhigh, type='DESI', scheme=None, **file_settings):
                 ztbl = np.load(jointz)
             else:
                 print(f"File {jointz} does not exist, fetching DESI files...")
-                tracers = ['ELGnotqso', 'LRG', 'QSO', 'BGS_ANY']
+                tracers = ['ELG_LOPnotqso', 'LRG', 'QSO', 'BGS_ANY']
                 zall = []
                 for t in tracers:
                     print(f"Fetching DESI files for tracer {t}...")

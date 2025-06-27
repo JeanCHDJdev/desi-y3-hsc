@@ -1,10 +1,15 @@
 import numpy as np
-from astropy import units as u
-from astropy.cosmology import Planck18, FlatLambdaCDM
-
 import pyccl as ccl
+import math
 
-# Define the cosmology model
+from astropy import units as u
+from astropy.cosmology import FlatLambdaCDM
+from astropy.table import vstack, Table
+from scipy.integrate import quad
+
+import src.statistics.corrfiles as cf
+
+# Define the cosmology model and global constants.
 
 # parameters
 # We use: ΩDM = 0.258868, Ωb = 0.048252, ℎ = 0.6777, 𝑛𝑠 = 0.95 and 𝜎8 = 0.8 
@@ -42,7 +47,7 @@ def arcsec2hMpc(theta, z):
     theta = theta * u.arcsec
     d_pm = COSMO_astropy.comoving_transverse_distance(z) 
     x = (theta * d_pm).to(u.Mpc, u.dimensionless_angles()) 
-    x /= COSMO_astropy.h 
+    x *= COSMO_astropy.h 
     return x.value
 
 def hMpc2arcsec(rp, z):
@@ -57,7 +62,7 @@ def hMpc2arcsec(rp, z):
         Redshift
     """
     d_pm = COSMO_astropy.comoving_transverse_distance(z)
-    rp_hMpc = rp * COSMO_astropy.h  # Convert h^-1 Mpc to Mpc
+    rp_hMpc = rp / COSMO_astropy.h
     theta = (rp_hMpc * u.Mpc / d_pm).to(u.arcsec, u.dimensionless_angles())
     return theta.value
 
@@ -76,40 +81,139 @@ def z2dist(z):
         dtype=float
         )
 
-def get_wDM(angular_vals, zbin_edges, dndz):
-    '''
-    Using CCL (Core Cosmology Library) to estimate wDM (the dark matter angular correlation function).
-    NOTE : CCL uses Limber approximation to compute w(theta) from C_ell and 
-    halofit model for the non-linear power spectrum.
-    '''
-    # instaniate tracer
-    zbin_edges = np.asarray(zbin_edges, dtype=float)
-    dndz_zbins = 0.5 * (zbin_edges[:-1] + zbin_edges[1:])
-    if isinstance(dndz_zbins, (float, int)):
-        dndz_zbins = np.array([dndz_zbins])
+def w_dm_ang(comov_sep, z, ell_max=10000):
+    """
+    Compute angular dark matter correlation function w(theta) at a given redshift z.
+    
+    Parameters
+    ----------
+    comov_sep : float | list[float] | np.ndarray[float]
+        Comoving separation in h^-1 Mpc.
+    z : float
+        Redshift at which to compute the angular correlation function.
+    COSMO_ccl : ccl.Cosmology, optional
+        CCL cosmology object. If None, uses default Planck18 cosmology.
+    ell_max : int
+        Maximum ell for Cl computation (default: 3000).
+    
+    Returns
+    -------
+    wtheta : ndarray
+        Angular correlation function values at theta_vals_deg.
+    """
+    # Define delta-function redshift distribution (normalized)
+    zmin = z - 0.025
+    zmax = z + 0.025
+    zarr = np.linspace(zmin, zmax, 100)
+    dndz = np.ones_like(zarr)
+    dndz /= np.trapz(dndz, zarr)
+    bias = np.ones_like(zarr)  # unit bias for DM
 
-    bias = (dndz_zbins, np.ones_like(dndz_zbins))
+    angular_vals_deg = hMpc2arcsec(comov_sep, z) / 3600  # convert h^-1 Mpc to arcseconds
+
+    # Create number counts tracer
     tracer = ccl.NumberCountsTracer(
-        COSMO_ccl,
-        has_rsd=False,
-        dndz=(dndz_zbins, dndz),  # normalized PDF
-        bias=bias
+        COSMO_ccl, dndz=(zarr, dndz), bias=(zarr, bias), has_rsd=False
     )
 
-    # angular power spectrum from C_ells
-    ell = np.logspace(np.log10(1), np.log10(10000), 2000)
-    cl = ccl.angular_cl(COSMO_ccl, tracer, tracer, ell)
+    # Compute Cls
+    ells = np.arange(1, ell_max)
+    Cls = ccl.angular_cl(COSMO_ccl, tracer, tracer, ells)
 
-    # w(theta) from C_ells using Limber approximation
-    wtheta = ccl.correlation(
+    # Compute w(theta)
+    wtheta = ccl.correlations.correlation(
         COSMO_ccl, 
-        ell=ell, 
-        C_ell=cl, 
-        theta=angular_vals,
+        ell=ells, 
+        C_ell=Cls,
+        theta=angular_vals_deg, 
         type='NN'
-        )
+    )
 
     return wtheta
+
+def weights(rp, beta=-1):
+    return rp**beta / np.trapz(rp**beta, x=rp)
+
+def chi(z):
+    return ccl.comoving_radial_distance(COSMO_ccl, 1/(1+z))
+
+def PNL(l,z):
+    return ccl.power.nonlin_power(COSMO_ccl, k=(l+0.5)/chi(z), a=1/(1+z), p_of_k_a='delta_matter:delta_matter')
+
+def Plin(l,z):
+    return ccl.power.linear_power(COSMO_ccl, k=(l+0.5)/chi(z), a=1/(1+z), p_of_k_a='delta_matter:delta_matter')
+
+def w_dm(rp_vals, z, integrate=True, ell_max=10000):
+    '''
+    w_dm expects rp_vals in h^-1 Mpc.
+    '''
+    rp_vals /= COSMO_astropy.h  # convert to Mpc (1h^-1 Mpc ~1.43 Mpc)
+    c_light = 299792.458  # speed of light in km/s
+    Ell = range(1, ell_max)
+
+    Hz = COSMO_astropy.H(z).value
+    P_delta = [PNL(l, z) for l in Ell]
+
+
+    theta = rp_vals/chi(z)*360/(2*math.pi) 
+    norm = Hz/c_light*(1/chi(z)**2)
+    xi_dm=norm*ccl.correlations.correlation(
+        COSMO_ccl, ell=Ell, C_ell=P_delta, theta=theta, type='NN', #method='Legendre'
+        )
+    
+    if integrate:
+        return np.trapz(
+            np.multiply(xi_dm, weights(rp_vals)),
+            x=rp_vals
+        )
+    else:
+        return xi_dm
+
+def redshift_distribution(bounds, tracer, discretization=100):
+    centers = []
+    if isinstance(bounds, (list, np.ndarray)):
+        if isinstance(bounds[0], (float, int)):
+            assert len(bounds) == 2, "Bounds must be in the form [z_min, z_max]"
+            bounds = [tuple(bounds)]
+        elif isinstance(bounds[0], (list, tuple)):
+            assert all(len(b) == 2 for b in bounds), "Bounds must be in the form [[z_min, z_max], ...]"
+            # convert to tuples for consistency
+            bounds = [tuple(b) for b in bounds]
+        else:
+            raise TypeError("Bounds must be a list of two floats or a list of lists/tuples of two floats")
+    else:
+        raise TypeError("Bounds must be a list or numpy array")
+    for b in bounds:
+        assert b[0] < b[1], "Bounds must be in the form [z_min, z_max] with z_min < z_max"
+        centers.append(0.5 * (b[0] + b[1]))
+    dz = np.diff(centers)
+    assert all(np.isclose(d, dz[0]) for d in dz), "Bounds must be equally spaced in redshift"
+    dz = dz[0]  # use the first dz as the common interval
+
+    assert isinstance(discretization, int) and discretization > 0, "Discretization must be a positive integer"
+    assert tracer in ['all', 'BGS_ANY', 'LRG', 'ELG_LOPnotqso', 'QSO']
+
+    zdata = None
+    files = {
+        t : np.array([cf.fetch_desi_files(t, randoms=False, cap=cap) for cap in ['NGC', 'SGC']]).flatten() 
+            for t in ['BGS_ANY', 'LRG', 'ELG_LOPnotqso', 'QSO']
+        }
+    if tracer == 'all':
+        # get the redshift file to get the distribution
+        allf = []
+        for k, f in files.items():
+            allf.extend(f)
+    else:
+        # get the redshift file for the specific tracer
+        allf = files[tracer]
+    zdata = vstack([Table.read(f) for f in allf])
+
+    return zdata["Z"].data
+        
+            
+
+        
+
 
 def parametrize_magnification():
     '''
@@ -129,7 +233,7 @@ def mag_coeffs(
         contribution : str = 'all'
     ) -> float:
     '''
-    Returns the magnification correction function.
+    Returns the magnification correction coefficients.
     This is the function used in the HSC WL-photoz tomographic analysis.
     '''
     alpha_model_p, alpha_model_s, bias_model_p, bias_model_s = parametrize_magnification()
@@ -183,6 +287,7 @@ def _magnification_coefficients(
         "contribution must be 'uD', 'Du', 'DD' or 'all'"
     )
 
+    # preload the cosmological parameters
     _c = 299792.458  # speed of light in km/s
     chi = COSMO_astropy.comoving_transverse_distance # comoving transverse distance in Mpc
     _H0 = COSMO_astropy.H0.value # Hubble constant in km/s/Mpc
@@ -192,6 +297,13 @@ def _magnification_coefficients(
     dz = np.mean(np.diff(zvalues))  # mean redshift interval
 
     zi = zvalues[zindex]
+    
+    def _wDM(z_low, z_high, tracer='all'):
+        return get_wDM(
+            angular_vals=arcsec2hMpc(1, z_low),
+            zbin_edges=[z_low, z_high],
+            dndz=np.ones_like([z_low, z_high])
+        )
 
     def _Dn_ij(zi, zj):
         cosmotransverse = ((chi(zj)-chi(zi))/chi(zj))*chi(zi)
@@ -216,3 +328,8 @@ def _magnification_coefficients(
             )
 
     return magnification
+
+def solve_magnification(
+        zgrid
+    ):
+    pass

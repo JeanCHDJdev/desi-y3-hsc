@@ -79,7 +79,7 @@ class CorrelationMeta(ABC):
 
     bins_tracers = {
         'LRG': bins_lrg,
-        'ELGnotqso': bins_elg,
+        'ELG_LOPnotqso': bins_elg,
         'QSO': bins_qso,
         'BGS_ANY': bins_bgs,
         'HSC': bins_hsc,
@@ -153,7 +153,7 @@ class CorrelationMeta(ABC):
         self.use_hsc = False
         self.use_desi = False
 
-        desi_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
+        desi_tgt = ['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY']
         hsc_tgt = ['HSC']
 
         # Idea : 
@@ -296,7 +296,7 @@ class CorrelationMeta(ABC):
         Parameters
         ----------
         tgt : str
-            Target name (e.g. LRG, ELGnotqso, QSO, BGS_ANY)
+            Target name (e.g. LRG, ELG_LOPnotqso, QSO, BGS_ANY)
         bin_redshift : array
             Redshift binning for the target. Will digitize the redshift column
             and make the masks.
@@ -318,9 +318,9 @@ class CorrelationMeta(ABC):
             cap=self.cap,
             )
         if not self.sims:
-            # use onle the first 6 random files for now, it's fine... 
+            # use onle the first 3 random files for now, it's fine... 
             # could do more but not really worth the hassle
-            ranf = ranf[:5]
+            ranf = ranf[:3]
 
         tid = time.time()
         cat = sample_file_on_moc(
@@ -442,10 +442,11 @@ class CorrelationMeta(ABC):
             zmask_ran = None
         #if self.use_zbin:
         #    zmask_data = cat[self.z_bin_hsc_col]
+        use_real_cut = False
+        use_symexpr = False
 
         if self.use_zbin:
             # symbolic model to regress out the tail if necessary 
-            use_symexpr = False
             if use_symexpr:
                 self.logger.info('Calculating symbolic expression for HSC data')
                 stddnnz = cat['dnnz_photoz_std_best'][:]
@@ -477,29 +478,35 @@ class CorrelationMeta(ABC):
             ztomographic = [0.3, 1.5]
             # Mask redshifts inside tomographic range but with bad quality (tldr : calibration cut)
             inside_tomo_range = (zvalues > ztomographic[0]) & (zvalues <= ztomographic[1])
-            inside_bin1and2 = (zvalues > 0.3) & (zvalues <= 0.9)
+
             bad_quality = zmask_bins == 0
+            if use_real_cut:
+                inside_bin1and2 = (zvalues > 0.3) & (zvalues <= 0.9)
 
-            # implementing the fiducial cut with the difference in
-            diffmizuki = cat['mizuki_photoz_err95_max'][:] - cat['mizuki_photoz_err95_min'][:]
-            diffdnnz = cat['dnnz_photoz_err95_max'][:] - cat['dnnz_photoz_err95_min'][:]
-            quality_mask = (diffmizuki < 2.7) & (diffdnnz < 2.7)
+                # implementing the fiducial cut with the difference in
+                diffmizuki = cat['mizuki_photoz_err95_max'][:] - cat['mizuki_photoz_err95_min'][:]
+                diffdnnz = cat['dnnz_photoz_err95_max'][:] - cat['dnnz_photoz_err95_min'][:]
+                quality_mask = (diffmizuki < 2.7) & (diffdnnz < 2.7)
 
-            # TODO : figure this out ???????
-            #assert inside_bin1and2 & bad_quality == inside_bin1and2 & quality_mask, (
-            #    'inside_tomo_range & bad_quality does not match quality_mask, check the calibration cut'
-            #    )
-            self.logger.info(f'Removed sources because of bad quality from cat : {np.sum(inside_bin1and2 & bad_quality)/len(cat[inside_bin1and2]):.2%} of the data')
-            self.logger.info(f'Removed sources because of bad quality mask : {np.sum(inside_bin1and2 & ~quality_mask)/len(cat[inside_bin1and2]):.2%} of the data')
+                # TODO : figure this out ???????
+                #assert inside_bin1and2 & bad_quality == inside_bin1and2 & quality_mask, (
+                #    'inside_tomo_range & bad_quality does not match quality_mask, check the calibration cut'
+                #    )
+
+                self.logger.info(f'Removed sources because of bad quality from cat : {np.sum(inside_bin1and2 & bad_quality)/len(cat[inside_bin1and2]):.2%} of the data')
+                self.logger.info(f'Removed sources because of bad quality mask : {np.sum(inside_bin1and2 & ~quality_mask)/len(cat[inside_bin1and2]):.2%} of the data')
 
             # Zero out these values
             if use_symexpr:
                 # if we skip the symbolic expression, we just remove the bad quality sources
                 self.logger.info(f'Removed sources because of tail : {np.sum(rm_tail)/len(cat):.2%} of the data')
                 zmask_data[(inside_tomo_range & bad_quality) | rm_tail] = 0
-            else:
+            elif use_real_cut:
                 # Apply the quality cut only if z <= 0.9 (e.g bin 1, 2 or below)
                 zmask_data[~quality_mask & (zvalues <= 0.9)] = 0
+            else:
+                # if we don't use the symbolic expression, we just remove the bad quality sources
+                zmask_data[inside_tomo_range & bad_quality] = 0
             assert len(zmask_data[zmask_data > 0]) > 0, 'No data left after masking HSC data'
 
         else:
@@ -663,7 +670,7 @@ class CorrelationMeta(ABC):
                 zhigh=self.bin_redshift1[self.bin_index1],
                 type='DESI',
                 scheme="simple",
-                                file_settings={
+                file_settings={
                     'sims': self.sims,
                     'sims_version': self.sims_version,
                 }
@@ -1187,7 +1194,7 @@ def _get_data_to_read(
     return data
     
 def figure_out_class(tgt1, tgt2=None, jackknife=False):
-    desi_avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
+    desi_avb = ['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY']
     hsc_avb = ['HSC']
     avb = desi_avb + hsc_avb
     if tgt1 is None and tgt2 is None:
@@ -1211,7 +1218,7 @@ def get_target_couple(tgt1, tgt2=None):
     Utility method to get the target couple for DESI and HSC targets and reordering them
     based on what the script needs.
     '''
-    avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'HSC']
+    avb = ['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY', 'HSC']
     assert not((tgt1 is None) and (tgt2 is None)), 'tgt1 and tgt2 cannot be None simultaneously'
     if tgt2 is None and tgt1 is not None:
         tgt2 = tgt1
