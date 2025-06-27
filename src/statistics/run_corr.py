@@ -60,7 +60,7 @@ def parse_args():
         type=str,
         nargs='+',
         default=None,
-        choices=['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'HSC'],
+        choices=['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY', 'HSC'],
         help='Target(s) 1. '
         'Default is None. If None, will use all DESI targets.'
         )
@@ -68,7 +68,7 @@ def parse_args():
         '-t2',
         '--tgt2',
         type=str,
-        choices=['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'HSC'],
+        choices=['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY', 'HSC'],
         default=None,
         help='Target 2. '
         'Default is None. Only current option is HSC.'

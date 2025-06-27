@@ -81,13 +81,19 @@ def z2dist(z):
         dtype=float
         )
 
-def w_dm_ang(comov_sep, z, ell_max=10000):
+def weights(rp, beta=-1):
+    return rp**beta / np.trapz(rp**beta, x=rp)
+
+def chi(z):
+    return ccl.comoving_radial_distance(COSMO_ccl, 1/(1+z))
+
+def w_dm_ang(rp_vals, z, integrate=False, ell_max=10000):
     """
     Compute angular dark matter correlation function w(theta) at a given redshift z.
     
     Parameters
     ----------
-    comov_sep : float | list[float] | np.ndarray[float]
+    rp_vals : float | list[float] | np.ndarray[float]
         Comoving separation in h^-1 Mpc.
     z : float
         Redshift at which to compute the angular correlation function.
@@ -109,7 +115,7 @@ def w_dm_ang(comov_sep, z, ell_max=10000):
     dndz /= np.trapz(dndz, zarr)
     bias = np.ones_like(zarr)  # unit bias for DM
 
-    angular_vals_deg = hMpc2arcsec(comov_sep, z) / 3600  # convert h^-1 Mpc to arcseconds
+    angular_vals_deg = hMpc2arcsec(rp_vals, z) / 3600  # convert h^-1 Mpc to degrees
 
     # Create number counts tracer
     tracer = ccl.NumberCountsTracer(
@@ -118,7 +124,13 @@ def w_dm_ang(comov_sep, z, ell_max=10000):
 
     # Compute Cls
     ells = np.arange(1, ell_max)
-    Cls = ccl.angular_cl(COSMO_ccl, tracer, tracer, ells)
+    Cls = ccl.angular_cl(
+        COSMO_ccl, 
+        tracer, 
+        tracer, 
+        ells, 
+        p_of_k_a='delta_matter:delta_matter'
+        )
 
     # Compute w(theta)
     wtheta = ccl.correlations.correlation(
@@ -128,34 +140,34 @@ def w_dm_ang(comov_sep, z, ell_max=10000):
         theta=angular_vals_deg, 
         type='NN'
     )
-
-    return wtheta
-
-def weights(rp, beta=-1):
-    return rp**beta / np.trapz(rp**beta, x=rp)
-
-def chi(z):
-    return ccl.comoving_radial_distance(COSMO_ccl, 1/(1+z))
-
+    if integrate:
+        # Integrate w(theta) over the angular separation
+        w = np.trapz(
+            np.multiply(wtheta, weights(angular_vals_deg)),
+            x=angular_vals_deg
+        )
+        return w
+    else:
+        return wtheta
+    
 def PNL(l,z):
     return ccl.power.nonlin_power(COSMO_ccl, k=(l+0.5)/chi(z), a=1/(1+z), p_of_k_a='delta_matter:delta_matter')
 
 def Plin(l,z):
     return ccl.power.linear_power(COSMO_ccl, k=(l+0.5)/chi(z), a=1/(1+z), p_of_k_a='delta_matter:delta_matter')
 
-def w_dm(rp_vals, z, integrate=True, ell_max=10000):
+def w_dm(rp_vals, z, integrate=False, ell_max=10000):
     '''
     w_dm expects rp_vals in h^-1 Mpc.
     '''
-    rp_vals /= COSMO_astropy.h  # convert to Mpc (1h^-1 Mpc ~1.43 Mpc)
+    rp_vals_Mpc = rp_vals / COSMO_astropy.h  # convert to Mpc (1h^-1 Mpc ~1.43 Mpc)
     c_light = 299792.458  # speed of light in km/s
     Ell = range(1, ell_max)
 
     Hz = COSMO_astropy.H(z).value
     P_delta = [PNL(l, z) for l in Ell]
 
-
-    theta = rp_vals/chi(z)*360/(2*math.pi) 
+    theta = rp_vals_Mpc/chi(z)*360/(2*math.pi) 
     norm = Hz/c_light*(1/chi(z)**2)
     xi_dm=norm*ccl.correlations.correlation(
         COSMO_ccl, ell=Ell, C_ell=P_delta, theta=theta, type='NN', #method='Legendre'
@@ -163,8 +175,8 @@ def w_dm(rp_vals, z, integrate=True, ell_max=10000):
     
     if integrate:
         return np.trapz(
-            np.multiply(xi_dm, weights(rp_vals)),
-            x=rp_vals
+            np.multiply(xi_dm, weights(rp_vals_Mpc)),
+            x=rp_vals_Mpc
         )
     else:
         return xi_dm
@@ -228,13 +240,13 @@ def parametrize_magnification():
     return alpha_model_p, alpha_model_s, bias_model_p, bias_model_s
 
 def mag_coeffs( 
-        zindex : int, 
+        zi_ind : int, 
         zvalues : np.ndarray,
+        w_dm_values : np.ndarray = None,
         contribution : str = 'all'
     ) -> float:
     '''
     Returns the magnification correction coefficients.
-    This is the function used in the HSC WL-photoz tomographic analysis.
     '''
     alpha_model_p, alpha_model_s, bias_model_p, bias_model_s = parametrize_magnification()
     return _magnification_coefficients(
@@ -242,8 +254,9 @@ def mag_coeffs(
         alpha_model_s, 
         bias_model_p, 
         bias_model_s, 
-        zindex, 
+        zi_ind, 
         zvalues,
+        w_dm_values=w_dm_values,
         contribution=contribution
     )
     
@@ -252,8 +265,9 @@ def _magnification_coefficients(
         alpha_model_s : callable, 
         bias_model_p : callable, 
         bias_model_s : callable, 
-        zindex : int, 
+        zi_ind : int, 
         zvalues : np.ndarray,
+        w_dm_values : np.ndarray = None,
         contribution : str = 'all'
         ):
     '''
@@ -271,13 +285,13 @@ def _magnification_coefficients(
         The bias model for the photometric tracer.
     bias_model_s : callable
         The bias model for the spectroscopic tracer.
-    zindex : int
+    zi_ind : int
         The index of the redshift bin to compute the magnification correction for.
     zvalues : np.ndarray
         The redshift values corresponding to the n(z) values.
     '''
-    assert zindex < len(zvalues), "zindex must be less than the length of zvalues"
-    assert zindex >= 0, "zindex must be non-negative"
+    assert zi_ind < len(zvalues), "zi_ind must be less than the length of zvalues"
+    assert zi_ind >= 0, "zi_ind must be non-negative"
     if isinstance(contribution, str):
         if contribution == 'all':
             contribution = ['uD', 'Du', 'DD']
@@ -286,6 +300,10 @@ def _magnification_coefficients(
     assert all(c in ['uD', 'Du', 'DD'] for c in contribution), (
         "contribution must be 'uD', 'Du', 'DD' or 'all'"
     )
+    if w_dm_values is None:
+        raise ValueError(
+            "w_dm_values must be provided to compute the magnification correction"
+        )
 
     # preload the cosmological parameters
     _c = 299792.458  # speed of light in km/s
@@ -296,14 +314,7 @@ def _magnification_coefficients(
     cosmofactor = (3 * _H0 **2 * _Om0 / _c)
     dz = np.mean(np.diff(zvalues))  # mean redshift interval
 
-    zi = zvalues[zindex]
-    
-    def _wDM(z_low, z_high, tracer='all'):
-        return get_wDM(
-            angular_vals=arcsec2hMpc(1, z_low),
-            zbin_edges=[z_low, z_high],
-            dndz=np.ones_like([z_low, z_high])
-        )
+    zi = zvalues[zi_ind]
 
     def _Dn_ij(zi, zj):
         cosmotransverse = ((chi(zj)-chi(zi))/chi(zj))*chi(zi)
@@ -313,23 +324,51 @@ def _magnification_coefficients(
 
     mag1_const = alpha_model_s(zi)/(bias_model_p(zi)*bias_model_s(zi))
     mag2_const = 1 / bias_model_p(zi)
-    for j, zj in enumerate(zvalues):
-        if j < zindex and 'uD' in contribution:
+    for zj_ind, zj in enumerate(zvalues):
+        if zj_ind < zi_ind and 'uD' in contribution:
             Dn_ji = _Dn_ij(zj, zi)
-            magnification[j] = (
-               mag1_const * bias_model_p(zj) * Dn_ji
+            magnification[zj_ind] = (
+               mag1_const * bias_model_p(zj) * Dn_ji * w_dm_values[zj_ind] / w_dm_values[zi_ind]
             )
-        elif j == zindex and 'DD' in contribution:
-            magnification[j] = 1
-        elif j > zindex and 'Du' in contribution:
+        elif zj_ind == zi_ind and 'DD' in contribution:
+            magnification[zj_ind] = 1
+        elif zj_ind > zi_ind and 'Du' in contribution:
             Dn_ij = _Dn_ij(zi, zj)
-            magnification[j] = (
+            magnification[zj_ind] = (
                 mag2_const * alpha_model_p(zj) * Dn_ij
             )
 
     return magnification
 
 def solve_magnification(
-        zgrid
+        meas,
+        meas_err,
+        scale_cut,
+        zvalues,
     ):
-    pass
+
+    # first, compute w_dm_values for all redshifts
+    rp_vals = np.linspace(scale_cut[0], scale_cut[-1], 100)  # in h^-1 Mpc
+    print(f'Computing w_dm for {len(zvalues)} redshifts and {len(rp_vals)} rp values...')
+    w_dm_values = np.array([
+        w_dm(rp_vals, z, integrate=True) 
+        for z in zvalues
+    ])
+
+    # make the magnification matrix
+    print(f'Computing magnification matrix for {len(zvalues)} redshifts...')
+    Mag = np.array([
+        mag_coeffs(i, zvalues, w_dm_values, contribution='all')
+        for i in range(len(zvalues))
+    ])
+
+    # solve the linear system
+    print(f'Solving the linear system for {len(zvalues)} redshifts...')
+    npz = np.linalg.solve(Mag, meas)
+
+    # TODO : propagate errors from bias models
+    #dMag = np.std(Mag, axis=0)  
+    #npz_err = np.linalg.solve(Mag, (meas_err + dMag @ npz))
+    
+    npz_err = 0
+    return npz, npz_err, w_dm_values

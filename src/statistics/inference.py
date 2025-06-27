@@ -557,12 +557,18 @@ def full_npz_tomo(
         nz, nz_err = zip(*results)
         return np.array(nz), np.array(nz_err)
     
-def _get_fine_redshift_bins(fr: corrf.CorrFileReader):
+def _get_fine_redshift_bins(fr: corrf.CorrFileReader, tracer='Merged'):
     dzall = []
     mint = 1089 # cmb redshift should be high enough
     maxt = 0
-    for t in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']:
+    if tracer == 'Merged':
+        tracers = ['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY']
+    else:
+        if isinstance(tracer, str):
+            tracers = [tracer]
+    for t in tracers:
         bin_t = fr.get_bins(t)
+        print(bin_t)
         mint = min(mint, min(bin_t))
         maxt = max(maxt, max(bin_t)) 
         dz_t = np.diff(bin_t)
@@ -799,7 +805,7 @@ def merge_estimators(
     For overlapping redshift bins (where there are two tracers) combine them into a single estimator,
     and save them to the provided paths. Also combine on MOCs.
     '''
-    tracers = ['LRG', 'QSO', 'ELGnotqso', 'BGS_ANY']
+    tracers = ['LRG', 'QSO', 'ELG_LOPnotqso', 'BGS_ANY']
 
     fr_cross = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
     ngc = path_dictionary['DESI_NGC']
