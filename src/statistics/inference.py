@@ -346,7 +346,7 @@ def compute_npz(
     verbose : bool
         If verbose is True, will print the values used to compute the n(z) for the tracer.
     '''
-    assert tracer in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'Merged'], f'tracer {tracer} not a DESI tracer.'
+    assert tracer in ['LRG', 'ELGnotqso','ELG_LOPnotqso', 'QSO', 'BGS_ANY', 'Merged'], f'tracer {tracer} not a DESI tracer.'
     assert tomo_bin in [1, 2, 3, 4], f'tomo_bin {tomo_bin} not a valid bin.'
     
     # let's grab the binning scheme that we are using
@@ -531,7 +531,9 @@ def full_npz_tomo(
         print(f'Using merged method for tracer {tracer} and tomo bin {tomo_bin}.')
         func = compute_npz_merged
     else:
+        print(f'Using standard method for tracer {tracer} and tomo bin {tomo_bin}.')
         func = compute_npz
+
     for i in range(1, len(fine_redshift)):
         out = func(
             path_dictionary,
@@ -568,7 +570,8 @@ def _get_fine_redshift_bins(fr: corrf.CorrFileReader, tracer='Merged'):
             tracers = [tracer]
     for t in tracers:
         bin_t = fr.get_bins(t)
-        print(bin_t)
+        if bin_t is None and t == 'ELG_LOPnotqso':
+            bin_t = fr.get_bins('ELGnotqso')
         mint = min(mint, min(bin_t))
         maxt = max(maxt, max(bin_t)) 
         dz_t = np.diff(bin_t)
@@ -586,7 +589,6 @@ def _get_fine_redshift_bins(fr: corrf.CorrFileReader, tracer='Merged'):
 
 def _get_bias_correction(scale_cuts):
     if scale_cuts == [1, 5]:
-        #scale cut = [1, 5]
         gamma = 0.4539423871141212
         delta_gamma = 0.03450372293660535
     else:
@@ -609,7 +611,7 @@ def compute_rcc(
 
     Refer to full_rcc for the parameters.
     '''
-    assert tracer1 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer1} not a DESI tracer.'
+    assert tracer1 in ['LRG', 'ELGnotqso', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY'], f'tracer {tracer1} not a DESI tracer.'
 
     if tracer2 == 'HSC':
         w22_meas, w22_cov, w22_sep = wpp(
@@ -724,7 +726,7 @@ def full_rcc(
         If verbose is True, will print the values used to compute the n(z) for the tracer.
     '''
     # let's grab the binning scheme that we are using
-    if tracer1 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']:
+    if tracer1 in ['LRG', 'ELGnotqso', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY']:
         fr1 = corrf.CorrFileReader(path_dictionary['DESI_NGC'])
         tracer1_redshift = fr1.get_bins(tracer1)
     else:
@@ -797,24 +799,51 @@ def full_rcc(
 def merge_estimators(
         path_dictionary, 
         outdir, 
-        tomo_interest='all', 
-        verbose=False,
-        show_progress=True
+        which_tomo='all', 
+        which_cap='all',
+        which_patches='all',
+        which_tracers='all',
+        verbose=True
         ):
     '''
     For overlapping redshift bins (where there are two tracers) combine them into a single estimator,
     and save them to the provided paths. Also combine on MOCs.
+    
+    Parameters
+    ----------
+    path_dictionary : dict
+        Dictionary containing the paths to the HSC and DESI catalogs.
+    outdir : str or Path 
+        The output directory where the merged estimators will be saved.
+    which_tomo : str or list of int, optional
+        The tomographic bins to consider for merging. If 'all', all tomographic bins will be used.
+        If a list of integers, only those tomographic bins will be considered.
+    verbose : bool, optional
+        If True, will print the progress of the merging.
+    which_cap : str, optional
+        The type of MOC to use for the merging of autocorrelations. Can be 'all', 'NGC', 'SGC'.
+    which_patches : str or list of int, optional
+        The patches to consider for merging. If 'all', all patches will be used.
+        If a list of integers, only those patches will be considered. Can be [1, 2, 3, 4] for the four 
+        sky patches of HSC.
+    which_tracers : str or list of str, optional
+        The tracers to consider for merging. If 'all', all tracers will be used.
+        If a list of strings, only those tracers will be considered. Default is 'all', e.g. : 
+        ['LRG', 'QSO', 'ELG_LOPnotqso', 'BGS_ANY'].
     '''
-    tracers = ['LRG', 'QSO', 'ELG_LOPnotqso', 'BGS_ANY']
 
     fr_cross = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
+    if which_cap == 'all':
+        which_cap = ['NGC', 'SGC']
+    if isinstance(which_cap, str):
+        which_cap = [which_cap]
     ngc = path_dictionary['DESI_NGC']
-    if ngc is not None:
+    if ngc is not None and 'NGC' in which_cap:
         fr_auto_NGC = corrf.CorrFileReader(path_dictionary['DESI_NGC'])
     else:
         fr_auto_NGC = None
     sgc = path_dictionary['DESI_SGC']
-    if sgc is not None:
+    if sgc is not None and 'SGC' in which_cap:
         fr_auto_SGC = corrf.CorrFileReader(path_dictionary['DESI_SGC'])
     else:
         fr_auto_SGC = None
@@ -823,27 +852,43 @@ def merge_estimators(
         'At least one of auto_NGC or auto_SGC must be provided.'
     )
 
-    if tomo_interest == 'all':
+    if which_tomo == 'all':
         ## get all tomgraphic bins available in the cross-correlations
-        tomo_interest = fr_cross.get_bins('HSC')
+        which_tomo = fr_cross.get_bins('HSC')
         # transform to 1-indexed bins
-        tomo_interest = np.arange(1, len(tomo_interest), dtype=int)
+        which_tomo = np.arange(1, len(which_tomo), dtype=int)
         if verbose:
-            print(f'Using all tomographic bins : {tomo_interest}')
+            print(f'Using all tomographic bins : {which_tomo}')
+
+    if which_tracers == 'all':
+        tracers = ['LRG', 'QSO', 'ELG_LOPnotqso', 'BGS_ANY']
+    elif isinstance(which_tracers, str):
+        tracers = [which_tracers]
+    assert all(t in ['LRG', 'QSO', 'ELG_LOPnotqso', 'BGS_ANY'] for t in tracers), (
+        f'which_tracers must be a list of strings in [LRG, QSO, ELG_LOPnotqso, BGS_ANY], got {tracers}'
+    )
 
     redshift_bins = _get_fine_redshift_bins(fr_cross)
     tracer_bins = {t: fr_cross.get_bins(t) for t in tracers}
     redshift_bin_centers = 0.5 * (redshift_bins[:-1] + redshift_bins[1:])
     dz = np.mean(np.diff(redshift_bins))
 
+    if which_patches == 'all':
+        which_patches = [0, 1, 2, 3]  # all patches
+    elif isinstance(which_patches, int):
+        which_patches = [which_patches]
+    assert all(w in [0, 1, 2, 3] for w in which_patches), (
+        f'which_patches must be a list of integers in [0, 1, 2, 3], got {which_patches}'
+    )
+
     estimators_cross = []
     estimators_autos = []
     for zindr, zr in enumerate(redshift_bin_centers):
-        if show_progress:
+        if verbose:
             if (zindr) % (len(redshift_bins) // 10) == 0:
                 print(f'Processing redshift bin {zindr} (Completion : {(zindr+1)/len(redshift_bin_centers):.2%})')
         # paths_cross also has to respect tomographic bins, so we will have a list of lists
-        paths_cross = [[] for _ in range(len(tomo_interest))]
+        paths_cross = [[] for _ in range(len(which_tomo))]
         paths_autos = []
         for t in tracers:
             # find the index of bint where the two tracers match
@@ -853,9 +898,9 @@ def merge_estimators(
                     # first deal with DESI autos :
                     paths_autos_z = []
                     if fr_auto_NGC is not None:
-                        paths_autos_z.extend(fr_auto_NGC.get_file(zindt, zindt, t, t, None))
+                        paths_autos_z.extend(fr_auto_NGC.get_file(zindt, zindt, t, t, moc=which_patches))
                     if fr_auto_SGC is not None:
-                        paths_autos_z.extend(fr_auto_SGC.get_file(zindt, zindt, t, t, None))
+                        paths_autos_z.extend(fr_auto_SGC.get_file(zindt, zindt, t, t, moc=which_patches))
                     assert len(paths_autos_z) > 0, (
                         "No valid autocorrelations. got "
                         f"{fr_auto_NGC.get_file(zindt, zindt, t, t, None)}"
@@ -864,9 +909,9 @@ def merge_estimators(
 
                     # now deal with cross-correlations
                     # for each tomographic bin
-                    for index_tomo, hsc_tomo in enumerate(tomo_interest, start=1):
+                    for index_tomo, hsc_tomo in enumerate(which_tomo, start=1):
                         # grab all paths on MOC
-                        paths_tomo_cross = fr_cross.get_file(zindt, hsc_tomo, t, "HSC", None)
+                        paths_tomo_cross = fr_cross.get_file(zindt, hsc_tomo, t, "HSC", moc=which_patches)
                         # combine on MOCs for this tomo bin
                         paths_cross[index_tomo-1].extend(paths_tomo_cross)   
 
@@ -886,7 +931,7 @@ def merge_estimators(
             )
         )
 
-    assert len(estimators_cross[-1]) == len(tomo_interest), (
+    assert len(estimators_cross[-1]) == len(which_tomo), (
         f'estimators_cross[-1] should have 4 tomographic bins, got {len(estimators_cross[-1])}'
     )
     assert len(estimators_autos) == len(estimators_cross), (
@@ -906,7 +951,7 @@ def merge_estimators(
 
     # now save the estimators to the provided paths
     for i in range(1, len(redshift_bin_centers)+1):
-        for j, (est, tomo_bin) in enumerate(zip(estimators_cross[i-1], tomo_interest), start=1):
+        for j, (est, tomo_bin) in enumerate(zip(estimators_cross[i-1], which_tomo), start=1):
             # save the cross-correlations
             file_path = cross_dir / f'MergedxHSC_b1x{i}_b2x{tomo_bin}.npy'
             if isinstance(est, float):

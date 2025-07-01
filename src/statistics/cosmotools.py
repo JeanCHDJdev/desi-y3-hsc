@@ -150,10 +150,10 @@ def w_dm_ang(rp_vals, z, integrate=False, ell_max=10000):
     else:
         return wtheta
     
-def PNL(l,z):
+def p_mat_nonlin(l,z):
     return ccl.power.nonlin_power(COSMO_ccl, k=(l+0.5)/chi(z), a=1/(1+z), p_of_k_a='delta_matter:delta_matter')
 
-def Plin(l,z):
+def p_mat_lin(l,z):
     return ccl.power.linear_power(COSMO_ccl, k=(l+0.5)/chi(z), a=1/(1+z), p_of_k_a='delta_matter:delta_matter')
 
 def w_dm(rp_vals, z, integrate=False, ell_max=10000):
@@ -165,7 +165,7 @@ def w_dm(rp_vals, z, integrate=False, ell_max=10000):
     Ell = range(1, ell_max)
 
     Hz = COSMO_astropy.H(z).value
-    P_delta = [PNL(l, z) for l in Ell]
+    P_delta = [p_mat_nonlin(l, z) for l in Ell]
 
     theta = rp_vals_Mpc/chi(z)*360/(2*math.pi) 
     norm = Hz/c_light*(1/chi(z)**2)
@@ -222,21 +222,19 @@ def redshift_distribution(bounds, tracer, discretization=100):
 
     return zdata["Z"].data
         
-            
-
-        
-
-
-def parametrize_magnification():
+def parametrize_magnification(tracer='LRG'):
     '''
     Returns the alpha and bias models for the magnification correction.
     These are the models used in the HSC WL-photoz tomographic analysis.
     '''
-    alpha_model_p = lambda z: 2.5*0.004-1
-    # LRG / QSO alpha model
-    alpha_model_s = lambda z: 2.5*1.5-1 if z < 1.1 else 2.5*0.3-1
-    bias_model_p = lambda z: (1+z)**0.5
-    bias_model_s = lambda z: 1
+    # LRGs & tomobin 2 0.4 < z < 1.1
+    if tracer == 'LRG':
+        alpha_LRG = 0.209
+        beta_LRG = 2.790
+        alpha_model_p = lambda z: -0.701
+        alpha_model_s = lambda z: 1.506
+        bias_model_p = lambda z: 1#(1+z)**0.5
+        bias_model_s = lambda z: alpha_LRG * ((1+z)**2 - 6.565) + beta_LRG
     return alpha_model_p, alpha_model_s, bias_model_p, bias_model_s
 
 def mag_coeffs( 
@@ -250,12 +248,12 @@ def mag_coeffs(
     '''
     alpha_model_p, alpha_model_s, bias_model_p, bias_model_s = parametrize_magnification()
     return _magnification_coefficients(
-        alpha_model_p, 
-        alpha_model_s, 
-        bias_model_p, 
-        bias_model_s, 
-        zi_ind, 
-        zvalues,
+        alpha_model_p=alpha_model_p, 
+        alpha_model_s=alpha_model_s, 
+        bias_model_p=bias_model_p, 
+        bias_model_s=bias_model_s, 
+        zi_ind=zi_ind, 
+        zvalues=zvalues,
         w_dm_values=w_dm_values,
         contribution=contribution
     )
@@ -307,7 +305,7 @@ def _magnification_coefficients(
 
     # preload the cosmological parameters
     _c = 299792.458  # speed of light in km/s
-    chi = COSMO_astropy.comoving_transverse_distance # comoving transverse distance in Mpc
+    _chi = COSMO_astropy.comoving_transverse_distance # comoving transverse distance in Mpc
     _H0 = COSMO_astropy.H0.value # Hubble constant in km/s/Mpc
     _Om0 = COSMO_astropy.Om0 # matter density parameter
     _H = COSMO_astropy.H # Hubble parameter at redshift zvalues in km/s/Mpc
@@ -317,13 +315,13 @@ def _magnification_coefficients(
     zi = zvalues[zi_ind]
 
     def _Dn_ij(zi, zj):
-        cosmotransverse = ((chi(zj)-chi(zi))/chi(zj))*chi(zi)
+        cosmotransverse = ((_chi(zj)-_chi(zi))/_chi(zj))*_chi(zi)
         return cosmofactor * ((1 + zi) / _H(zi).value) * cosmotransverse.value * dz
     
     magnification = np.zeros_like(zvalues)
 
     mag1_const = alpha_model_s(zi)/(bias_model_p(zi)*bias_model_s(zi))
-    mag2_const = 1 / bias_model_p(zi)
+    mag2_const = 1 / bias_model_s(zi)
     for zj_ind, zj in enumerate(zvalues):
         if zj_ind < zi_ind and 'uD' in contribution:
             Dn_ji = _Dn_ij(zj, zi)
@@ -345,10 +343,11 @@ def solve_magnification(
         meas_err,
         scale_cut,
         zvalues,
+        return_matrices=False,
     ):
 
     # first, compute w_dm_values for all redshifts
-    rp_vals = np.linspace(scale_cut[0], scale_cut[-1], 100)  # in h^-1 Mpc
+    rp_vals = np.linspace(scale_cut[0], scale_cut[-1], 101)  # in h^-1 Mpc
     print(f'Computing w_dm for {len(zvalues)} redshifts and {len(rp_vals)} rp values...')
     w_dm_values = np.array([
         w_dm(rp_vals, z, integrate=True) 
@@ -367,8 +366,12 @@ def solve_magnification(
     npz = np.linalg.solve(Mag, meas)
 
     # TODO : propagate errors from bias models
+    dMag = 0
     #dMag = np.std(Mag, axis=0)  
     #npz_err = np.linalg.solve(Mag, (meas_err + dMag @ npz))
     
     npz_err = 0
-    return npz, npz_err, w_dm_values
+    if return_matrices:
+        return npz, npz_err, w_dm_values, Mag, dMag
+    else:
+        return npz, npz_err, w_dm_values
