@@ -54,8 +54,18 @@ class CorrFileReader():
         if moc == "Merged":
             return f'{DIR}/{tgt1}x{tgt2}_b1x{b1}_b2x{b2}.npy'
         if moc is None:
-            return sorted(list(Path(f'{DIR}').glob(f'{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc*.npy')))
-        return f'{DIR}/{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{moc}.npy'
+            moc = [0,1,2,3]
+        if isinstance(moc, list):
+            assert all(m in [0, 1, 2, 3] for m in moc), f"MOC values should be in [0, 1, 2, 3], not {moc}"
+            path_list = []
+            for m in moc:
+                list_files = sorted(list(Path(f'{DIR}').glob(f'{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{m}.npy')))
+                assert len(list_files) == len(moc), f"Expected {len(moc)} files, found {len(list_files)} for {tgt1}x{tgt2} b1x{b1} b2x{b2}"
+                path_list.extend(list_files)
+            return sorted(path_list)
+        if isinstance(moc, int):
+            assert moc in [0, 1, 2, 3], f"MOC should be an integer in [0, 1, 2, 3], not {moc}"
+            return f'{DIR}/{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{moc}.npy'
     
     def get_auto_file(self, b1, tgt, moc):
         """
@@ -66,7 +76,11 @@ class CorrFileReader():
     def get_bins(self, name):
         bins = np.load(f'{self.ROOT}/bins/bins_all.npz')
         if name not in bins:
-            raise ValueError(f"Unknown bin name {name}. Available bins are {bins.files}")
+            # backward compatibility for old names, same redshift bins (temporary fix)
+            if name == 'ELG_LOPnotqso':
+                name = 'ELGnotqso'
+            else:
+                raise ValueError(f"Unknown bin name {name}. Available bins are {bins.files}")
         else:
             return bins[name]
         
@@ -114,96 +128,6 @@ class CorrFileReader():
         else:
             files = covdir.glob(f'*.npy')
             return list(files)
-        
-    def get_cov_file(self, b1, b2, tgt1, tgt2='HSC', moc=0):
-        """
-        Get the covariance file name for given redshift bins and MOC.
-        """
-        covdir = Path(self.ROOT, f'{tgt1}x{tgt2}', 'cov')
-        file = covdir / f'{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{moc}.npy'
-        if not file.exists():
-            raise FileNotFoundError(f"File {file} does not exist")
-        else:
-            return file
-
-    def make_dndz(self, sims : int, outfile='dndz.npz', overwrite=False, z_dens_resolution=5, oversample_rate=100):
-
-        use_sims = True if sims > 0 else False
-        assert sims >= 0, f"Invalid simulations version {sims}"
-        if use_sims:
-            print(f"Using simulations version {sims}")
-        else:
-            print("Using real data")
-
-        out = Path(self.ROOT, 'dndz', outfile).resolve()
-        if not out.parent.exists():
-            out.parent.mkdir(parents=True)
-        else:
-            if not overwrite:
-                print(f'Output file already exists and overwrite is set to False. ')
-                return
-        
-        targets = ['ELG_LOPnotqso', 'LRG', 'QSO', 'BGS_ANY', 'HSC']
-
-        if use_sims:
-            hsc_z_col = 'Z'
-            desi_z_col = 'z'
-            targets.pop(targets.index('QSO'))
-        else:
-            hsc_z_col = 'dnnz_photoz_best'
-            desi_z_col = 'Z'
-
-        tgts_save = {
-            **{f'{tgt}_dndz': [] for tgt in targets},
-            **{f'{tgt}_wDM': [] for tgt in targets}
-        }
-
-        for tgt in targets:
-
-            print(f'Processing {tgt}...')
-
-            if tgt == 'HSC':
-                file = fetch_hsc_files(
-                    randoms=False, sims=use_sims, sims_version=sims
-                    )
-                ztbl = fio.FITS(Path(file))[1][hsc_z_col].read()
-            else:
-                file = fetch_desi_files(
-                    #cap does not really for dndz
-                    tgt, randoms=False, sims=use_sims, sims_version=sims, cap='NGC' 
-                    )
-                ztbl = fio.FITS(Path(file))[1][desi_z_col].read()
-            tbl_length = len(ztbl)
-            assert tbl_length > 0, f"Empty table for {tgt} in {file}"
-
-            btgt = self.get_bins(tgt)
-            tgts_save[f'{tgt}_bin'] = btgt
-
-            for b in range(1, len(btgt)):
-                mask = (
-                    (ztbl > btgt[b-1]) & (ztbl <= btgt[b])
-                    )
-                zloc = (btgt[b-1] + btgt[b]) / 2
-                counts, edges = np.histogram(
-                    ztbl[mask], bins=z_dens_resolution
-                    )
-                rp_bins = self.get_bins('rp')
-                angular_bins = ct.hMpc2arcsec(rp_bins, z=zloc) * 3600
-                # let's oversample the angular bins to get a better resolution
-                angular_bins = np.linspace(
-                    angular_bins[0], angular_bins[-1], oversample_rate*len(angular_bins)
-                    )
-                wDM = ct.get_wDM(
-                    angular_bins=angular_bins,
-                    zbin_edges=edges,
-                    dndz=counts
-                    )
-                tgts_save[f'{tgt}_wDM'].append(wDM)
-                dndz = np.sum(mask)/tbl_length
-                tgts_save[f'{tgt}_dndz'].append(dndz)
-
-        self.dndz_file = out
-        np.savez(self.dndz_file, **tgts_save)
 
 def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
     """
@@ -253,11 +177,11 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
 
     return logger
 
-def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_version=0, cap=None):
+def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_version=0, cap=None, version='DR1'):
     if cap is None:
         raise ValueError("cap cannot be None. Please provide a value.")
     assert cap in ['NGC', 'SGC'], f"cap should be either NGC or SGC, not {cap}"
-    assert tgt in ['ELG_LOPnotqso', 'ELG_LOPnotqso', 'LRG', 'QSO', 'BGS_ANY'], f"Unknown target {tgt}"
+    assert tgt in ['ELG_LOPnotqso', 'ELGnotqso', 'LRG', 'QSO', 'BGS_ANY'], f"Unknown target {tgt}"
     assert weight_type in ['PIP', 'nonKP', 'base'], f"Unknown weight type {weight_type}"
 
     try:
@@ -275,14 +199,18 @@ def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_v
                 f'desi_targets_sim_{tgt}_v{sims_version}.fits'
                 )
         else:
-            root = Path(
-                '/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/'
-                )
+            if version not in ['DR1', 'DR2']:
+                raise ValueError(f"Unknown version {version}. Available versions are 'DR1' and 'DR2'.")
+            if version == 'DR2':
+                root = Path('/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/')
+            elif version == 'DR1':
+                root = Path('/global/cfs/projectdirs/desi/survey/catalogs/Y1/LSS/iron/LSScats/v1.5/')
             if weight_type == 'PIP':
                 root = Path(root, 'PIP')
                 path = f'{tgt}_{cap}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
             elif weight_type == 'nonKP':
-                root = Path(root, 'nonKP')
+                if version == 'DR2':
+                    root = Path(root, 'nonKP')
                 path = f'{tgt}_{cap}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
             elif weight_type == 'base':
                 root = Path(root)

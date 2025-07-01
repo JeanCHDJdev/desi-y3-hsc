@@ -219,6 +219,7 @@ class CorrelationMeta(ABC):
         self.w_cols_to_operate = [
             self.w_desi_col, 
             self.w_fkp_desi_col,
+            #'PROB_OBS'
             #self.w_comp_desi_col
             ]
         self.w_operator = '*'
@@ -1158,10 +1159,16 @@ def _get_data_to_read(
             if operator in ['*', 'multiply', 'times', 'product']:
                 w_col = np.ones_like(data[ra_col])
                 for col in weight_cols_to_operate:
-                    w_col *= data[col]
-                    logging.info(
-                        f"Multiplying {col} to {main_weight_col} : {data[col][:3]} * {w_col[:3]}"
-                        )
+                    if col == 'PROB_OBS':
+                        w_col /= data[col]
+                        logging.info(
+                            f"Dividing {col} to {main_weight_col} : {data[col][:3]} / {w_col[:3]}"
+                            )
+                    else:
+                        w_col *= data[col]
+                        logging.info(
+                            f"Multiplying {col} to {main_weight_col} : {data[col][:3]} * {w_col[:3]}"
+                            )
             elif operator in ['+', 'add', 'plus', 'sum']:
                 w_col = np.zeros_like(data[ra_col])
                 for col in weight_cols_to_operate:
