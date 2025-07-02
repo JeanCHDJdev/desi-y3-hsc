@@ -126,14 +126,14 @@ HSC:
 OUTDIR="-o outputs/v12_correction/autos_HSC" && DEFAULT_FLAGS="-ns 50 -r1 15 -r2 30 -s 0 -c 200 -z -j" && setcc && python run_corr.py -t1 HSC && OUTDIR="-o outputs/v12_correction/cross" && DEFAULT_FLAGS="-t2 HSC -ns 50 -r1 4 -r2 50 -s 0 -c 200 -z -j" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 BGS_ANY && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO
 
 NGC:
-OUTDIR="-o outputs/v14/autos_NGC" && DEFAULT_FLAGS="-s 0 -ns 80 -re 256 -j -k -a 1" && setcc && python run_corr.py $OUTDIR -t1 ELG_LOPnotqso $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 LRG $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 BGS_ANY $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 QSO $DEFAULT_FLAGS
+OUTDIR="-o outputs/v15_dr1/autos_NGC" && DEFAULT_FLAGS="-s 0 -ns 80 -re 256 -j -k -a 1" && setcc && python run_corr.py $OUTDIR -t1 ELG_LOPnotqso $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 LRG $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 BGS_ANY $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 QSO $DEFAULT_FLAGS
 SGC:
-OUTDIR="-o outputs/v14/autos_SGC" && DEFAULT_FLAGS="-s 0 -ns 80 -re 256 -j -k -a 3" && setcc && python run_corr.py $OUTDIR -t1 ELG_LOPnotqso $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 LRG $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 BGS_ANY $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 QSO $DEFAULT_FLAGS
+OUTDIR="-o outputs/v16_dr1/autos_SGC" && DEFAULT_FLAGS="-s 0 -ns 80 -re 256 -j -k -a 3" && setcc && python run_corr.py $OUTDIR -t1 ELG_LOPnotqso $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 LRG $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 BGS_ANY $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 QSO $DEFAULT_FLAGS
 CROSS :
 A :
-- OUTDIR="-o outputs/v14/cross" && DEFAULT_FLAGS="-t2 HSC -ns 80 -s 0 -z -j" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 LRG
+- OUTDIR="-o outputs/v15_dr1/cross" && DEFAULT_FLAGS="-t2 HSC -ns 80 -s 0 -z -j" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 LRG
 B :
-- OUTDIR="-o outputs/v14/cross" && DEFAULT_FLAGS="-t2 HSC -ns 80 -s 0 -z -j" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 BGS_ANY && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 ELG_LOPnotqso
+- OUTDIR="-o outputs/v15_dr1/cross" && DEFAULT_FLAGS="-t2 HSC -ns 80 -s 0 -z -j" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 ELG_LOPnotqso && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 ELG_LOPnotqso
 
 ### Simulations :
 - Autos :
