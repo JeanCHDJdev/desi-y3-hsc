@@ -58,10 +58,9 @@ class CorrFileReader():
         if isinstance(moc, list):
             assert all(m in [0, 1, 2, 3] for m in moc), f"MOC values should be in [0, 1, 2, 3], not {moc}"
             path_list = []
-            for m in moc:
-                list_files = sorted(list(Path(f'{DIR}').glob(f'{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{m}.npy')))
-                assert len(list_files) == len(moc), f"Expected {len(moc)} files, found {len(list_files)} for {tgt1}x{tgt2} b1x{b1} b2x{b2}"
-                path_list.extend(list_files)
+            list_files = sorted(list(Path(f'{DIR}', f'{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{m}.npy') for m in moc))
+            assert len(list_files) == len(moc), f"Expected {len(moc)} files, found {len(list_files)} for {tgt1}x{tgt2} b1x{b1} b2x{b2}"
+            path_list.extend(list_files)
             return sorted(path_list)
         if isinstance(moc, int):
             assert moc in [0, 1, 2, 3], f"MOC should be an integer in [0, 1, 2, 3], not {moc}"
@@ -177,7 +176,7 @@ def setup_crosscorr_logging(log_file='logs/output', log_level=logging.INFO):
 
     return logger
 
-def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_version=0, cap=None, version='DR1'):
+def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_version=0, cap=None, version='DR2'):
     if cap is None:
         raise ValueError("cap cannot be None. Please provide a value.")
     assert cap in ['NGC', 'SGC'], f"cap should be either NGC or SGC, not {cap}"
@@ -226,6 +225,9 @@ def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_v
             return files
     except PermissionError:
         logging.error(f"Permission denied accessing DESI files and randoms = {randoms}")
+        raise
+    except FileNotFoundError:
+        logging.error(f"DESI catalog file not found and randoms = {randoms}") 
         raise
 
 def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=0):

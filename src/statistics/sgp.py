@@ -41,11 +41,15 @@ def _suppress(x, damping):
     
 def suppression(zval, gp_n, gp_sigma, SNRthreshold=3, damping=.3):
     dz = np.mean(np.diff(zval))
+    kernel_size = int(2 * np.ceil(1 / dz))
 
-    half_length = len(zval) // 2
-    k_range = np.arange(-half_length, half_length)
-    gaussian = np.exp(-0.5 * (k_range / dz) ** 2)
-    gaussian /= np.sum(gaussian)  # Normalize so sum = 1
+    if kernel_size % 2 == 0:
+        kernel_size -= 1 
+
+    k_range = np.arange(-kernel_size // 2, kernel_size // 2 + 1)
+
+    gaussian = np.exp(-0.5 * (((k_range+1) * dz) / (0.1)) ** 2)
+    gaussian /= np.sum(gaussian)
 
     x = (1/SNRthreshold) * np.convolve(gp_n/gp_sigma, gaussian, mode='same')
     suppression = np.array([_suppress(xi, damping) for xi in x])
