@@ -82,12 +82,12 @@ def combine_error_bars(x, xerr, y, yerr):
 def combine_error_bars_mult(x, xerr, y, yerr):
     '''
     Combine error bars for two samples with z+/-zerr=sqrt((x+/-xerr)*(y+/-yerr))
-    Returns z, zerr.
+    Returns zerr.
     '''
-    x = np.asarray(x)
-    y = np.asarray(y)
-    xerr = np.asarray(xerr)
-    yerr = np.asarray(yerr)
+    x = np.asarray(x).copy()
+    y = np.asarray(y).copy()
+    xerr = np.asarray(xerr).copy()
+    yerr = np.asarray(yerr).copy()
     return np.sqrt(
         1/(4*x*y)*(x*yerr + y*xerr)**2
     )
