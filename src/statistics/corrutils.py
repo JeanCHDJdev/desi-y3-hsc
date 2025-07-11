@@ -1,6 +1,6 @@
 '''
 This script holds wrapper functions and utilities for 
-calculating and plotting correlation matrices.
+calculating and plotting correlation functions.
 '''
 import time 
 import math
@@ -9,7 +9,6 @@ import fitsio as fio
 import numpy as np
 import logging
 import multiprocessing as mp
-import pandas as pd
 
 from astropy.table import Table
 from abc import ABC, abstractmethod
@@ -68,14 +67,10 @@ class CorrelationMeta(ABC):
     bins_bgs = np.arange(0.0, 0.55, 0.05) # 0 < z < 0.5
     bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.1
     bins_elg = np.arange(0.8, 1.65, 0.05) # 0.8 < z < 1.6 in redshift distribution
-    #bins_elg = np.array([0.8, 0.9, 1.0, 1.1]) # for now reduce bin for compute power
     bins_qso = np.arange(0.8, 2.85, 0.05) # 0.9 < z < 2.8
 
-    # use_zbin will override this choice
-    #bins_hsc = np.arange(0, 2.9, 0.1) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    #bins_hsc = np.arange(0, 2.5, 0.1)
     bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
-    # if mini_bins : 
-    #bins_hsc = np.arange(0, 2.825, 0.025)
 
     bins_tracers = {
         'LRG': bins_lrg,
@@ -219,7 +214,6 @@ class CorrelationMeta(ABC):
         self.w_cols_to_operate = [
             self.w_desi_col, 
             self.w_fkp_desi_col,
-            #'PROB_OBS'
             #self.w_comp_desi_col
             ]
         self.w_operator = '*'
@@ -319,7 +313,7 @@ class CorrelationMeta(ABC):
             cap=self.cap,
             )
         if not self.sims:
-            # use onle the first 3 random files for now, it's fine... 
+            # use only the first 3 random files for now (e.g, over 100x the number of data)
             # could do more but not really worth the hassle
             ranf = ranf[:3]
 
@@ -419,7 +413,7 @@ class CorrelationMeta(ABC):
             main_weight_col=self.w_hsc_col if not self.sims else None,
             # we go with both z col and z bin col in case we want to use the calibration cut
             # that only the bins know about (and it's important for HSC)
-            z_col=self.z_hsc_col if not self.use_zbin else [self.z_hsc_col, self.z_bin_hsc_col], 
+            z_col=[self.z_hsc_col, self.z_bin_hsc_col], 
             moc=self.moc if not self.skip_moc else None,
             distance_col=self.distance_col,
             operator=self.w_operator,
@@ -441,30 +435,32 @@ class CorrelationMeta(ABC):
         else:
             # no z masking on HSC randoms for real HSC data
             zmask_ran = None
-        #if self.use_zbin:
-        #    zmask_data = cat[self.z_bin_hsc_col]
-        use_real_cut = False
-        use_symexpr = False
 
         if self.use_zbin:
+            # ----------- SYMBOLIC EXPRESSION TAIL REMOVAL ------------
             # symbolic model to regress out the tail if necessary 
-            if use_symexpr:
-                self.logger.info('Calculating symbolic expression for HSC data')
-                stddnnz = cat['dnnz_photoz_std_best'][:]
-                mean_mode = cat['dnnz_photoz_mean'][:] - cat['dnnz_photoz_mode'][:]
-                symexpr = ((mean_mode + stddnnz) * 0.5395833) - 0.043832403
+            #if use_symexpr:
+            #    self.logger.info('Calculating symbolic expression for HSC data')
+            #    stddnnz = cat['dnnz_photoz_std_best'][:]
+            #    mean_mode = cat['dnnz_photoz_mean'][:] - cat['dnnz_photoz_mode'][:]
+            #    symexpr = ((mean_mode + stddnnz) * 0.5395833) - 0.043832403
 
-                assert len(symexpr) == len(cat), 'symexpr and cat have different lengths'
+            #    assert len(symexpr) == len(cat), 'symexpr and cat have different lengths'
 
-                self.logger.info(f'Calculating symbolic expression for HSC data {symexpr[:5]}')
-                pct = 60 # remove 40%
-                rm_threshold = np.percentile(symexpr[~np.isnan(symexpr)], pct)
-                assert not np.isnan(rm_threshold), 'rm_threshold is NaN, check the symbolic expression'
+            #    self.logger.info(f'Calculating symbolic expression for HSC data {symexpr[:5]}')
+            #    pct = 60 # remove 40%
+            #    rm_threshold = np.percentile(symexpr[~np.isnan(symexpr)], pct)
+            #    assert not np.isnan(rm_threshold), 'rm_threshold is NaN, check the symbolic expression'
                 
-                self.logger.info(f'Removing {pct}th percentile: {rm_threshold:.4f}')
+            #    self.logger.info(f'Removing {pct}th percentile: {rm_threshold:.4f}')
                 # >= to remove the tail
                 # < to only keep the tail
-                rm_tail = symexpr < rm_threshold
+            #    rm_tail = symexpr < rm_threshold
+            # Zero out these values
+            #if use_symexpr:
+                # if we skip the symbolic expression, we just remove the bad quality sources
+            #    self.logger.info(f'Removed sources because of tail : {np.sum(rm_tail)/len(cat):.2%} of the data')
+            #    zmask_data[(inside_tomo_range & bad_quality) | rm_tail] = 0
             
             # zbins in HSC are 1-indexed. 0 = outside of the binning scheme
             zmask_bins = cat[self.z_bin_hsc_col]
@@ -477,37 +473,21 @@ class CorrelationMeta(ABC):
                 )
             # which zvalues are in the tomographic range ?
             ztomographic = [0.3, 1.5]
+
             # Mask redshifts inside tomographic range but with bad quality (tldr : calibration cut)
             inside_tomo_range = (zvalues > ztomographic[0]) & (zvalues <= ztomographic[1])
-
             bad_quality = zmask_bins == 0
-            if use_real_cut:
-                inside_bin1and2 = (zvalues > 0.3) & (zvalues <= 0.9)
 
-                # implementing the fiducial cut with the difference in
-                diffmizuki = cat['mizuki_photoz_err95_max'][:] - cat['mizuki_photoz_err95_min'][:]
-                diffdnnz = cat['dnnz_photoz_err95_max'][:] - cat['dnnz_photoz_err95_min'][:]
-                quality_mask = (diffmizuki < 2.7) & (diffdnnz < 2.7)
+            # implementing the fiducial cut with the difference in
+            diffmizuki = cat['mizuki_photoz_err95_max'][:] - cat['mizuki_photoz_err95_min'][:]
+            diffdnnz = cat['dnnz_photoz_err95_max'][:] - cat['dnnz_photoz_err95_min'][:]
+            quality_mask = (diffmizuki < 2.7) & (diffdnnz < 2.7)
 
-                # TODO : figure this out ???????
-                #assert inside_bin1and2 & bad_quality == inside_bin1and2 & quality_mask, (
-                #    'inside_tomo_range & bad_quality does not match quality_mask, check the calibration cut'
-                #    )
+            # For photoz sources under 0.3, we remove the sources following the calibration cut
+            zmask_data[~quality_mask & (zvalues < 0.3)] = 0
+            # for sources in the tomographic range, we remove the bad quality sources (e.g., no bin associated to them)
+            zmask_data[inside_tomo_range & bad_quality] = 0
 
-                self.logger.info(f'Removed sources because of bad quality from cat : {np.sum(inside_bin1and2 & bad_quality)/len(cat[inside_bin1and2]):.2%} of the data')
-                self.logger.info(f'Removed sources because of bad quality mask : {np.sum(inside_bin1and2 & ~quality_mask)/len(cat[inside_bin1and2]):.2%} of the data')
-
-            # Zero out these values
-            if use_symexpr:
-                # if we skip the symbolic expression, we just remove the bad quality sources
-                self.logger.info(f'Removed sources because of tail : {np.sum(rm_tail)/len(cat):.2%} of the data')
-                zmask_data[(inside_tomo_range & bad_quality) | rm_tail] = 0
-            elif use_real_cut:
-                # Apply the quality cut only if z <= 0.9 (e.g bin 1, 2 or below)
-                zmask_data[~quality_mask & (zvalues <= 0.9)] = 0
-            else:
-                # if we don't use the symbolic expression, we just remove the bad quality sources
-                zmask_data[inside_tomo_range & bad_quality] = 0
             assert len(zmask_data[zmask_data > 0]) > 0, 'No data left after masking HSC data'
 
         else:
@@ -553,9 +533,9 @@ class CorrelationMeta(ABC):
         self.randoms2 = ran2
         self.zmask_data2 = zmask_cat2
         self.zmask_randoms2 = zmask_ran2
-        #import ipdb; ipdb.set_trace()
-        logging.info(
-            'MAKE CATS : ' +
+
+        self.logger.info(
+            'MAKE CATS : \n' +
             f'N data {self.tgt1}: {len(self.data1)}' +
             f', N randoms {self.tgt1}: {len(self.randoms1)}' +
             f', N data {self.tgt2}: {len(self.data2) if self.data2 is not None else "None"}' +
@@ -662,20 +642,10 @@ class CorrelationMeta(ABC):
                 self.randoms1[self.ra_desi_col][self.z_bool_r1],
                 self.randoms1[self.dec_desi_col][self.z_bool_r1]
                 ]
-            #previously we used the mean redshift of the bin on the moc, but it's likely better to use
-            # the mean redshift of the data in the bin on the entire footprint 
-            #z1 = np.mean(self.data1[self.z_desi_col][self.z_bool_d1])
+            
             tz = time.time()
-            z1 = get_zeff(
-                zlow=self.bin_redshift1[self.bin_index1-1],
-                zhigh=self.bin_redshift1[self.bin_index1],
-                type='DESI',
-                scheme="simple",
-                file_settings={
-                    'sims': self.sims,
-                    'sims_version': self.sims_version,
-                }
-            )
+            z1 = (self.bin_redshift1[self.bin_index1-1] + self.bin_redshift1[self.bin_index1])/2
+
             self.logger.info(
                 f'Using DESI redshift binning for {self.tgt1} : {self.bin_redshift1[self.bin_index1-1]} - {self.bin_redshift1[self.bin_index1]}'
                 f' (zeff={z1}) in {time.time()-tz:.2f} seconds'
@@ -697,16 +667,7 @@ class CorrelationMeta(ABC):
                 self.randoms1[self.ra_hsc_randoms_col],
                 self.randoms1[self.dec_hsc_randoms_col]
                 ]   
-            z1 = get_zeff(
-                zlow=self.bin_redshift1[self.bin_index1-1],
-                zhigh=self.bin_redshift1[self.bin_index1],
-                type='HSC',
-                scheme="simple",
-                                file_settings={
-                    'sims': self.sims,
-                    'sims_version': self.sims_version,
-                }
-            )
+            z1 = (self.bin_redshift1[self.bin_index1-1] + self.bin_redshift1[self.bin_index1])/2
             if self.corr_type == 'rp' or self.corr_type == 'rppi':
                 # autocorrelation case : rp1, dp1 are not used
                 dp1.append(
@@ -715,6 +676,7 @@ class CorrelationMeta(ABC):
                 rp1.append(
                     self.randoms1[self.z_hsc_randoms_col]
                     )
+                
         # if not doing autocorrelation, we need to add the second dataset
         if not self.autocorr:
             if self.double_desi:
@@ -758,12 +720,8 @@ class CorrelationMeta(ABC):
             rp2 = None
             dp2 = None 
         
-        
-        #zloc = (self.bin_redshift1[bin_index1-1] + self.bin_redshift1[bin_index1]) / 2
         self.zloc = z1
-        self.logger.info(f'Effective redshift for {self.tgt1} : {z1}')
-        self.z_effective.append(z1)
-        self.theta_edges = ct.hMpc2arcsec(self.edges, self.zloc)/3600 #convert to degrees
+        self.theta_edges = ct.hMpc2arcsec(self.edges, self.zloc)/3600
         self.logger.info('Theta edges : ' + str(self.theta_edges))
 
         dw1 = None
@@ -1150,6 +1108,19 @@ def _get_data_to_read(
         # if extra_cols is provided, we add them to the columns to read
         cols_to_read += [col for col in extra_cols if col in tbl.get_colnames()]
         logging.info(f"Extra columns to read: {extra_cols}")
+    # testing
+    if 'FRACZ_TILELOC_ID' in tbl.get_colnames():
+        cols_to_read.append('FRACZ_TILELOC_ID')
+        logging.info(
+            f"Adding FRACZ_TILELOC_ID to columns to read: {cols_to_read}"
+            )
+        isdata = True
+    if 'FRAC_TLOBS_TILES' in tbl.get_colnames():
+        cols_to_read.append('FRAC_TLOBS_TILES')
+        logging.info(
+            f"Adding FRAC_TLOBS_TILES to columns to read: {cols_to_read}"
+            )
+        isdata = False
     data = Table(tbl.read(columns=cols_to_read))
 
     if main_weight_col is not None:
@@ -1159,11 +1130,16 @@ def _get_data_to_read(
             if operator in ['*', 'multiply', 'times', 'product']:
                 w_col = np.ones_like(data[ra_col])
                 for col in weight_cols_to_operate:
-                    if col == 'PROB_OBS':
+                    if isdata and col == 'FRACZ_TILELOC_ID':
                         w_col /= data[col]
                         logging.info(
                             f"Dividing {col} to {main_weight_col} : {data[col][:3]} / {w_col[:3]}"
                             )
+                    elif not isdata and col == 'FRAC_TLOBS_TILES':
+                        logging.info(
+                            f"Multiplying {col} to {main_weight_col} : {data[col][:3]} * {w_col[:3]}"
+                            )
+                        w_col *= data[col]
                     else:
                         w_col *= data[col]
                         logging.info(

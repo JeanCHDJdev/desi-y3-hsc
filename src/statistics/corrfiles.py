@@ -265,13 +265,17 @@ def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=0
         logging.error(f"HSC catalog file not found and randoms = {randoms}") 
         raise
 
-def get_zeff(zlow, zhigh, type='DESI', scheme=None, **file_settings):
+def get_zeff(zlow, zhigh, type='DESI', scheme='simple', **file_settings):
     '''
     Get the effective redshift for a given distribution, concatenating over all tracers.
     '''
     if scheme == "simple":
         print("Using simple scheme for effective redshift calculation.")
         return (zlow + zhigh) / 2
+    raise DeprecationWarning(
+        "Other schemes are deprecated. "
+    )
+    '''
     elif scheme == "weighted":    
         file_settings_defaults = {
             'sims': False,
@@ -315,6 +319,6 @@ def get_zeff(zlow, zhigh, type='DESI', scheme=None, **file_settings):
 
         print(f"Effective redshift for DESI from {zlow} to {zhigh}: {zeff:.4f}")
         return zeff
-    
     else:
         raise ValueError(f"Unknown scheme {scheme}. Available schemes are 'simple' and 'weighted'.")
+    '''
