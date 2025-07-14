@@ -39,7 +39,7 @@ def _suppress(x, damping):
     else:
         return 1
     
-def suppression(zval, gp_n, gp_sigma, SNRthreshold=3, damping=.4):
+def suppression(zval, gp_n, gp_sigma, SNRthreshold=2, damping=.7):
     dz = np.mean(np.diff(zval))
     kernel_size = int(2 * np.ceil(1 / dz))
 
@@ -76,7 +76,7 @@ def get_enveloppe(draws, sigma_level=1):
     
     return mean, lower, upper
 
-def suppress_nz(zval, gp_n, gp_sigma, SNRthreshold=3, damping=.3, n_draws=500):
+def suppress_nz(zval, gp_n, gp_sigma, SNRthreshold=3, damping=.3, n_draws=500, normalize=True):
     """
     Suppress the noise in the Gaussian Process based on the SNR threshold.
     """
@@ -85,6 +85,10 @@ def suppress_nz(zval, gp_n, gp_sigma, SNRthreshold=3, damping=.3, n_draws=500):
     suppressed_draws = draws * suppression_function[:, np.newaxis]
     mean, lower, upper = get_enveloppe(suppressed_draws)
     renormalization = np.trapz(mean, zval)
+    if normalize:
+        mean /= renormalization
+        lower /= renormalization
+        upper /= renormalization
     if renormalization == 0:
         raise ValueError("Renormalization factor is zero, cannot proceed with suppression.")
-    return mean/renormalization , (upper - lower)/(2*renormalization)
+    return mean , (upper - lower)/2
