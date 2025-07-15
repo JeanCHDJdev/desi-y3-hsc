@@ -42,8 +42,9 @@ def optimize_knot_positions(x_data, y_data, y_err, n_knots=12, method='different
     """
     Directly optimize knot positions to minimize fitting error
     """
-    x_min, x_max = x_data.min(), x_data.max()
-    
+    x_min = min(x_data)
+    x_max = max(x_data)
+
     def objective(knot_positions):
         # Ensure knots are sorted and within bounds
         knots_sorted = np.sort(knot_positions)
@@ -57,7 +58,7 @@ def optimize_knot_positions(x_data, y_data, y_err, n_knots=12, method='different
             
             # Fit M-spline
             basis_matrix = mspline_basis(x_data, full_knots, degree=3)
-            weights = 1.0 / (y_err**2 + 1e-10)
+            weights = 1.0 / (y_err**2)
             
             A = basis_matrix * np.sqrt(weights)[:, np.newaxis]
             b = y_data * np.sqrt(weights)
@@ -72,7 +73,7 @@ def optimize_knot_positions(x_data, y_data, y_err, n_knots=12, method='different
             min_spacing = (x_max - x_min) / (n_knots * 5)  # Minimum spacing
             spacing_penalty = 0
             for i in range(len(knots_sorted)-1):
-                if knots_sorted[i+1] - knots_sorted[i] < min_spacing:
+                if (knots_sorted[i+1] - knots_sorted[i]) < min_spacing:
                     spacing_penalty += 1e4 * (min_spacing - (knots_sorted[i+1] - knots_sorted[i]))**2
 
             return chi2 + spacing_penalty
@@ -91,35 +92,51 @@ def optimize_knot_positions(x_data, y_data, y_err, n_knots=12, method='different
             objective, 
             bounds, 
             seed=42, 
-            maxiter=200,
-            popsize=10, 
-            atol=1e-6, 
-            tol=1e-6
+            tol=0.05,
+            disp=False,
+            polish=True,     
         )
-        optimal_knots = np.sort(result.x)
-        final_score = result.fun
+        
+        # Check if optimization "failed" but still found a reasonable solution
+        if not result.success:
+            print(f"   DE didn't fully converge (reason: {result.message})")
+                
     else:
         # Local optimization
         result = minimize(objective, init_knots, bounds=bounds, method='L-BFGS-B')
-        optimal_knots = np.sort(result.x)
-        final_score = result.fun
+        
+        if not result.success:
+            print(f"   L-BFGS-B didn't converge (reason: {result.message})")
+            print(f"   Found solution with score: {result.fun:.3f}")
     
-    return optimal_knots, final_score
+    knots = np.sort(result.x)
+    return knots, result
 
 def optimize_knots(x_data, y_data, y_err, max_knots=16, method='differential_evolution'):
     """
     Optimize knot positions and number of knots for M-spline fitting.
+    Returns the best result with respect to scoring function.
     """
     results = []
     
     for n_knots in range(4, max_knots + 1):
+        print(f"Optimizing with {n_knots} knots using {method}...")
         try:
-            knots, score = optimize_knot_positions(x_data, y_data, y_err, n_knots=n_knots, method=method)
+            knots, result = optimize_knot_positions(x_data, y_data, y_err, n_knots=n_knots, method=method)
             results.append({
                 'n_knots': n_knots,
                 'knots': knots,
-                'score': score
+                'score': result.fun,
+                'result': result,
+                'success': result.success,
+                'message': getattr(result, 'message', ''),
+                'nfev': getattr(result, 'nfev', 0)
             })
+            
+            # Simple success indicator
+            status = "✓" if result.success else "~"
+            print(f"{status} Score: {result.fun:.2f}")
+            
         except Exception as e:
             print(f"Failed with {n_knots} knots: {e}")
             continue
@@ -217,7 +234,7 @@ def adaptive_refinement_knots(x_data, y_data, y_err, max_knots=20, target_chi2_r
         y_smooth = np.convolve(y_data, np.array([1, -2, 1]), mode='valid')
         x_smooth = x_data[1:-1]
 
-        weights = np.abs(y_smooth) / (np.interp(x_smooth, x_data, y_err**2) + 1e-10)
+        weights = np.abs(y_smooth) / np.interp(x_smooth, x_data, y_err**2)
         uniform_knots = np.linspace(x_min, x_max, max(n_knots//2, 2))
 
         if len(weights) > 0 and n_knots > len(uniform_knots):
