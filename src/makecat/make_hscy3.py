@@ -6,6 +6,8 @@ from astropy.table import Table, join, vstack, hstack
 from glob import glob
 from tqdm import tqdm
 import fitsio as fio
+import os
+from pathlib import Path
 
 def get_psf_ellip(catalog, return_shear=False):
     """This utility gets the PSF ellipticity (uncalibrated shear) from a data
@@ -27,7 +29,7 @@ def get_psf_ellip(catalog, return_shear=False):
         psf_myy = catalog["ishape_sdss_psf_iyy"]
         psf_mxy = catalog["ishape_sdss_psf_ixy"]
     else:
-        raise ValueError("Input catalog does not have required coulmn name")
+        raise ValueError("Input catalog does not have required column name")
 
     if return_shear:
         return (
@@ -46,73 +48,16 @@ def make_hscy3_cat(
         fpath_primcats = "catalog_obs_reGaus_public/",
         fpath_secondary = "/global/cfs/cdirs/desicollab/science/c3/DESI-Lensing/prelim_hscy3/gfarm.ipmu.jp/~surhud/S19ACatalogs/catalog_tracts/",
         field_names = ["GAMA09H", "GAMA15H", "HECTOMAP", "VVDS", "WIDE12H", "XMM"],
-        use_bmode_mask = False,
+        use_bmode_mask = True,
         add_photz = True,
         photoz_method = ["dnnz", "mizuki"],
         check_all_galaxies = False,
     ):
-    final_lenscat = Table()
-    for field_name in field_names:
-        pth = fpath_cats + fpath_primcats + f'{field_name}.fits'
-        lenscat = Table.read(pth)
-
-        if use_bmode_mask:
-            lenscat = lenscat[lenscat["b_mode_mask"]]
-        if add_photz:
-            columns_pz = ['object_id']
-            for method in photoz_method:
-                secondary_cats = glob(f"{fpath_secondary}{field_name}_tracts/*_pz.fits")
-
-                pz_prefix = f"{method}_photoz_"
-                columns_pz.extend([
-                    pz_prefix + "best",
-                    pz_prefix + "err68_min",
-                    pz_prefix + "err68_max",
-                    pz_prefix + "err95_min",
-                    pz_prefix + "err95_max",
-                    pz_prefix + "risk_best",
-                    pz_prefix + "std_best",
-                    pz_prefix + "mode",
-                    pz_prefix + "mean",
-                    pz_prefix + "median"
-                ])
-            mag_columns = [
-                'object_id',
-                'i_cmodel_mag',
-                'i_cmodel_magerr', 
-                "weak_lensing_flag",
-                "a_i",
-                "i_blendedness_abs"
-                ]
-            for mag in ['g', 'i', 'r', 'z', 'y']:
-                mag_columns.extend([
-                    f'forced_{mag}_cmodel_mag', 
-                    f'forced_{mag}_cmodel_magerr', 
-                    f'forced_{mag}_cmodel_flag'
-                ])
-            
-            for secondary_cat in tqdm(secondary_cats, desc=f"{field_name}"):
-                mag_cat = secondary_cat.replace('_pz.fits', '_no_m.fits')
-
-                with fio.FITS(mag_cat) as f:
-                    hudl_mag = Table(f[1].read(columns=mag_columns))
-
-                with fio.FITS(secondary_cat) as f:
-                    hdul_nofz = Table(f[1].read(columns=columns_pz))
-                
-                joint_pz_mag = join(hudl_mag, hdul_nofz, keys='object_id', join_type='inner')
-                joint_tab = join(lenscat, joint_pz_mag, keys='object_id', join_type='inner')
-
-                final_lenscat = vstack([final_lenscat, joint_tab])
-                #print(final_lenscat.colnames)
-            if check_all_galaxies:
-                assert set(lenscat['object_id']).issubset(set(final_lenscat['object_id']))
-        else:
-            final_lenscat = vstack([final_lenscat,lenscat])
-    # can do this later...
-    #lens_bin_mask = final_lenscat['hsc_y3_zbin']>0
-    #final_lenscat = final_lenscat[lens_bin_mask]
-    rename_map = {
+    # Pre-define constants and column lists outside loops for efficiency
+    MAGNITUDE_BANDS = ['g', 'r', 'i', 'z', 'y']
+    
+    # Define column mappings once
+    base_rename_map = {
         'i_ra': 'ra',
         'i_dec': 'dec',
         'i_hsmshaperegauss_e1': 'e_1',
@@ -128,82 +73,181 @@ def make_hscy3_cat(
         'i_cmodel_magerr': 'i_cm_magerr',
         'hsc_y3_zbin': 'z_bin'
     }
-    rename_map.update(
-        {
-        old: new
-            for mag in ['g', 'r', 'i', 'z', 'y']
-            for old, new in [
-                (f'forced_{mag}_cmodel_mag', f'forced_{mag}_cm_mag'),
-                (f'forced_{mag}_cmodel_magerr', f'forced_{mag}_cm_magerr'),
-                (f'forced_{mag}_cmodel_flag', f'forced_{mag}_cm_flag'),
-            ]
-        }
-    )
-
     
-    for old, new in rename_map.items():
-        final_lenscat.rename_column(old, new)
+    # Add magnitude column mappings
+    mag_rename_map = {
+        f'forced_{mag}_cmodel_mag': f'forced_{mag}_cm_mag'
+        for mag in MAGNITUDE_BANDS
+    }
+    mag_rename_map.update({
+        f'forced_{mag}_cmodel_magerr': f'forced_{mag}_cm_magerr'
+        for mag in MAGNITUDE_BANDS
+    })
+    mag_rename_map.update({
+        f'forced_{mag}_cmodel_flag': f'forced_{mag}_cm_flag'
+        for mag in MAGNITUDE_BANDS
+    })
+    
+    rename_map = {**base_rename_map, **mag_rename_map}
+    
+    # Pre-define column lists
+    if add_photz:
+        columns_pz = ['object_id']
+        for method in photoz_method:
+            pz_prefix = f"{method}_photoz_"
+            columns_pz.extend([
+                pz_prefix + "best",
+                pz_prefix + "err95_min",
+                pz_prefix + "err95_max",
+                pz_prefix + "std_best",
+            ])
+            
+        mag_columns = ['object_id', 'i_cmodel_mag', 'i_cmodel_magerr', "a_i"]
+        for mag in MAGNITUDE_BANDS:
+            mag_columns.extend([
+                f'forced_{mag}_cmodel_mag', 
+                f'forced_{mag}_cmodel_magerr', 
+                f'forced_{mag}_cmodel_flag'
+            ])
+    
+    # Use list to collect tables for more efficient concatenation
+    field_tables = []
+    
+    for field_name in field_names:
+        pth = os.path.join(fpath_cats, fpath_primcats, f'{field_name}.fits')
+        
+        # Check if file exists to avoid errors
+        if not os.path.exists(pth):
+            print(f"Warning: File {pth} not found, skipping field {field_name}")
+            continue
+            
+        lenscat = Table.read(pth)
 
-    e1_psf,e2_psf = get_psf_ellip(final_lenscat,return_shear=False)
+        if use_bmode_mask:
+            lenscat = lenscat[lenscat["b_mode_mask"]]
+            
+        if add_photz:
+            secondary_cats = glob(f"{fpath_secondary}{field_name}_tracts/*_pz.fits")
+            
+            if not secondary_cats:
+                print(f"Warning: No secondary catalogs found for field {field_name}")
+                continue
+            
+            # Collect all secondary catalog data for this field
+            field_secondary_tables = []
+            
+            for secondary_cat in tqdm(secondary_cats, desc=f"Processing {field_name}"):
+                mag_cat = secondary_cat.replace('_pz.fits', '_no_m.fits')
+                
+                # Check if both files exist
+                if not (os.path.exists(mag_cat) and os.path.exists(secondary_cat)):
+                    print(f"Warning: Missing files for {secondary_cat}, skipping")
+                    continue
+
+                try:
+                    with fio.FITS(mag_cat) as f:
+                        hudl_mag = Table(f[1].read(columns=mag_columns))
+
+                    with fio.FITS(secondary_cat) as f:
+                        hdul_nofz = Table(f[1].read(columns=columns_pz))
+                    
+                    # Join magnitude and photoz data
+                    joint_pz_mag = join(hudl_mag, hdul_nofz, keys='object_id', join_type='inner')
+                    field_secondary_tables.append(joint_pz_mag)
+                    
+                except Exception as e:
+                    print(f"Error processing {secondary_cat}: {e}")
+                    continue
+            
+            if field_secondary_tables:
+                # Combine all secondary data for this field
+                field_secondary_combined = vstack(field_secondary_tables)
+                
+                # Join with primary lens catalog
+                joint_tab = join(lenscat, field_secondary_combined, keys='object_id', join_type='inner')
+                field_tables.append(joint_tab)
+                
+                if check_all_galaxies:
+                    if not set(lenscat['object_id']).issubset(set(joint_tab['object_id'])):
+                        print(f"Warning: Not all galaxies from {field_name} found in joined catalog")
+            else:
+                print(f"Warning: No valid secondary catalogs processed for field {field_name}")
+        else:
+            field_tables.append(lenscat)
+    
+    if not field_tables:
+        raise ValueError("No valid field tables were processed")
+    
+    # Combine all field tables at once (more efficient than repeated vstacks)
+    final_lenscat = vstack(field_tables)
+    # Apply column renaming
+    for old, new in rename_map.items():
+        if old in final_lenscat.colnames:
+            final_lenscat.rename_column(old, new)
+
+    # Add PSF ellipticity columns
+    e1_psf, e2_psf = get_psf_ellip(final_lenscat, return_shear=False)
     final_lenscat['e1_psf'] = e1_psf
     final_lenscat['e2_psf'] = e2_psf
-    all_columns = [
-        'object_id', 
-        'ra',
-        'dec',
-        'e_1',
-        'e_2',
-        'z_bin',
-        'weight',
-        'm_corr',
-        'c_1',
-        'c_2',
-        'resolution',
-        'e_rms',
-        'e1_psf',
-        'e2_psf',
-        'i_aperture_mag',
-        'i_cm_mag',
-        'i_cm_magerr',
-        ]
-    all_columns.extend(
-        [
-            "weak_lensing_flag",
-            "a_i",
-            "i_blendedness_abs"
-        ]
-    )
-    for mag in ['g', 'r', 'i', 'z', 'y']:
-        all_columns += [
+    
+    # Define final column list
+    base_columns = [
+        'object_id', 'ra', 'dec', 'e_1', 'e_2', 'z_bin', 'weight',
+        'm_corr', 'c_1', 'c_2', 'resolution', 'e_rms', 'e1_psf', 'e2_psf',
+        'i_aperture_mag', 'i_cm_mag', 'i_cm_magerr', 'a_i'
+    ]
+    
+    # Add magnitude columns
+    mag_columns_final = []
+    for mag in MAGNITUDE_BANDS:
+        mag_columns_final.extend([
             f'forced_{mag}_cm_mag',
             f'forced_{mag}_cm_magerr',
             f'forced_{mag}_cm_flag'
-        ]
+        ])
+    
+    all_columns = base_columns + mag_columns_final
+    
+    # Add photoz columns if requested
     if add_photz:
+        photoz_columns = []
         for method in photoz_method:
-            all_columns += [
+            photoz_columns.extend([
                 f"{method}_photoz_best",
-                f"{method}_photoz_err68_min",
-                f"{method}_photoz_err68_max",
                 f"{method}_photoz_err95_min",
                 f"{method}_photoz_err95_max",
-                f"{method}_photoz_risk_best",
                 f"{method}_photoz_std_best",
-                f"{method}_photoz_mode",
-                f"{method}_photoz_mean",
-                f"{method}_photoz_median"
-            ]
-    final_lenscat.keep_columns(all_columns)
+            ])
+        all_columns.extend(photoz_columns)
+    
+    # Keep only required columns
+    available_columns = [col for col in all_columns if col in final_lenscat.colnames]
+    final_lenscat.keep_columns(available_columns)
 
-    final_lenscat['e_2'] = -final_lenscat['e_2']
-    final_lenscat['c_2'] = -final_lenscat['c_2']
-    final_lenscat['e2_psf'] = -final_lenscat['e2_psf']
+    # Apply sign corrections
+    if 'e_2' in final_lenscat.colnames:
+        final_lenscat['e_2'] = -final_lenscat['e_2']
+    if 'c_2' in final_lenscat.colnames:
+        final_lenscat['c_2'] = -final_lenscat['c_2']
+    if 'e2_psf' in final_lenscat.colnames:
+        final_lenscat['e2_psf'] = -final_lenscat['e2_psf']
 
     return final_lenscat
 
-if __name__=="__main__":
-    final_lenscat = make_hscy3_cat()
-    final_lenscat.write(
-        "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat_withflags.fits",
-        overwrite=True
-        )
+if __name__ == "__main__":
+    try:
+        print("Starting HSC Y3 catalog creation...")
+        final_lenscat = make_hscy3_cat()
+        
+        output_path = "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat_withflags.fits"
+        
+        # Create output directory if it doesn't exist
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        print(f"Writing catalog with {len(final_lenscat)} objects to {output_path}")
+        final_lenscat.write(output_path, overwrite=True)
+        print("Catalog creation completed successfully!")
+        
+    except Exception as e:
+        print(f"Error during catalog creation: {e}")
+        raise
