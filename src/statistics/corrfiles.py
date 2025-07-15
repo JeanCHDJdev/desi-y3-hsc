@@ -200,10 +200,12 @@ def fetch_desi_files(tgt, randoms=False, weight_type='nonKP', sims=False, sims_v
         else:
             if version not in ['DR1', 'DR2']:
                 raise ValueError(f"Unknown version {version}. Available versions are 'DR1' and 'DR2'.")
+            
             if version == 'DR2':
-                root = Path('/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v1.1/')
+                root = Path('/global/cfs/projectdirs/desi/survey/catalogs/Y3/LSS/loa-v1/LSScats/v2/')
             elif version == 'DR1':
                 root = Path('/global/cfs/projectdirs/desi/survey/catalogs/Y1/LSS/iron/LSScats/v1.5/')
+
             if weight_type == 'PIP':
                 root = Path(root, 'PIP')
                 path = f'{tgt}_{cap}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'

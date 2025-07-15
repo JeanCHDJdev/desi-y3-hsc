@@ -5,7 +5,7 @@ import math
 from astropy import units as u
 from astropy.cosmology import FlatLambdaCDM
 from astropy.table import vstack, Table
-from scipy.integrate import quad
+from scipy.interpolate import interp1d
 
 import src.statistics.corrfiles as cf
 
@@ -84,8 +84,8 @@ def z2dist(z):
 def weights(rp, beta=-1):
     return rp**beta / np.trapz(rp**beta, x=rp)
 
-def chi(z):
-    return ccl.comoving_radial_distance(COSMO_ccl, 1/(1+z))
+def chi_ccl(z):
+    return ccl.comoving_radial_distance(COSMO_ccl, a=1/(1+z))
 
 def w_dm_ang(rp_vals, z, integrate=False, ell_max=10000):
     """
@@ -151,10 +151,10 @@ def w_dm_ang(rp_vals, z, integrate=False, ell_max=10000):
         return wtheta
     
 def p_mat_nonlin(l,z):
-    return ccl.power.nonlin_power(COSMO_ccl, k=(l+0.5)/chi(z), a=1/(1+z), p_of_k_a='delta_matter:delta_matter')
+    return ccl.power.nonlin_power(COSMO_ccl, k=(l+0.5)/chi_ccl(z), a=1/(1+z), p_of_k_a='delta_matter:delta_matter')
 
 def p_mat_lin(l,z):
-    return ccl.power.linear_power(COSMO_ccl, k=(l+0.5)/chi(z), a=1/(1+z), p_of_k_a='delta_matter:delta_matter')
+    return ccl.power.linear_power(COSMO_ccl, k=(l+0.5)/chi_ccl(z), a=1/(1+z), p_of_k_a='delta_matter:delta_matter')
 
 def w_dm(rp_vals, z, integrate=False, ell_max=10000):
     '''
@@ -167,8 +167,8 @@ def w_dm(rp_vals, z, integrate=False, ell_max=10000):
     Hz = COSMO_astropy.H(z).value
     P_delta = [p_mat_nonlin(l, z) for l in Ell]
 
-    theta = rp_vals_Mpc/chi(z)*360/(2*math.pi) 
-    norm = Hz/c_light*(1/chi(z)**2)
+    theta = rp_vals_Mpc/chi_ccl(z)*360/(2*math.pi) 
+    norm = Hz/c_light*(1/chi_ccl(z)**2)
     xi_dm=norm*ccl.correlations.correlation(
         COSMO_ccl, ell=Ell, C_ell=P_delta, theta=theta, type='NN', #method='Legendre'
         )
@@ -221,37 +221,126 @@ def redshift_distribution(bounds, tracer, discretization=100):
     zdata = vstack([Table.read(f) for f in allf])
 
     return zdata["Z"].data
-        
-def parametrize_magnification(tracer='LRG'):
+
+def spectroscopic_bias_model(alpha, beta, z):
+    return alpha * ((1+z)**2 - 6.565) + beta
+
+def parametrize_bias(tracer, tomobin):
     '''
     Returns the alpha and bias models for the magnification correction.
     These are the models used in the HSC WL-photoz tomographic analysis.
     '''
-    # LRGs & tomobin 2 0.4 < z < 1.1
-    if tracer == 'LRG':
-        alpha_LRG = 0.209
-        beta_LRG = 2.790
-        alpha_model_p = lambda z: -0.701
-        alpha_model_s = lambda z: 1.506
-        bias_model_p = lambda z: 1#(1+z)**0.5
-        bias_model_s = lambda z: alpha_LRG * ((1+z)**2 - 6.565) + beta_LRG
+    # -------------------
+    # photo-z bias model
+    bias_model_p = lambda z: (1+z)**0.2803
+    # tomographic bins. These measurements are pretty rough.
+    match tomobin:
+        case 1:
+            alpha_model_p = lambda z: -0.701
+        case 2:
+            alpha_model_p = lambda z: -0.701
+        case 3:
+            alpha_model_p = lambda z: -0.701
+        case 4:
+            alpha_model_p = lambda z: -0.701
+        case _:
+            raise ValueError(f"Unknown tomographic bin: {tomobin}. Must be one of [1, 2, 3, 4]")
+
+    # -------------------
+    # spectroscopic bias model
+    match tracer:
+        # Galaxy bias : 
+        # BGS_ANY: alpha = 0.342 ± 0.012, beta = 2.812 ± 0.059
+        # LRG: alpha = 0.332 ± 0.008, beta = 3.245 ± 0.029
+        # ELG_LOPnotqso: alpha = 0.197 ± 0.006, beta = 1.354 ± 0.012
+        # QSO: alpha = 0.271 ± 0.008, beta = 2.285 ± 0.017
+        case 'BGS_ANY':
+            pz_BGS = np.array([0.211, 0.352])
+            alpha_bgs = 2.5*np.array([0.81, 0.80])-1
+            interpolated_BGS = interp1d(
+                pz_BGS,
+                alpha_bgs,
+                bounds_error=False,
+                fill_value='extrapolate'
+            )
+            alpha_model_s = lambda z: interpolated_BGS(z)
+            bias_model_s = lambda z: spectroscopic_bias_model(
+                alpha=0.342,
+                beta=2.812,
+                z=z
+            )
+        case 'LRG':
+            pz_cuts_south_LRG = np.array([0.4, 0.47, 0.54, 0.6265, 0.713, 0.7865, 0.86, 0.92, 1.02])
+            pz_cuts_north_LRG = np.array([0.4, 0.4725, 0.545, 0.632, 0.719, 0.785, 0.851, 0.92, 1.024])
+            pz_cuts_combined_LRG = (pz_cuts_north_LRG + pz_cuts_south_LRG) / 2
+
+            combined_s_LRG     = np.array([1.008, 0.954, 0.988, 1.040, 1.047, 0.999, 0.957, 0.914, 1.078])
+            combined_s_LRG_err = np.array([0.007, 0.027, 0.025, 0.021, 0.018, 0.021, 0.017, 0.018, 0.020])
+            interpolated_lrg = interp1d(
+                pz_cuts_combined_LRG, 
+                combined_s_LRG, 
+                bounds_error=False, 
+                fill_value='extrapolate'
+            )
+            alpha_model_s = lambda z: 2.5*interpolated_lrg(z)-1
+            bias_model_s = lambda z: spectroscopic_bias_model(
+                alpha=0.332,
+                beta=3.245,
+                z=z
+            )
+        case 'ELG_LOPnotqso':
+            alpha_ELG = [1.7223330925515012, 2.1021482852604767]
+            alpha_ELG_err = [0.009850409808008864, 0.010948105366427699]
+            interpolated_ELG = interp1d(
+                [(1.15-0.75)/2, (1.55-1.15)/2],
+                alpha_ELG,
+                bounds_error=False, 
+                fill_value='extrapolate'
+            )
+            alpha_model_s = lambda z: interpolated_ELG(z)
+            bias_model_s = lambda z: spectroscopic_bias_model(
+                alpha=0.197,
+                beta=1.354,
+                z=z
+            )
+        case 'QSO':
+            pz_qso_edges = np.array([0.8, 2.1, 2.5, 3.5])
+            pz_qso = [1.44, 2.27, 2.75]
+            qso_mag = 2.5*np.array([0.0820, 0.1634, 0.1109])-1
+            interpolated_QSO = interp1d(
+                pz_qso, 
+                qso_mag, 
+                bounds_error=False, 
+                fill_value='extrapolate'
+            )
+            alpha_model_s = lambda z: interpolated_QSO(z)
+            bias_model_s = lambda z: spectroscopic_bias_model(
+                alpha=0.271,
+                beta=2.285,
+                z=z
+            )
+        case _:
+            raise ValueError(f"Unknown tracer: {tracer}. Must be one of ['BGS_ANY', 'ELG_LOPnotqso', 'QSO', 'LRG']")
+        
     return alpha_model_p, alpha_model_s, bias_model_p, bias_model_s
 
 def mag_coeffs( 
         zi_ind : int, 
         zvalues : np.ndarray,
         w_dm_values : np.ndarray = None,
-        contribution : str = 'all'
-    ) -> float:
+        contribution : str = 'all',
+        tracer : str = None,
+        tomobin : int = None
+    ) -> np.ndarray:
     '''
     Returns the magnification correction coefficients.
-    '''
-    alpha_model_p, alpha_model_s, bias_model_p, bias_model_s = parametrize_magnification()
+    '''    
+    alpha_p, alpha_s, bias_p, bias_s = parametrize_bias(tracer=tracer, tomobin=tomobin)
     return _magnification_coefficients(
-        alpha_model_p=alpha_model_p, 
-        alpha_model_s=alpha_model_s, 
-        bias_model_p=bias_model_p, 
-        bias_model_s=bias_model_s, 
+        alpha_model_p=alpha_p, 
+        alpha_model_s=alpha_s, 
+        bias_model_p=bias_p, 
+        bias_model_s=bias_s, 
         zi_ind=zi_ind, 
         zvalues=zvalues,
         w_dm_values=w_dm_values,
@@ -305,17 +394,16 @@ def _magnification_coefficients(
 
     # preload the cosmological parameters
     _c = 299792.458  # speed of light in km/s
-    _chi = COSMO_astropy.comoving_transverse_distance # comoving transverse distance in Mpc
     _H0 = COSMO_astropy.H0.value # Hubble constant in km/s/Mpc
-    _Om0 = COSMO_astropy.Om0 # matter density parameter
-    _H = COSMO_astropy.H # Hubble parameter at redshift zvalues in km/s/Mpc
+    _Om0 = COSMO_astropy.Om0.value # matter density parameter
+    _H = COSMO_astropy.H.value # Hubble parameter at redshift zvalues in km/s/Mpc
     cosmofactor = (3 * _H0 **2 * _Om0 / _c)
     dz = np.mean(np.diff(zvalues))  # mean redshift interval
 
     zi = zvalues[zi_ind]
 
     def _Dn_ij(zi, zj):
-        cosmotransverse = ((_chi(zj)-_chi(zi))/_chi(zj))*_chi(zi)
+        cosmotransverse = ((chi_ccl(zj)-chi_ccl(zi))/chi_ccl(zj))*chi_ccl(zi)
         return cosmofactor * ((1 + zi) / _H(zi).value) * cosmotransverse.value * dz
     
     magnification = np.zeros_like(zvalues)
@@ -340,15 +428,19 @@ def _magnification_coefficients(
 
 def solve_magnification(
         meas,
-        meas_err,
         scale_cut,
+        tracer,
         zvalues,
         return_matrices=False,
     ):
+    # extract from tuple
+    meas_vals, meas_err = meas
 
     # first, compute w_dm_values for all redshifts
     rp_vals = np.linspace(scale_cut[0], scale_cut[-1], 101)  # in h^-1 Mpc
     print(f'Computing w_dm for {len(zvalues)} redshifts and {len(rp_vals)} rp values...')
+
+    # precompute the angular dark matter correlation function contribution first
     w_dm_values = np.array([
         w_dm(rp_vals, z, integrate=True) 
         for z in zvalues
@@ -357,13 +449,13 @@ def solve_magnification(
     # make the magnification matrix
     print(f'Computing magnification matrix for {len(zvalues)} redshifts...')
     Mag = np.array([
-        mag_coeffs(i, zvalues, w_dm_values, contribution='all')
+        mag_coeffs(i, zvalues, w_dm_values, contribution='all', tracer=tracer)
         for i in range(len(zvalues))
     ])
 
     # solve the linear system
     print(f'Solving the linear system for {len(zvalues)} redshifts...')
-    npz = np.linalg.solve(Mag, meas)
+    npz = np.linalg.solve(Mag, meas_vals)
 
     # TODO : propagate errors from bias models
     dMag = 0
@@ -374,4 +466,4 @@ def solve_magnification(
     if return_matrices:
         return npz, npz_err, w_dm_values, Mag, dMag
     else:
-        return npz, npz_err, w_dm_values
+        return npz, npz_err

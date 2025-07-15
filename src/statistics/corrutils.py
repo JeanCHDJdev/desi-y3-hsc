@@ -48,6 +48,9 @@ class CorrelationMeta(ABC):
     # use redshift column to go to the h-1Mpc distance
     distance_col = 'dist'
 
+    # which DR, either DR1 or DR2
+    data_release = 'DR1'
+
     ## MOC list 
     moc_list = sorted([
             Path(
@@ -302,7 +305,8 @@ class CorrelationMeta(ABC):
             weight_type=self.weight_type, 
             sims=self.sims, 
             sims_version=self.sims_version,
-            cap=self.cap
+            cap=self.cap,
+            version=self.data_release,
             )
         ranf = fetch_desi_files(
             tgt, 
@@ -311,6 +315,7 @@ class CorrelationMeta(ABC):
             sims=self.sims, 
             sims_version=self.sims_version,
             cap=self.cap,
+            version=self.data_release,
             )
         if not self.sims:
             # use only the first 3 random files for now (e.g, over 100x the number of data)
@@ -1109,18 +1114,12 @@ def _get_data_to_read(
         cols_to_read += [col for col in extra_cols if col in tbl.get_colnames()]
         logging.info(f"Extra columns to read: {extra_cols}")
     # testing
-    if 'FRACZ_TILELOC_ID' in tbl.get_colnames():
-        cols_to_read.append('FRACZ_TILELOC_ID')
-        logging.info(
-            f"Adding FRACZ_TILELOC_ID to columns to read: {cols_to_read}"
-            )
-        isdata = True
     if 'FRAC_TLOBS_TILES' in tbl.get_colnames():
         cols_to_read.append('FRAC_TLOBS_TILES')
         logging.info(
             f"Adding FRAC_TLOBS_TILES to columns to read: {cols_to_read}"
             )
-        isdata = False
+        weight_cols_to_operate.append('FRAC_TLOBS_TILES')
     data = Table(tbl.read(columns=cols_to_read))
 
     if main_weight_col is not None:
@@ -1130,21 +1129,10 @@ def _get_data_to_read(
             if operator in ['*', 'multiply', 'times', 'product']:
                 w_col = np.ones_like(data[ra_col])
                 for col in weight_cols_to_operate:
-                    if isdata and col == 'FRACZ_TILELOC_ID':
-                        w_col /= data[col]
-                        logging.info(
-                            f"Dividing {col} to {main_weight_col} : {data[col][:3]} / {w_col[:3]}"
-                            )
-                    elif not isdata and col == 'FRAC_TLOBS_TILES':
-                        logging.info(
-                            f"Multiplying {col} to {main_weight_col} : {data[col][:3]} * {w_col[:3]}"
-                            )
-                        w_col *= data[col]
-                    else:
-                        w_col *= data[col]
-                        logging.info(
-                            f"Multiplying {col} to {main_weight_col} : {data[col][:3]} * {w_col[:3]}"
-                            )
+                    w_col *= data[col]
+                    logging.info(
+                        f"Multiplying {col} to {main_weight_col} : {data[col][:3]} * {w_col[:3]}"
+                        )
             elif operator in ['+', 'add', 'plus', 'sum']:
                 w_col = np.zeros_like(data[ra_col])
                 for col in weight_cols_to_operate:
