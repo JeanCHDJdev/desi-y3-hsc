@@ -165,8 +165,8 @@ def wss(
         path_SGC = Path(path_SGC)
         assert path_SGC.exists(), f'Path {path_SGC} does not exist.'
         frSGC = corrf.CorrFileReader(path_SGC)
-        bins_t1 = frNGC.get_bins(tracer1)
-        bins_t2 = frNGC.get_bins(tracer2)
+        bins_t1 = frSGC.get_bins(tracer1)
+        bins_t2 = frSGC.get_bins(tracer2)
     else:
         frSGC = None
     if frNGC is None and frSGC is None:
@@ -301,6 +301,7 @@ def compute_npz(
         tracer, 
         fine_bin, 
         tomo_bin, 
+        which_patches,
         scale_cuts, 
         do_bias_correction=True,
         rebin=1,
@@ -369,6 +370,7 @@ def compute_npz(
         bin_index2=fine_bin,
         scale_cuts=scale_cuts,
         rebin=rebin,
+        #which_patches=which_patches,
         integration='single-bin'
     )
     wsp_meas, wsp_err, _  = wsp(
@@ -378,6 +380,7 @@ def compute_npz(
         tomo_bin=tomo_bin,
         scale_cuts=scale_cuts,
         rebin=rebin,
+        which_patches=which_patches,
         integration='single-bin'
     )
     combined_err = comb.combine_error_bars(
@@ -406,11 +409,15 @@ def compute_npz_merged(
         fine_bin,  
         tomo_bin, 
         scale_cuts, 
+        which_patches=None,
         do_bias_correction=True,
         rebin=1,
         return_chunks=False, 
         verbose=False
         ):
+    
+    if which_patches is not None:
+        raise ValueError("which_patches must be None for merged catalogs")
     
     fine_redshift = _get_fine_redshift_bins(corrf.CorrFileReader(path_dictionary['DESIxHSC']))
 
@@ -426,7 +433,7 @@ def compute_npz_merged(
         rebin=rebin, 
         z=zloc, 
         beta=-1,  
-        scale_cuts=scale_cuts
+        scale_cuts=scale_cuts,
     )
 
     frsp = corrf.CorrFileReader(path_dictionary['MergedxHSC'])
@@ -437,7 +444,7 @@ def compute_npz_merged(
         rebin=rebin, 
         z=zloc, 
         beta=-1, 
-        scale_cuts=scale_cuts
+        scale_cuts=scale_cuts,
     )
 
     combined_err = comb.combine_error_bars(
@@ -463,6 +470,7 @@ def full_npz_tomo(
         tracer, 
         tomo_bin, 
         scale_cuts, 
+        which_patches='all',
         do_bias_correction=True,
         rebin=1,
         verbose=False, 
@@ -541,6 +549,7 @@ def full_npz_tomo(
             fine_bin=i,
             do_bias_correction=do_bias_correction,
             tomo_bin=tomo_bin,
+            which_patches=which_patches,
             scale_cuts=scale_cuts,
             rebin=rebin,
             verbose=verbose,
@@ -588,11 +597,8 @@ def _get_fine_redshift_bins(fr: corrf.CorrFileReader, tracer='Merged'):
     return fine_redshift
 
 def _get_bias_correction(scale_cuts):
-    if scale_cuts == [1, 5]:
-        gamma = 0.4539423871141212
-        delta_gamma = 0.03450372293660535
-    else:
-        raise NotImplementedError
+    gamma = 0.21524
+    delta_gamma = 0.05757
     return gamma, delta_gamma
     
 def compute_rcc(
@@ -797,8 +803,8 @@ def full_rcc(
     return rcc
 
 def merge_estimators(
-        path_dictionary, 
-        outdir, 
+        path_dictionary : dict, 
+        outdir : str | Path, 
         which_tomo='all', 
         which_cap='all',
         which_patches='all',
@@ -837,12 +843,12 @@ def merge_estimators(
         which_cap = ['NGC', 'SGC']
     if isinstance(which_cap, str):
         which_cap = [which_cap]
-    ngc = path_dictionary['DESI_NGC']
+    ngc = path_dictionary.get('DESI_NGC')
     if ngc is not None and 'NGC' in which_cap:
         fr_auto_NGC = corrf.CorrFileReader(path_dictionary['DESI_NGC'])
     else:
         fr_auto_NGC = None
-    sgc = path_dictionary['DESI_SGC']
+    sgc = path_dictionary.get('DESI_SGC')
     if sgc is not None and 'SGC' in which_cap:
         fr_auto_SGC = corrf.CorrFileReader(path_dictionary['DESI_SGC'])
     else:
@@ -898,9 +904,11 @@ def merge_estimators(
                     # first deal with DESI autos :
                     paths_autos_z = []
                     if fr_auto_NGC is not None:
-                        paths_autos_z.extend(fr_auto_NGC.get_file(zindt, zindt, t, t, moc=which_patches))
+                        # moc 1 + skip moc (-k flag) is NGC config
+                        paths_autos_z.extend(fr_auto_NGC.get_file(zindt, zindt, t, t, moc=[1]))
                     if fr_auto_SGC is not None:
-                        paths_autos_z.extend(fr_auto_SGC.get_file(zindt, zindt, t, t, moc=which_patches))
+                        # moc 3 + skip moc is by default the SGC config... not very clear I know
+                        paths_autos_z.extend(fr_auto_SGC.get_file(zindt, zindt, t, t, moc=[3]))
                     assert len(paths_autos_z) > 0, (
                         "No valid autocorrelations. got "
                         f"{fr_auto_NGC.get_file(zindt, zindt, t, t, None)}"

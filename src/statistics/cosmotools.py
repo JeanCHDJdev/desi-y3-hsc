@@ -225,7 +225,7 @@ def redshift_distribution(bounds, tracer, discretization=100):
 def spectroscopic_bias_model(alpha, beta, z):
     return alpha * ((1+z)**2 - 6.565) + beta
 
-def parametrize_bias(tracer, tomobin):
+def parametrize_bias(tracer, tomo_bin):
     '''
     Returns the alpha and bias models for the magnification correction.
     These are the models used in the HSC WL-photoz tomographic analysis.
@@ -234,17 +234,17 @@ def parametrize_bias(tracer, tomobin):
     # photo-z bias model
     bias_model_p = lambda z: (1+z)**0.2803
     # tomographic bins. These measurements are pretty rough.
-    match tomobin:
+    match tomo_bin:
         case 1:
-            alpha_model_p = lambda z: -0.701
+            alpha_model_p = lambda z: -0.990
         case 2:
             alpha_model_p = lambda z: -0.701
         case 3:
-            alpha_model_p = lambda z: -0.701
+            alpha_model_p = lambda z: -0.369
         case 4:
-            alpha_model_p = lambda z: -0.701
+            alpha_model_p = lambda z: -0.065
         case _:
-            raise ValueError(f"Unknown tomographic bin: {tomobin}. Must be one of [1, 2, 3, 4]")
+            raise ValueError(f"Unknown tomographic bin: {tomo_bin}. Must be one of [1, 2, 3, 4]")
 
     # -------------------
     # spectroscopic bias model
@@ -292,15 +292,20 @@ def parametrize_bias(tracer, tomobin):
             alpha_ELG = [1.7223330925515012, 2.1021482852604767]
             alpha_ELG_err = [0.009850409808008864, 0.010948105366427699]
             interpolated_ELG = interp1d(
-                [(1.15-0.75)/2, (1.55-1.15)/2],
+                [(0.75+1.15)/2, (1.15+1.55)/2],
                 alpha_ELG,
                 bounds_error=False, 
                 fill_value='extrapolate'
             )
             alpha_model_s = lambda z: interpolated_ELG(z)
             bias_model_s = lambda z: spectroscopic_bias_model(
-                alpha=0.197,
-                beta=1.354,
+                # this has issues with weights. maybe we should be using the parameters 
+                # from Edmond's bias model.
+                #alpha=0.197,
+                #beta=1.354,
+                # Edmond's bias parameters
+                alpha=0.153,
+                beta=1.541, 
                 z=z
             )
         case 'QSO':
@@ -324,46 +329,25 @@ def parametrize_bias(tracer, tomobin):
         
     return alpha_model_p, alpha_model_s, bias_model_p, bias_model_s
 
-def mag_coeffs( 
+def magnification_coefficients(
         zi_ind : int, 
         zvalues : np.ndarray,
-        w_dm_values : np.ndarray = None,
-        contribution : str = 'all',
-        tracer : str = None,
-        tomobin : int = None
-    ) -> np.ndarray:
-    '''
-    Returns the magnification correction coefficients.
-    '''    
-    alpha_p, alpha_s, bias_p, bias_s = parametrize_bias(tracer=tracer, tomobin=tomobin)
-    return _magnification_coefficients(
-        alpha_model_p=alpha_p, 
-        alpha_model_s=alpha_s, 
-        bias_model_p=bias_p, 
-        bias_model_s=bias_s, 
-        zi_ind=zi_ind, 
-        zvalues=zvalues,
-        w_dm_values=w_dm_values,
-        contribution=contribution
-    )
-    
-def _magnification_coefficients( 
         alpha_model_p : callable, 
         alpha_model_s : callable, 
         bias_model_p : callable, 
         bias_model_s : callable, 
-        zi_ind : int, 
-        zvalues : np.ndarray,
         w_dm_values : np.ndarray = None,
         contribution : str = 'all'
-        ):
+        ) -> np.ndarray:
     '''
-    Computes the magnification correction for a given redshift index and value and cosmology.
+    Computes the magnification correction coefficients for a given redshift index.
 
     Parameters
     ----------
-    cosmology : acosmo
-        The cosmology to use for the magnification correction.
+    zi_ind : int
+        The index of the redshift bin to compute the magnification correction for.
+    zvalues : np.ndarray
+        The redshift values corresponding to the n(z) values.
     alpha_model_p : callable
         The alpha model for the photometric tracer.
     alpha_model_s : callable
@@ -372,10 +356,15 @@ def _magnification_coefficients(
         The bias model for the photometric tracer.
     bias_model_s : callable
         The bias model for the spectroscopic tracer.
-    zi_ind : int
-        The index of the redshift bin to compute the magnification correction for.
-    zvalues : np.ndarray
-        The redshift values corresponding to the n(z) values.
+    w_dm_values : np.ndarray, optional
+        The dark matter correlation function values at each redshift.
+    contribution : str or list, optional
+        The contribution(s) to include: 'uD', 'Du', 'DD', or 'all'.
+        
+    Returns
+    -------
+    np.ndarray
+        The magnification correction coefficients.
     '''
     assert zi_ind < len(zvalues), "zi_ind must be less than the length of zvalues"
     assert zi_ind >= 0, "zi_ind must be non-negative"
@@ -395,8 +384,8 @@ def _magnification_coefficients(
     # preload the cosmological parameters
     _c = 299792.458  # speed of light in km/s
     _H0 = COSMO_astropy.H0.value # Hubble constant in km/s/Mpc
-    _Om0 = COSMO_astropy.Om0.value # matter density parameter
-    _H = COSMO_astropy.H.value # Hubble parameter at redshift zvalues in km/s/Mpc
+    _Om0 = COSMO_astropy.Om0 # matter density parameter
+    _H = COSMO_astropy.H # Hubble parameter at redshift z in km/s/Mpc (NOTE: is callable)
     cosmofactor = (3 * _H0 **2 * _Om0 / _c)
     dz = np.mean(np.diff(zvalues))  # mean redshift interval
 
@@ -404,20 +393,25 @@ def _magnification_coefficients(
 
     def _Dn_ij(zi, zj):
         cosmotransverse = ((chi_ccl(zj)-chi_ccl(zi))/chi_ccl(zj))*chi_ccl(zi)
-        return cosmofactor * ((1 + zi) / _H(zi).value) * cosmotransverse.value * dz
+        return cosmofactor * ((1 + zi) / _H(zi).value) * cosmotransverse * dz
     
     magnification = np.zeros_like(zvalues)
 
     mag1_const = alpha_model_s(zi)/(bias_model_p(zi)*bias_model_s(zi))
     mag2_const = 1 / bias_model_s(zi)
+
+    # order : spectroscopic x photometric
     for zj_ind, zj in enumerate(zvalues):
+        # magnification x galaxy contribution (magnification from the spectroscopic tracer)
         if zj_ind < zi_ind and 'uD' in contribution:
             Dn_ji = _Dn_ij(zj, zi)
             magnification[zj_ind] = (
                mag1_const * bias_model_p(zj) * Dn_ji * w_dm_values[zj_ind] / w_dm_values[zi_ind]
             )
+        # galaxy x galaxy contribution
         elif zj_ind == zi_ind and 'DD' in contribution:
             magnification[zj_ind] = 1
+        # galaxy x magnification contribution (magnification from the photometric tracer)
         elif zj_ind > zi_ind and 'Du' in contribution:
             Dn_ij = _Dn_ij(zi, zj)
             magnification[zj_ind] = (
@@ -430,6 +424,7 @@ def solve_magnification(
         meas,
         scale_cut,
         tracer,
+        tomo_bin,
         zvalues,
         return_matrices=False,
     ):
@@ -448,21 +443,36 @@ def solve_magnification(
 
     # make the magnification matrix
     print(f'Computing magnification matrix for {len(zvalues)} redshifts...')
+    
+    # obtain bias, alpha models (parametrize bias has them hardcoded)
+    alpha_p, alpha_s, bias_p, bias_s = parametrize_bias(tracer=tracer, tomo_bin=tomo_bin)
+    
     Mag = np.array([
-        mag_coeffs(i, zvalues, w_dm_values, contribution='all', tracer=tracer)
+        magnification_coefficients(
+            zi_ind=i, 
+            zvalues=zvalues, 
+            alpha_model_p=alpha_p,
+            alpha_model_s=alpha_s,
+            bias_model_p=bias_p,
+            bias_model_s=bias_s,
+            w_dm_values=w_dm_values, 
+            contribution='all'
+            )
         for i in range(len(zvalues))
     ])
 
     # solve the linear system
     print(f'Solving the linear system for {len(zvalues)} redshifts...')
-    npz = np.linalg.solve(Mag, meas_vals)
+    Mag_inv = np.linalg.inv(Mag)
+    npz = Mag_inv @ meas_vals
 
-    # TODO : propagate errors from bias models
+    # TODO : propagate errors from bias models ?
     dMag = 0
+
+    npz_err = Mag_inv @ meas_err
     #dMag = np.std(Mag, axis=0)  
     #npz_err = np.linalg.solve(Mag, (meas_err + dMag @ npz))
     
-    npz_err = 0
     if return_matrices:
         return npz, npz_err, w_dm_values, Mag, dMag
     else:
