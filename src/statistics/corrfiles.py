@@ -77,7 +77,9 @@ class CorrFileReader():
         if name not in bins:
             # backward compatibility for old names, same redshift bins (temporary fix)
             if name == 'ELG_LOPnotqso':
-                name = 'ELGnotqso'
+                return bins['ELGnotqso']
+            elif name == 'ELGnotqso':
+                return bins['ELG_LOPnotqso']
             else:
                 raise ValueError(f"Unknown bin name {name}. Available bins are {bins.files}")
         else:

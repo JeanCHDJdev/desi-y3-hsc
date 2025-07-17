@@ -49,7 +49,7 @@ class CorrelationMeta(ABC):
     distance_col = 'dist'
 
     # which DR, either DR1 or DR2
-    data_release = 'DR1'
+    data_release = 'DR2'
 
     ## MOC list 
     moc_list = sorted([
@@ -189,11 +189,12 @@ class CorrelationMeta(ABC):
         self.tgt1 = tgt1
         self.tgt2 = tgt2
 
+        # Describe status of the run / which settings were selected
         self.logger.info(
             f'Using targets {self.tgt1} and {self.tgt2} '
             f'for cross correlation. '
             f'Autocorr={self.autocorr}, double_desi={self.double_desi}'
-            f'using_hsc={self.use_hsc}, using_desi={self.use_desi}'
+            f'use_hsc={self.use_hsc}, use_desi={self.use_desi}'
             )
 
         if not self.use_desi and not self.use_hsc:
@@ -216,7 +217,7 @@ class CorrelationMeta(ABC):
         # weights : here base (nonKP or PIP) + FKP + ...
         self.w_cols_to_operate = [
             self.w_desi_col, 
-            self.w_fkp_desi_col,
+            #self.w_fkp_desi_col,
             #self.w_comp_desi_col
             ]
         self.w_operator = '*'
@@ -228,26 +229,24 @@ class CorrelationMeta(ABC):
         else:
             self.edges = self.bins_mode['rp' if self.corr_type == 'theta' else self.corr_type]
 
-        self.logger.info(f'mode : {self.corr_type}')
-        self.logger.info(f'edges : {self.edges} in Mpc/h')
-        self.logger.info(f'pos type : {self.pos_type}')
-
         # Setup multiprocessing; can do mpi4py later on
         if nproc is None: 
             nproc = max(os.cpu_count()-2, 1)
+
         self.nproc = nproc
 
-        # Filesystem setup
         self.output_dir = Path(output_dir, f'{tgt1}x{tgt2}')
         if not self.output_dir.exists():
             self.output_dir.mkdir(parents=True)
 
-        self.logger.info('Estimator type : ' + self.estimator_type)
-
         # Grabbing the catalogs on initialisation
         logger.info(
+            f'mode : {self.corr_type} '
+            f'edges : {self.edges} in Mpc/h '
+            f'pos type : {self.pos_type} '
             f'Grabbing catalogs for {tgt1} and {tgt2} ... ' 
             f'weight_type={weight_type}, sims={self.sims}, '
+            f'Estimator type : {self.estimator_type}'
             )
 
         # Loading the MOC footprint
@@ -327,9 +326,8 @@ class CorrelationMeta(ABC):
             catf, 
             ra_col=self.ra_desi_col, 
             dec_col=self.dec_desi_col, 
-            # no weights when cross correlating simulations
-            main_weight_col=self.w_desi_col if not self.sims else None,
-            weight_cols_to_operate=self.w_cols_to_operate if not self.sims else None, 
+            main_w_col=self.w_desi_col if not self.sims else None,
+            w_cols_to_operate=self.w_cols_to_operate if not self.sims else None, 
             z_col=self.z_desi_col,
             moc=self.moc if not self.skip_moc else None,
             distance_col=self.distance_col,
@@ -343,7 +341,7 @@ class CorrelationMeta(ABC):
             ra_col=self.ra_desi_col,
             dec_col=self.dec_desi_col,
             main_w_col=self.w_desi_col if not self.sims else None,
-            weight_cols_to_operate=self.w_cols_to_operate if not self.sims else None,
+            w_cols_to_operate=self.w_cols_to_operate if not self.sims else None,
             z_col=self.z_desi_randoms_col,
             moc=self.moc if not self.skip_moc else None,
             distance_col=self.distance_col,
@@ -405,7 +403,7 @@ class CorrelationMeta(ABC):
         self.logger.info(
             f'Collated HSC randoms in {time.time()-trh:.2f}s. ' 
             f'Reduction : {samp_r_length/all_r_length*100:.2f}% ({all_r_length} -> {samp_r_length})'
-                )
+        )
         
         tih = time.time()
         # we can't use bins on HSC sims
@@ -415,7 +413,7 @@ class CorrelationMeta(ABC):
             catf, 
             ra_col=self.ra_hsc_col, 
             dec_col=self.dec_hsc_col, 
-            main_weight_col=self.w_hsc_col if not self.sims else None,
+            main_w_col=self.w_hsc_col if not self.sims else None,
             # we go with both z col and z bin col in case we want to use the calibration cut
             # that only the bins know about (and it's important for HSC)
             z_col=[self.z_hsc_col, self.z_bin_hsc_col], 
@@ -726,8 +724,8 @@ class CorrelationMeta(ABC):
             dp2 = None 
         
         self.zloc = z1
+        # arcsec to degrees conversion
         self.theta_edges = ct.hMpc2arcsec(self.edges, self.zloc)/3600
-        self.logger.info('Theta edges : ' + str(self.theta_edges))
 
         dw1 = None
         dw2 = None
@@ -879,9 +877,11 @@ class JackknifeCrossCorrelation(CorrelationMeta):
         labels = subsampler.label(rpsamp)
 
         self.subsampler = subsampler
-        self.logger.info(f'Labels from {labels.min()} to {labels.max()}.')
-        self.logger.info(f'Number of samples : {self.nsamples}')
-        self.logger.info(f'Using nside {self.nside} for subsampling')
+        self.logger.info(
+            f'Labels from {labels.min()} to {labels.max()}. '
+            f'Number of samples : {self.nsamples}'
+            f'Using nside {self.nside} for subsampling'
+            )
 
     def run_corr(self):
         dp1, dp2, rp1, rp2, dw1, dw2, rw1, rw2 = self.make_corr_data()
@@ -940,8 +940,8 @@ def _process_random_file(
         f, 
         ra_col, 
         dec_col, 
-        main_weight_col, 
-        weight_cols_to_operate, 
+        main_w_col, 
+        w_cols_to_operate, 
         z_col, 
         moc, 
         distance_col=None,
@@ -956,8 +956,8 @@ def _process_random_file(
                 tbl=tbl, 
                 ra_col=ra_col, 
                 dec_col=dec_col, 
-                main_weight_col=main_weight_col, 
-                weight_cols_to_operate=weight_cols_to_operate, 
+                main_w_col=main_w_col, 
+                w_cols_to_operate=w_cols_to_operate, 
                 z_col=z_col, 
                 operator=operator
                 )
@@ -984,7 +984,7 @@ def sample_randoms_on_moc(
         ra_col, 
         dec_col, 
         main_w_col=None, 
-        weight_cols_to_operate=None,
+        w_cols_to_operate=None,
         z_col=None, 
         moc=None, 
         operator=None,
@@ -1012,8 +1012,9 @@ def sample_randoms_on_moc(
                     ra_col, 
                     dec_col, 
                     main_w_col, 
-                    weight_cols_to_operate, 
-                    z_col, moc, 
+                    w_cols_to_operate, 
+                    z_col, 
+                    moc, 
                     distance_col, 
                     operator
                     ) 
@@ -1036,8 +1037,8 @@ def sample_file_on_moc(
         file, 
         ra_col, 
         dec_col, 
-        main_weight_col, 
-        weight_cols_to_operate=None, 
+        main_w_col, 
+        w_cols_to_operate=None, 
         z_col=None, 
         moc=None, 
         operator=None,
@@ -1054,8 +1055,8 @@ def sample_file_on_moc(
             tbl=tbl, 
             ra_col=ra_col, 
             dec_col=dec_col, 
-            main_weight_col=main_weight_col, 
-            weight_cols_to_operate=weight_cols_to_operate, 
+            main_w_col=main_w_col, 
+            w_cols_to_operate=w_cols_to_operate, 
             z_col=z_col, 
             operator=operator,
             distance_col=distance_col,
@@ -1077,15 +1078,15 @@ def _get_data_to_read(
         tbl, 
         ra_col, 
         dec_col, 
-        main_weight_col, 
-        weight_cols_to_operate, 
+        main_w_col, 
+        w_cols_to_operate, 
         z_col, 
         operator=None, 
         distance_col=None,
         extra_cols=None
     ):
     # if HSC + zbin we can have an edge case where the z_col is two values, so flatten and unpack first
-    requested_cols = [ra_col, dec_col, main_weight_col]
+    requested_cols = [ra_col, dec_col, main_w_col]
     if isinstance(z_col, list):
         if len(z_col) == 2:
             # we want both knowledge on zbin and z
@@ -1096,6 +1097,7 @@ def _get_data_to_read(
     else:
         # if not a list we're good to go
         requested_cols.append(z_col)
+
     # None values are not valid columns so we exclude them
     base_cols = [col for col in requested_cols if col is not None]
     cols_to_read = base_cols.copy()
@@ -1103,10 +1105,10 @@ def _get_data_to_read(
     if len(base_cols) == 0:
         raise ValueError(f"No columns to read in {tbl}")
     # we unpack the weights we want to operate on here...
-    if main_weight_col in base_cols:
-        if weight_cols_to_operate is not None:
-            cols_to_read.remove(main_weight_col)
-            cols_to_read += weight_cols_to_operate
+    if main_w_col in base_cols:
+        if w_cols_to_operate is not None:
+            cols_to_read.remove(main_w_col)
+            cols_to_read += w_cols_to_operate
 
     assert all(c in tbl.get_colnames() for c in cols_to_read), f"Columns {cols_to_read} not in {tbl}"
     if extra_cols is not None:
@@ -1114,32 +1116,32 @@ def _get_data_to_read(
         cols_to_read += [col for col in extra_cols if col in tbl.get_colnames()]
         logging.info(f"Extra columns to read: {extra_cols}")
     # testing
-    if 'FRAC_TLOBS_TILES' in tbl.get_colnames():
-        cols_to_read.append('FRAC_TLOBS_TILES')
-        logging.info(
-            f"Adding FRAC_TLOBS_TILES to columns to read: {cols_to_read}"
-            )
-        weight_cols_to_operate.append('FRAC_TLOBS_TILES')
+    #if 'FRAC_TLOBS_TILES' in tbl.get_colnames():
+    #    cols_to_read.append('FRAC_TLOBS_TILES')
+    #    logging.info(
+    #        f"Adding FRAC_TLOBS_TILES to columns to read: {cols_to_read}"
+    #        )
+    #    w_cols_to_operate.append('FRAC_TLOBS_TILES')
     data = Table(tbl.read(columns=cols_to_read))
 
-    if main_weight_col is not None:
-        if weight_cols_to_operate is not None:
+    if main_w_col is not None:
+        if w_cols_to_operate is not None:
             if operator is None:
                 raise ValueError("Operator not provided for weight columns")
             if operator in ['*', 'multiply', 'times', 'product']:
                 w_col = np.ones_like(data[ra_col])
-                for col in weight_cols_to_operate:
+                for col in w_cols_to_operate:
                     w_col *= data[col]
-                    logging.info(
-                        f"Multiplying {col} to {main_weight_col} : {data[col][:3]} * {w_col[:3]}"
-                        )
-            elif operator in ['+', 'add', 'plus', 'sum']:
-                w_col = np.zeros_like(data[ra_col])
-                for col in weight_cols_to_operate:
-                    w_col += data[col]
+                    #logging.info(
+                    #    f"Multiplying {col} to {main_w_col} : {data[col][:3]} * {w_col[:3]}"
+                    #    )
+            #elif operator in ['+', 'add', 'plus', 'sum']:
+            #    w_col = np.zeros_like(data[ra_col])
+            #    for col in w_cols_to_operate:
+            #        w_col += data[col]
         else:
-            w_col = data[main_weight_col]
-        data[main_weight_col] = w_col
+            w_col = data[main_w_col]
+        data[main_w_col] = w_col
 
     if distance_col is not None:
         if z_col is not None:
@@ -1149,18 +1151,20 @@ def _get_data_to_read(
 
     logging.info(
         (
-            f"Weight column {main_weight_col} set to {data[main_weight_col][:3]}\n"
+            f"Weight column {main_w_col} set to {data[main_w_col][:3]}\n"
             f" after applying operator {operator} to "
-            f"columns {weight_cols_to_operate} " 
-            if main_weight_col is not None else ""
+            f"columns {w_cols_to_operate} " 
+            if main_w_col is not None else ""
             ) +
         (
             f"Distance column {distance_col} set to {data[distance_col][:3]}" 
             if distance_col is not None else ""
             )
         )
-    if weight_cols_to_operate is not None:
-        logging.info(f'{data[:3]}, {Table(tbl.read(columns=weight_cols_to_operate))[:3]}')
+    if w_cols_to_operate is not None:
+        weight_data_sample = {col: data[col][:3] for col in w_cols_to_operate if col in data.columns}
+        logging.info(f'Weight columns to operate: {w_cols_to_operate}')
+        logging.info(f'Weight data sample (first 3 rows): {weight_data_sample}')
     
     return data
     

@@ -42,21 +42,23 @@ def get_psf_ellip(catalog, return_shear=False):
             2.0 * psf_mxy / (psf_mxx + psf_myy)
             )
     
-
 def make_hscy3_cat(
         fpath_cats = "/pscratch/sd/x/xiangchl/data/catalog/hsc_year3_shape/",
         fpath_primcats = "catalog_obs_reGaus_public/",
         fpath_secondary = "/global/cfs/cdirs/desicollab/science/c3/DESI-Lensing/prelim_hscy3/gfarm.ipmu.jp/~surhud/S19ACatalogs/catalog_tracts/",
         field_names = ["GAMA09H", "GAMA15H", "HECTOMAP", "VVDS", "WIDE12H", "XMM"],
+        # 20 deg region excluded by HSC analysis because of B modes appearing in x-corr
+        # and 4th moment PSF modelling issues
         use_bmode_mask = True,
+        # if we need to add photo-zs
         add_photz = True,
+        # which photo-z methods to add, if add_photz is True
         photoz_method = ["dnnz", "mizuki"],
         check_all_galaxies = False,
     ):
-    # Pre-define constants and column lists outside loops for efficiency
+    # which HSC bands to use
     MAGNITUDE_BANDS = ['g', 'r', 'i', 'z', 'y']
     
-    # Define column mappings once
     base_rename_map = {
         'i_ra': 'ra',
         'i_dec': 'dec',
@@ -74,7 +76,6 @@ def make_hscy3_cat(
         'hsc_y3_zbin': 'z_bin'
     }
     
-    # Add magnitude column mappings
     mag_rename_map = {
         f'forced_{mag}_cmodel_mag': f'forced_{mag}_cm_mag'
         for mag in MAGNITUDE_BANDS
@@ -109,17 +110,13 @@ def make_hscy3_cat(
                 f'forced_{mag}_cmodel_magerr', 
                 f'forced_{mag}_cmodel_flag'
             ])
-    
-    # Use list to collect tables for more efficient concatenation
     field_tables = []
     
     for field_name in field_names:
-        pth = os.path.join(fpath_cats, fpath_primcats, f'{field_name}.fits')
+        pth = Path(fpath_cats, fpath_primcats, f'{field_name}.fits')
         
-        # Check if file exists to avoid errors
-        if not os.path.exists(pth):
-            print(f"Warning: File {pth} not found, skipping field {field_name}")
-            continue
+        if not Path(pth).exists():
+            raise FileNotFoundError(f"File {pth} does not exist")
             
         lenscat = Table.read(pth)
 
@@ -138,12 +135,12 @@ def make_hscy3_cat(
             
             for secondary_cat in tqdm(secondary_cats, desc=f"Processing {field_name}"):
                 mag_cat = secondary_cat.replace('_pz.fits', '_no_m.fits')
-                
-                # Check if both files exist
-                if not (os.path.exists(mag_cat) and os.path.exists(secondary_cat)):
-                    print(f"Warning: Missing files for {secondary_cat}, skipping")
-                    continue
 
+                if not (Path(mag_cat).exists() and Path(secondary_cat).exists()):
+                    raise FileNotFoundError(
+                        f"Required files {mag_cat} or {secondary_cat} do not exist"
+                    )
+                
                 try:
                     with fio.FITS(mag_cat) as f:
                         hudl_mag = Table(f[1].read(columns=mag_columns))
@@ -177,27 +174,22 @@ def make_hscy3_cat(
     
     if not field_tables:
         raise ValueError("No valid field tables were processed")
-    
-    # Combine all field tables at once (more efficient than repeated vstacks)
+
     final_lenscat = vstack(field_tables)
-    # Apply column renaming
     for old, new in rename_map.items():
         if old in final_lenscat.colnames:
             final_lenscat.rename_column(old, new)
 
-    # Add PSF ellipticity columns
     e1_psf, e2_psf = get_psf_ellip(final_lenscat, return_shear=False)
     final_lenscat['e1_psf'] = e1_psf
     final_lenscat['e2_psf'] = e2_psf
     
-    # Define final column list
     base_columns = [
         'object_id', 'ra', 'dec', 'e_1', 'e_2', 'z_bin', 'weight',
         'm_corr', 'c_1', 'c_2', 'resolution', 'e_rms', 'e1_psf', 'e2_psf',
         'i_aperture_mag', 'i_cm_mag', 'i_cm_magerr', 'a_i'
     ]
     
-    # Add magnitude columns
     mag_columns_final = []
     for mag in MAGNITUDE_BANDS:
         mag_columns_final.extend([
@@ -239,15 +231,13 @@ if __name__ == "__main__":
         print("Starting HSC Y3 catalog creation...")
         final_lenscat = make_hscy3_cat()
         
-        output_path = "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat_withflags.fits"
-        
-        # Create output directory if it doesn't exist
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        # your output path
+        output_path = "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits"
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         
         print(f"Writing catalog with {len(final_lenscat)} objects to {output_path}")
         final_lenscat.write(output_path, overwrite=True)
         print("Catalog creation completed successfully!")
         
     except Exception as e:
-        print(f"Error during catalog creation: {e}")
-        raise
+        raise RuntimeError(f"An error occurred during catalog creation: {e}")
