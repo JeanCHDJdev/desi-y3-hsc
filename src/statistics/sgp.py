@@ -39,7 +39,7 @@ def _suppress(x, damping):
     else:
         return 1
     
-def suppression(zval, gp_n, gp_sigma, SNRthreshold=2, damping=.7):
+def suppression(zval, gp_n, gp_sigma, SNRthreshold=2, damping=.3):
     dz = np.mean(np.diff(zval))
     kernel_size = int(2 * np.ceil(1 / dz))
 

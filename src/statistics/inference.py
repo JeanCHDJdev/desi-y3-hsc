@@ -470,7 +470,7 @@ def full_npz_tomo(
         tracer, 
         tomo_bin, 
         scale_cuts, 
-        which_patches='all',
+        which_patches=[1,2,3,4],
         do_bias_correction=True,
         rebin=1,
         verbose=False, 

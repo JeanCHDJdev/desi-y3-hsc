@@ -5,6 +5,7 @@ Can also do autocorrelation and jackknife estimates.
 import time 
 import os
 import numpy as np
+import logging
 
 from mocpy import MOC
 from pathlib import Path
@@ -180,6 +181,12 @@ def main():
     log = args.log
     areas = args.areas
 
+    # currently not implemented; meant to switch between Landy-Szalay and Davis-Peebles estimators
+    if args.estimator not in ['davispeebles', 'landyszalay']:
+        raise ValueError(
+            f"Invalid estimator {args.estimator}. "
+            "Choose from 'davispeebles', 'landyszalay'"
+            )
     estimator = args.estimator
 
     if areas is not None:
@@ -192,7 +199,7 @@ def main():
                 'and greater than 0'
                 )
     else:
-        areas = np.arange(len(cu.CorrelationMeta.moc_list))
+        areas = np.arange(1, len(cu.CorrelationMeta.moc_list)+1)
 
     ## logging infrastructure
     if log is None:
@@ -249,21 +256,23 @@ def main():
     logger.info(f'Number of threads: {nproc}\n')
     logger.info(f'Output directory: {output_dir}\n')
     strbins = '\n'.join(f"{k} : {v}" for k, v in cu.CorrelationMeta.bins_all.items())
-    logger.info(f'Bins :{strbins}\n')
+    logger.info(f'Bins : {strbins}\n')
 
     moc_list = sorted(cu.CorrelationMeta.moc_list)
-    if areas is not None:
-        logger.info(f'Using areas {areas} ... {[Path(moc_list[p-1]).stem for p in areas]}\n')
-    else:
-        areas = np.arange(1, len(moc_list))
+    logger.info(f'Using areas {areas} ... {[Path(moc_list[p-1]).stem for p in areas]}\n')
 
     # some more checks on targets
     tgt1, tgt2 = cu.get_target_couple(tgt1, tgt2)
+    assert len(areas) > 0, 'areas should be a list of integers'
 
     for m in areas:
         mocf = moc_list[m-1]
-        moc = MOC.from_fits(mocf)
-        logger.info(f'MOC {m} : {mocf} ...\n')
+        if skip_moc:
+            moc = None
+            logger.info(f'Skipping MOC {m} ...\n')
+        else:
+            moc = MOC.from_fits(mocf)
+            logger.info(f'MOC {m} : {Path(mocf).stem} ...\n')
 
         # tgt1 is always a list of DESI type targets
         for t1, t2 in zip(tgt1, tgt2):
@@ -273,7 +282,6 @@ def main():
 
             logger.memory_usage()
             corrclass = cu.figure_out_class(t1, t2, jackknife)
-            logger.info(f'{corrclass} will be used for {t1}x{t2} ...')
             cc = corrclass(
                 tgt1=t1,
                 tgt2=t2,
@@ -284,24 +292,31 @@ def main():
             logger.memory_usage()
 
             logger.info(
-                f'Running for {t1}x{t2}, bin1 {bin1}, bin2 {bin2}, moc {m}\n' + "=" * 80
+                ("=" * 80) +
+                f'\nRunning for {t1}x{t2}, bin1 {bin1}, bin2 {bin2}, moc {m}\n' 
+                f'{corrclass} will be used for {t1}x{t2} ...\n'
                 )
+
 
             for b1 in range(1, len(bin1)):
                 for b2 in range(1, len(bin2)):
-                    # autocorr skip
+                    # autocorr skip non-matching bins
                     if t1 == t2 and b1 != b2:
                         continue
 
                     tb1b2 = time.time()
                     cc.run(b1, b2, m)
-                    txt = f'Finished {t1}x{t2}, {b1} : {bin1[b1-1]}-{bin1[b1]}, {b2} : {bin2[b2-1]}-{bin2[b2]} in {time.time()-tb1b2:.2f}s'
+                    txt = (
+                        f'Finished {t1}x{t2}, {b1} : '
+                        f'{bin1[b1-1]:.2f}-{bin1[b1]:.2f}, '
+                        f'{b2} : {bin2[b2-1]:.2f}-{bin2[b2]:.2f} in {time.time()-tb1b2:.2f}s'
+                    )
                     logger.info(txt)
                     
             cc.save_zeff(t1, t2, m)
 
 if __name__ == '__main__':
-    print('Starting cross-correlation script ...')
+    logging.info('Starting cross-correlation script ...')
     ti = time.time()
     main()
-    print(f'Finished cross-correlation script in {time.time()-ti:.2f}s')
+    logging.info(f'Finished cross-correlation script in {time.time()-ti:.2f}s')

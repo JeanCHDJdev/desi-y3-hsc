@@ -232,7 +232,7 @@ def parametrize_bias(tracer, tomo_bin):
     '''
     # -------------------
     # photo-z bias model
-    bias_model_p = lambda z: (1+z)**0.2803
+    bias_model_p = lambda z: (1+z)**0.917
     # tomographic bins. These measurements are pretty rough.
     match tomo_bin:
         case 1:
@@ -297,7 +297,7 @@ def parametrize_bias(tracer, tomo_bin):
                 bounds_error=False, 
                 fill_value='extrapolate'
             )
-            alpha_model_s = lambda z: interpolated_ELG(z)
+            alpha_model_s = lambda z: interpolated_ELG(z) # np.sum(alpha_ELG)/2
             bias_model_s = lambda z: spectroscopic_bias_model(
                 # this has issues with weights. maybe we should be using the parameters 
                 # from Edmond's bias model.
@@ -309,9 +309,10 @@ def parametrize_bias(tracer, tomo_bin):
                 z=z
             )
         case 'QSO':
+            # https://arxiv.org/pdf/2506.22416v1
             pz_qso_edges = np.array([0.8, 2.1, 2.5, 3.5])
             pz_qso = [1.44, 2.27, 2.75]
-            qso_mag = 2.5*np.array([0.0820, 0.1634, 0.1109])-1
+            qso_mag = 2.5*np.array([0.099, 0.185, 0.244])-1
             interpolated_QSO = interp1d(
                 pz_qso, 
                 qso_mag, 
@@ -459,7 +460,7 @@ def solve_magnification(
             contribution='all'
             )
         for i in range(len(zvalues))
-    ])
+    ]) 
 
     # solve the linear system
     print(f'Solving the linear system for {len(zvalues)} redshifts...')
