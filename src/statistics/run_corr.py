@@ -61,7 +61,7 @@ def parse_args():
         type=str,
         nargs='+',
         default=None,
-        choices=['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY', 'HSC'],
+        choices=['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'HSC'],
         help='Target(s) 1. '
         'Default is None. If None, will use all DESI targets.'
         )
@@ -69,7 +69,7 @@ def parse_args():
         '-t2',
         '--tgt2',
         type=str,
-        choices=['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY', 'HSC'],
+        choices=['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'HSC'],
         default=None,
         help='Target 2. '
         'Default is None. Only current option is HSC.'
@@ -302,6 +302,11 @@ def main():
                 for b2 in range(1, len(bin2)):
                     # autocorr skip non-matching bins
                     if t1 == t2 and b1 != b2:
+                        continue
+                        
+                    # for this run, calibrate bin 3 and 4 with DR2
+                    # and calibrate 1 and 2 with DR1
+                    if b2 == 3 or b2 == 4:
                         continue
 
                     tb1b2 = time.time()

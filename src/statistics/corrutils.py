@@ -49,7 +49,7 @@ class CorrelationMeta(ABC):
     distance_col = 'dist'
 
     # which DR, either DR1 or DR2
-    data_release = 'DR2'
+    data_release = 'DR1'
 
     ## MOC list 
     moc_list = sorted([
@@ -67,17 +67,17 @@ class CorrelationMeta(ABC):
     bins_rppi_s = np.linspace(0., 200., 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
-    bins_bgs = np.arange(0.0, 0.55, 0.05) # 0 < z < 0.5
-    bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.1
-    bins_elg = np.arange(0.8, 1.65, 0.05) # 0.8 < z < 1.6 in redshift distribution
-    bins_qso = np.arange(0.8, 2.85, 0.05) # 0.9 < z < 2.8
+    bins_bgs = np.arange(0.0, 0.65, 0.05) # 0 < z < 0.5
+    bins_lrg = np.arange(0.3, 1.25, 0.05) # 0.3 < z < 1.2
+    bins_elg = np.arange(0.7, 1.65, 0.05) # 0.7 < z < 1.6 in redshift distribution
+    bins_qso = np.arange(0.7, 2.85, 0.05) # 0.7 < z < 2.8
 
     #bins_hsc = np.arange(0, 2.5, 0.1)
     bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
 
     bins_tracers = {
         'LRG': bins_lrg,
-        'ELG_LOPnotqso': bins_elg,
+        'ELGnotqso': bins_elg,
         'QSO': bins_qso,
         'BGS_ANY': bins_bgs,
         'HSC': bins_hsc,
@@ -111,10 +111,10 @@ class CorrelationMeta(ABC):
 
     # map MOC to caps
     capdict = {
-        0 : 'NGC',
-        1 : 'NGC',
-        2 : 'SGC',
-        3 : 'SGC',
+        1 : 'NGC', # moc 1 = NGC
+        2 : 'SGC', # moc 2 = SGC
+        3 : 'SGC', # moc 3 = SGC
+        4 : 'NGC', # moc 4 = NGC (HECTOMAP)
     }
 
     def __init__(
@@ -140,6 +140,9 @@ class CorrelationMeta(ABC):
         # use_zbin is used for HSC only
         self.use_zbin = use_zbin
         
+        # if we are using simulations, there are different columns and other stuff
+        # should be refactored, not a fan of how this is done
+        # in theory, everything should be stacked in a config yaml
         self.set_simulation_status(sims_version=sims_version)
 
         # figure out in which cap we are
@@ -151,7 +154,7 @@ class CorrelationMeta(ABC):
         self.use_hsc = False
         self.use_desi = False
 
-        desi_tgt = ['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY']
+        desi_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
         hsc_tgt = ['HSC']
 
         # Idea : 
@@ -189,6 +192,8 @@ class CorrelationMeta(ABC):
         self.tgt1 = tgt1
         self.tgt2 = tgt2
 
+        self.logger.info(f'Using data version {self.data_release} for targets {self.tgt1} and {self.tgt2}')
+
         # Describe status of the run / which settings were selected
         self.logger.info(
             f'Using targets {self.tgt1} and {self.tgt2} '
@@ -217,9 +222,13 @@ class CorrelationMeta(ABC):
         # weights : here base (nonKP or PIP) + FKP + ...
         self.w_cols_to_operate = [
             self.w_desi_col, 
-            #self.w_fkp_desi_col,
+            self.w_fkp_desi_col,
             #self.w_comp_desi_col
             ]
+        
+        self.logger.info(
+            f'Weights : {self.w_cols_to_operate} '
+        )
         self.w_operator = '*'
         # usually PIP, nonKP...
         self.weight_type = weight_type
@@ -293,7 +302,7 @@ class CorrelationMeta(ABC):
         Parameters
         ----------
         tgt : str
-            Target name (e.g. LRG, ELG_LOPnotqso, QSO, BGS_ANY)
+            Target name (e.g. LRG, ELGnotqso, QSO, BGS_ANY)
         bin_redshift : array
             Redshift binning for the target. Will digitize the redshift column
             and make the masks.
@@ -317,9 +326,9 @@ class CorrelationMeta(ABC):
             version=self.data_release,
             )
         if not self.sims:
-            # use only the first 3 random files for now (e.g, over 100x the number of data)
+            # use only the first 4 random files for now
             # could do more but not really worth the hassle
-            ranf = ranf[:3]
+            ranf = ranf[:4]
 
         tid = time.time()
         cat = sample_file_on_moc(
@@ -1072,6 +1081,7 @@ def sample_file_on_moc(
             print(f"Filtered {np.sum(mask)} rows in {Path(file).stem} using MOC")
             del mask
 
+    assert len(data) > 0, f"No data left after filtering {file} with MOC. Maybe you are using the wrong cap."
     return np.array(data)
 
 def _get_data_to_read(
@@ -1169,7 +1179,7 @@ def _get_data_to_read(
     return data
     
 def figure_out_class(tgt1, tgt2=None, jackknife=False):
-    desi_avb = ['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY']
+    desi_avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
     hsc_avb = ['HSC']
     avb = desi_avb + hsc_avb
     if tgt1 is None and tgt2 is None:
@@ -1193,7 +1203,7 @@ def get_target_couple(tgt1, tgt2=None):
     Utility method to get the target couple for DESI and HSC targets and reordering them
     based on what the script needs.
     '''
-    avb = ['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY', 'HSC']
+    avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'HSC']
     assert not((tgt1 is None) and (tgt2 is None)), 'tgt1 and tgt2 cannot be None simultaneously'
     if tgt2 is None and tgt1 is not None:
         tgt2 = tgt1
