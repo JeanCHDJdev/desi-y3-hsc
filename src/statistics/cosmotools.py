@@ -87,7 +87,7 @@ def weights(rp, beta=-1):
 def chi_ccl(z):
     return ccl.comoving_radial_distance(COSMO_ccl, a=1/(1+z))
 
-def w_dm_ang(rp_vals, z, integrate=False, ell_max=10000):
+def w_dm_ang(rp_vals, z, integrate=False, ell_max=12000):
     """
     Compute angular dark matter correlation function w(theta) at a given redshift z.
     
@@ -156,7 +156,7 @@ def p_mat_nonlin(l,z):
 def p_mat_lin(l,z):
     return ccl.power.linear_power(COSMO_ccl, k=(l+0.5)/chi_ccl(z), a=1/(1+z), p_of_k_a='delta_matter:delta_matter')
 
-def w_dm(rp_vals, z, integrate=False, ell_max=10000):
+def w_dm(rp_vals, z, integrate=False, ell_max=12000):
     '''
     w_dm expects rp_vals in h^-1 Mpc.
     '''
@@ -169,7 +169,7 @@ def w_dm(rp_vals, z, integrate=False, ell_max=10000):
 
     theta = rp_vals_Mpc/chi_ccl(z)*360/(2*math.pi) 
     norm = Hz/c_light*(1/chi_ccl(z)**2)
-    xi_dm=norm*ccl.correlations.correlation(
+    xi_dm = norm * ccl.correlations.correlation(
         COSMO_ccl, ell=Ell, C_ell=P_delta, theta=theta, type='NN', #method='Legendre'
         )
     
@@ -288,7 +288,7 @@ def parametrize_bias(tracer, tomo_bin):
                 beta=3.245,
                 z=z
             )
-        case 'ELG_LOPnotqso':
+        case 'ELG_LOPnotqso' | 'ELGnotqso':
             alpha_ELG = [1.7223330925515012, 2.1021482852604767]
             alpha_ELG_err = [0.009850409808008864, 0.010948105366427699]
             interpolated_ELG = interp1d(

@@ -54,16 +54,16 @@ class CorrFileReader():
         if moc == "Merged":
             return f'{DIR}/{tgt1}x{tgt2}_b1x{b1}_b2x{b2}.npy'
         if moc is None:
-            moc = [0,1,2,3]
+            moc = [1, 2, 3, 4]
         if isinstance(moc, list):
-            assert all(m in [0, 1, 2, 3] for m in moc), f"MOC values should be in [0, 1, 2, 3], not {moc}"
+            assert all(m in [1, 2, 3, 4] for m in moc), f"MOC values should be in [1, 2, 3, 4], not {moc}"
             path_list = []
             list_files = sorted(list(Path(f'{DIR}', f'{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{m}.npy') for m in moc))
             assert len(list_files) == len(moc), f"Expected {len(moc)} files, found {len(list_files)} for {tgt1}x{tgt2} b1x{b1} b2x{b2}"
             path_list.extend(list_files)
             return sorted(path_list)
         if isinstance(moc, int):
-            assert moc in [0, 1, 2, 3], f"MOC should be an integer in [0, 1, 2, 3], not {moc}"
+            assert moc in [1, 2, 3, 4], f"MOC should be an integer in [1, 2, 3, 4], not {moc}"
             return f'{DIR}/{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{moc}.npy'
     
     def get_auto_file(self, b1, tgt, moc):

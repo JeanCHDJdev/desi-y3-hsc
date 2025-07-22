@@ -49,7 +49,7 @@ class CorrelationMeta(ABC):
     distance_col = 'dist'
 
     # which DR, either DR1 or DR2
-    data_release = 'DR1'
+    data_release = 'DR2'
 
     ## MOC list 
     moc_list = sorted([
@@ -67,10 +67,17 @@ class CorrelationMeta(ABC):
     bins_rppi_s = np.linspace(0., 200., 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
+    # bins in DR2
     bins_bgs = np.arange(0.0, 0.65, 0.05) # 0 < z < 0.5
     bins_lrg = np.arange(0.3, 1.25, 0.05) # 0.3 < z < 1.2
     bins_elg = np.arange(0.7, 1.65, 0.05) # 0.7 < z < 1.6 in redshift distribution
     bins_qso = np.arange(0.7, 2.85, 0.05) # 0.7 < z < 2.8
+
+    # bins in DR1
+    #bins_bgs = np.arange(0.0, 0.55, 0.05) # 0 < z < 0.5
+    #bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.15
+    #bins_elg = np.arange(0.8, 1.65, 0.05) # 0.8 < z < 1.65 in redshift distribution
+    #bins_qso = np.arange(0.8, 2.85, 0.05) # 0.8 < z < 2.85
 
     #bins_hsc = np.arange(0, 2.5, 0.1)
     bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
