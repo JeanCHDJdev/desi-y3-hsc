@@ -61,7 +61,7 @@ def parse_args():
         type=str,
         nargs='+',
         default=None,
-        choices=['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'HSC'],
+        choices=['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY', 'HSC'],
         help='Target(s) 1. '
         'Default is None. If None, will use all DESI targets.'
         )
@@ -69,7 +69,7 @@ def parse_args():
         '-t2',
         '--tgt2',
         type=str,
-        choices=['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'HSC'],
+        choices=['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY', 'HSC'],
         default=None,
         help='Target 2. '
         'Default is None. Only current option is HSC.'
@@ -306,8 +306,31 @@ def main():
                         
                     # for this run, calibrate bin 3 and 4 with DR2
                     # and calibrate 1 and 2 with DR1
-                    if b2 == 3 or b2 == 4:
-                        continue
+                    #if b2 == 3 or b2 == 4:
+                    #   continue
+                    #if b2 == 1 or b2 == 2:
+                    #   continue
+                    
+                    # for this run (autocorrelations on small redshift bins)
+                    # we only measure on nearby redshift bins (3*dz_phot)
+                    if t2 == 'HSC':
+                        # moreover, if z < 0.9 use DR1 else use DR2
+                        if (bin2[b2-1] + bin2[b2])/2 > 0.9: # > if DR1
+                            logger.info(
+                                f'Skipping cross-correlation for {t1}x{t2}, '
+                                f'bin 1 {b1} : {bin1[b1-1]:.2f}-{bin1[b1]:.2f}, bin 2 {b2} : {bin2[b2-1]:.2f}-{bin2[b2]:.2f} '
+                                f'(z > 0.9)'
+                                )
+                            continue
+                        dz_phot = np.mean(np.diff(bin2))
+                        # use 3.1 for float point differences
+                        if bin1[b1-1] < bin2[b2-1] - 3.1*dz_phot or bin1[b1] > bin2[b2] + 3.1*dz_phot:
+                            logger.info(
+                                f'Skipping cross-correlation for {t1}x{t2}, '
+                                f'bin 1 {b1} : {bin1[b1-1]:.2f}-{bin1[b1]:.2f}, bin 2 {b2} : {bin2[b2-1]:.2f}-{bin2[b2]:.2f} '
+                                f'(redshift bins are too far apart)'
+                                )
+                            continue
 
                     tb1b2 = time.time()
                     cc.run(b1, b2, m)

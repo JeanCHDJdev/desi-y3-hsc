@@ -170,7 +170,7 @@ def w_dm(rp_vals, z, integrate=False, ell_max=12000):
     theta = rp_vals_Mpc/chi_ccl(z)*360/(2*math.pi) 
     norm = Hz/c_light*(1/chi_ccl(z)**2)
     xi_dm = norm * ccl.correlations.correlation(
-        COSMO_ccl, ell=Ell, C_ell=P_delta, theta=theta, type='NN', #method='Legendre'
+        COSMO_ccl, ell=Ell, C_ell=P_delta, theta=theta, type='NN', method='Legendre'
         )
     
     if integrate:
@@ -233,6 +233,7 @@ def parametrize_bias(tracer, tomo_bin):
     # -------------------
     # photo-z bias model
     bias_model_p = lambda z: (1+z)**0.917
+
     # tomographic bins. These measurements are pretty rough.
     match tomo_bin:
         case 1:
@@ -289,7 +290,7 @@ def parametrize_bias(tracer, tomo_bin):
                 z=z
             )
         case 'ELG_LOPnotqso' | 'ELGnotqso':
-            alpha_ELG = [1.7223330925515012, 2.1021482852604767]
+            alpha_ELG = [1.7223330925515012 - 1, 2.1021482852604767 - 1]
             alpha_ELG_err = [0.009850409808008864, 0.010948105366427699]
             interpolated_ELG = interp1d(
                 [(0.75+1.15)/2, (1.15+1.55)/2],

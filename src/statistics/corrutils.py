@@ -49,7 +49,7 @@ class CorrelationMeta(ABC):
     distance_col = 'dist'
 
     # which DR, either DR1 or DR2
-    data_release = 'DR2'
+    data_release = 'DR1'
 
     ## MOC list 
     moc_list = sorted([
@@ -79,12 +79,18 @@ class CorrelationMeta(ABC):
     #bins_elg = np.arange(0.8, 1.65, 0.05) # 0.8 < z < 1.65 in redshift distribution
     #bins_qso = np.arange(0.8, 2.85, 0.05) # 0.8 < z < 2.85
 
-    #bins_hsc = np.arange(0, 2.5, 0.1)
-    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    # bins for HSC bias
+    bins_bgs = np.arange(0.0, 0.525, 0.025) # 0 < z < 0.5
+    bins_lrg = np.arange(0.4, 1.125, 0.025) # 0.4 < z < 1.15
+    bins_elg = np.arange(0.8, 1.625, 0.025) # 0.8 < z < 1.65 in redshift distribution
+    bins_qso = np.arange(0.8, 2.825, 0.025) # 0.8 < z < 2.85
+    bins_hsc = np.arange(0, 2.5, 0.1)
+    
+    #bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
 
     bins_tracers = {
         'LRG': bins_lrg,
-        'ELGnotqso': bins_elg,
+        'ELG_LOPnotqso': bins_elg,
         'QSO': bins_qso,
         'BGS_ANY': bins_bgs,
         'HSC': bins_hsc,
@@ -161,7 +167,7 @@ class CorrelationMeta(ABC):
         self.use_hsc = False
         self.use_desi = False
 
-        desi_tgt = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
+        desi_tgt = ['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY']
         hsc_tgt = ['HSC']
 
         # Idea : 
@@ -309,7 +315,7 @@ class CorrelationMeta(ABC):
         Parameters
         ----------
         tgt : str
-            Target name (e.g. LRG, ELGnotqso, QSO, BGS_ANY)
+            Target name (e.g. LRG, ELG_LOPnotqso, QSO, BGS_ANY)
         bin_redshift : array
             Redshift binning for the target. Will digitize the redshift column
             and make the masks.
@@ -1186,7 +1192,7 @@ def _get_data_to_read(
     return data
     
 def figure_out_class(tgt1, tgt2=None, jackknife=False):
-    desi_avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']
+    desi_avb = ['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY']
     hsc_avb = ['HSC']
     avb = desi_avb + hsc_avb
     if tgt1 is None and tgt2 is None:
@@ -1210,7 +1216,7 @@ def get_target_couple(tgt1, tgt2=None):
     Utility method to get the target couple for DESI and HSC targets and reordering them
     based on what the script needs.
     '''
-    avb = ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY', 'HSC']
+    avb = ['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY', 'HSC']
     assert not((tgt1 is None) and (tgt2 is None)), 'tgt1 and tgt2 cannot be None simultaneously'
     if tgt2 is None and tgt1 is not None:
         tgt2 = tgt1

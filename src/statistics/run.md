@@ -128,12 +128,19 @@ OUTDIR="-o outputs/v12_correction/autos_HSC" && DEFAULT_FLAGS="-ns 50 -r1 15 -r2
 NGC:
 OUTDIR="-o outputs/v15_dr1/autos_NGC" && DEFAULT_FLAGS="-s 0 -ns 100 -re 256 -j -k -a 1" && setcc && python run_corr.py $OUTDIR -t1 ELG_LOPnotqso $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 LRG $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 BGS_ANY $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 QSO $DEFAULT_FLAGS
 SGC:
-OUTDIR="-o outputs/v20_dr1_inv_frac_tlobs/autos_SGC" && DEFAULT_FLAGS="-s 0 -ns 100 -re 256 -j -k -a 3" && setcc && python run_corr.py $OUTDIR -t1 ELG_LOPnotqso $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 LRG $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 BGS_ANY $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 QSO $DEFAULT_FLAGS && DEFAULT_FLAGS="-s 0 -ns 100 -re 256 -j -k -a 1" && setcc && python run_corr.py $OUTDIR -t1 ELG_LOPnotqso $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 LRG $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 BGS_ANY $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 QSO $DEFAULT_FLAGS
+OUTDIR="-o outputs/v22_dr2_v2_w/autos_SGC" && DEFAULT_FLAGS="-s 0 -ns 100 -re 256 -j -k -a 3" && setcc && python run_corr.py $OUTDIR -t1 ELG_LOPnotqso $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 LRG $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 BGS_ANY $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 QSO $DEFAULT_FLAGS
+
+
+OUTDIR="-o outputs/calibration/autos_HSC" && DEFAULT_FLAGS="-s 0 -ns 100 -re 256 -j" && setcc && python run_corr.py $OUTDIR -t1 HSC -t2 HSC 
+
+OUTDIR="-o outputs/calibration/dr2/autos_SGC" && DEFAULT_FLAGS="-s 0 -ns 100 -re 256 -j -k -a 3" && setcc && python run_corr.py $OUTDIR -t1 ELGnotqso $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 LRG $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 BGS_ANY $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 QSO $DEFAULT_FLAGS
+OUTDIR="-o outputs/calibration/dr2/autos_NGC" && DEFAULT_FLAGS="-s 0 -ns 100 -re 256 -j -k -a 1" && setcc && python run_corr.py $OUTDIR -t1 ELGnotqso $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 LRG $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 BGS_ANY $DEFAULT_FLAGS && python run_corr.py $OUTDIR -t1 QSO $DEFAULT_FLAGS
+
 CROSS :
 A :
-- OUTDIR="-o outputs/v15_dr1/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -z -j" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 LRG
+- OUTDIR="-o outputs/calibration/dr1/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -z -j" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 LRG
 B :
-- OUTDIR="-o outputs/v15_dr1/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -z -j" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 ELG_LOPnotqso && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 ELG_LOPnotqso
+- OUTDIR="-o outputs/calibration/dr1/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -z -j" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 BGS_ANY && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 ELG_LOPnotqso
 
 ### Simulations :
 - Autos :

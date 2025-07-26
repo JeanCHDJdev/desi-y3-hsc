@@ -133,10 +133,6 @@ def optimize_knots(x_data, y_data, y_err, max_knots=16, method='differential_evo
                 'nfev': getattr(result, 'nfev', 0)
             })
             
-            # Simple success indicator
-            status = "✓" if result.success else "~"
-            print(f"{status} Score: {result.fun:.2f}")
-            
         except Exception as e:
             print(f"Failed with {n_knots} knots: {e}")
             continue

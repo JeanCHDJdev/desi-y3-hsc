@@ -4,12 +4,9 @@ import warnings
 import logging
 import os
 
-from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
-from matplotlib.ticker import MultipleLocator
 from pathlib import Path
 from contextlib import contextmanager
-from typing import Optional, Dict, Any, Tuple, Union, Callable
+from typing import Optional, Dict, Any, Tuple, Union
 
 def plot_settings(custom_settings: Optional[Dict[str, Any]] = None):
     """
@@ -386,7 +383,3 @@ def add_subplot_labels(
         if text_kw['transform'] is None:
             text_kw['transform'] = ax.transAxes
         ax.text(xy[0], xy[1], label, **text_kw)
-
-
-# Global PlotManager instance for convenience
-default_plot_manager = PlotManager(overwrite=False)

@@ -202,11 +202,12 @@ def wss(
                 )
             except FileNotFoundError:
                 continue
+            
     estimators = [est for est in [estimatorSGC, estimatorNGC] if est is not None]
     zloc1 = (bins_t1[bin_index1-1] + bins_t1[bin_index1])/2
     zloc2 = (bins_t2[bin_index2-1] + bins_t2[bin_index2])/2
     assert np.isclose(zloc1, zloc2, atol=0.001), (
-        f'zloc1 {zloc1} != zloc2 {zloc2}, bin_index1 {bin_index1} | bin_index2 {bin_index2}'
+        f'zloc1 {zloc1} != zloc2 {zloc2}, bin indices: bin_index1 {bin_index1} | bin_index2 {bin_index2}'
     )
     zloc = (zloc1 + zloc2)/2
 
@@ -391,7 +392,7 @@ def compute_npz(
         )
     combined_err /= deltaz
 
-    gamma, delta_gamma = _get_bias_correction(scale_cuts) if do_bias_correction else (0, 0)
+    gamma, delta_gamma = _get_bias_correction() if do_bias_correction else (0, 0)
 
     result = wsp_meas / (deltaz * np.sqrt((wss_meas)) * (1 + zloc) ** gamma)
     combined_err = np.sqrt(
@@ -454,7 +455,7 @@ def compute_npz_merged(
         yerr=wss_err
         ) / deltaz
     
-    gamma, delta_gamma = _get_bias_correction(scale_cuts) if do_bias_correction else (0, 0)
+    gamma, delta_gamma = _get_bias_correction() if do_bias_correction else (0, 0)
 
     result = wsp_meas / (deltaz * np.sqrt((wss_meas)) * (1 + zloc) ** gamma)
     combined_err = np.sqrt(
@@ -596,7 +597,7 @@ def _get_fine_redshift_bins(fr: corrf.CorrFileReader, tracer='Merged'):
         )
     return fine_redshift
 
-def _get_bias_correction(scale_cuts):
+def _get_bias_correction():
     gamma = 0.21524
     delta_gamma = 0.05757
     return gamma, delta_gamma
@@ -609,7 +610,6 @@ def compute_rcc(
         bin_index2, 
         rebin=1,
         scale_cuts=None,
-        verbose=False
         ):
     '''
     Computes r_cc coefficient for the provided tracer and binning.
