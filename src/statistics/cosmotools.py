@@ -223,7 +223,7 @@ def redshift_distribution(bounds, tracer, discretization=100):
     return zdata["Z"].data
 
 def spectroscopic_bias_model(alpha, beta, z):
-    return alpha * ((1+z)**2 - 6.565) + beta
+    return alpha * ((1+z)**2) + beta
 
 def parametrize_bias(tracer, tomo_bin):
     '''
@@ -237,13 +237,13 @@ def parametrize_bias(tracer, tomo_bin):
     # tomographic bins. These measurements are pretty rough.
     match tomo_bin:
         case 1:
-            alpha_model_p = lambda z: -0.990
+            alpha_model_p = lambda z: -0.996 #-0.990
         case 2:
-            alpha_model_p = lambda z: -0.701
+            alpha_model_p = lambda z: -0.837 #-0.701
         case 3:
-            alpha_model_p = lambda z: -0.369
+            alpha_model_p = lambda z: -0.646 #-0.369
         case 4:
-            alpha_model_p = lambda z: -0.065
+            alpha_model_p = lambda z: -0.485 #-0.065
         case _:
             raise ValueError(f"Unknown tomographic bin: {tomo_bin}. Must be one of [1, 2, 3, 4]")
 
@@ -251,10 +251,17 @@ def parametrize_bias(tracer, tomo_bin):
     # spectroscopic bias model
     match tracer:
         # Galaxy bias : 
+        # nb : needs the -6.565 correction to match the alpha * ((1+z) ** 2) + beta formula
         # BGS_ANY: alpha = 0.342 ± 0.012, beta = 2.812 ± 0.059
         # LRG: alpha = 0.332 ± 0.008, beta = 3.245 ± 0.029
         # ELG_LOPnotqso: alpha = 0.197 ± 0.006, beta = 1.354 ± 0.012
         # QSO: alpha = 0.271 ± 0.008, beta = 2.285 ± 0.017
+
+        # Fitted parameters :
+        # BGS_ANY: alpha = 0.601 ± 0.025, beta = 0.354 ± 0.046
+        # LRG: alpha = 0.245 ± 0.009, beta = 1.360 ± 0.027
+        # ELGnotqso: alpha = 0.153 ± 0.005, beta = 0.691 ± 0.024
+        # QSO: alpha = 0.192 ± 0.005, beta = 1.038 ± 0.033
         case 'BGS_ANY':
             pz_BGS = np.array([0.211, 0.352])
             alpha_bgs = 2.5*np.array([0.81, 0.80])-1
@@ -266,8 +273,8 @@ def parametrize_bias(tracer, tomo_bin):
             )
             alpha_model_s = lambda z: interpolated_BGS(z)
             bias_model_s = lambda z: spectroscopic_bias_model(
-                alpha=0.342,
-                beta=2.812,
+                alpha=0.601,
+                beta=0.354,
                 z=z
             )
         case 'LRG':
@@ -285,13 +292,20 @@ def parametrize_bias(tracer, tomo_bin):
             )
             alpha_model_s = lambda z: 2.5*interpolated_lrg(z)-1
             bias_model_s = lambda z: spectroscopic_bias_model(
-                alpha=0.332,
-                beta=3.245,
+                alpha=0.245,
+                beta=1.360,
                 z=z
             )
         case 'ELG_LOPnotqso' | 'ELGnotqso':
-            alpha_ELG = [1.7223330925515012 - 1, 2.1021482852604767 - 1]
-            alpha_ELG_err = [0.009850409808008864, 0.010948105366427699]
+            alphas = [
+                1.258148799455872,
+                1.5334325766616752
+            ]
+            alphas_error = [
+                0.01081768382236435,
+                0.011938464095389137
+            ]
+            alpha_ELG = 2.5/np.log(10) * np.array(alphas) - 1
             interpolated_ELG = interp1d(
                 [(0.75+1.15)/2, (1.15+1.55)/2],
                 alpha_ELG,
@@ -306,7 +320,7 @@ def parametrize_bias(tracer, tomo_bin):
                 #beta=1.354,
                 # Edmond's bias parameters
                 alpha=0.153,
-                beta=1.541, 
+                beta=0.691,
                 z=z
             )
         case 'QSO':
@@ -322,8 +336,8 @@ def parametrize_bias(tracer, tomo_bin):
             )
             alpha_model_s = lambda z: interpolated_QSO(z)
             bias_model_s = lambda z: spectroscopic_bias_model(
-                alpha=0.271,
-                beta=2.285,
+                alpha=0.192,
+                beta=1.038,
                 z=z
             )
         case _:
