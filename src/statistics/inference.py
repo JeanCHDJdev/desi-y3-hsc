@@ -982,13 +982,69 @@ def merge_estimators(
     
     return 
 
+def merge_results(zvals_merge, npz_merge, npz_err_merge, precision=0.0001, co_normalize=False):
+    """
+    Merge results from different tomographic bins using inverse variance weighting.
+    
+    Parameters:
+    - zvals_merge: list of arrays, each containing redshift values for one tracer/bin
+    - npz_merge: list of arrays, each containing values at zvals
+    - npz_err_merge: list of arrays, each containing errors at zvals
+    
+    Returns:
+    - zvals: sorted array of unique redshift values
+    - npz: merged values at zvals
+    - npz_err: corresponding merged errors
+    """
+    zvals_rounded = [np.round(z / precision) * precision for z in zvals_merge]
+    zvals = np.unique(np.concatenate(zvals_rounded))
+    npz = np.zeros_like(zvals)
+    npz_err = np.zeros_like(zvals)
+    weight_sum = np.zeros_like(zvals)
+    value_weight_sum = np.zeros_like(zvals)
 
-def photbias_correction(
-        nz, 
-        zedges,
-        zloc,
-        ):
-    ct.get_wDM()
+    npz_merge_rescaled = [np.zeros_like(zvals) for _ in range(len(npz_merge))]
+    npz_err_merge_rescaled = [np.zeros_like(zvals) for _ in range(len(npz_err_merge))]
+    
+    if co_normalize:
+        # ensure that all npz_merge arrays are normalized to the same scale
+        # by matching on the overlap region
+        for i in range(len(npz_merge)):
+            if i == 0:
+                # First one is the reference tracer, no scaling needed
+                npz_merge_rescaled[i] = npz_merge[i].copy()
+                npz_err_merge_rescaled[i] = npz_err_merge[i].copy()
+                continue
+            # Find the overlap values between zvals_rounded[i] and zvals_rounded[0]
+            overlap_vals = np.intersect1d(zvals_rounded[i], zvals_rounded[0])
+            if len(overlap_vals) > 0:
+                # Get indices of overlap in both arrays
+                idx_i = np.nonzero(np.isin(zvals_rounded[i], overlap_vals))[0]
+                idx_0 = np.nonzero(np.isin(zvals_rounded[0], overlap_vals))[0]
+                # Compute scale factor using only overlapping points
+                scale_factor = np.mean(npz_merge[i][idx_i] / npz_merge[0][idx_0])
+                npz_merge_rescaled[i] = npz_merge[i] * scale_factor
+                npz_err_merge_rescaled[i] = npz_err_merge[i] * scale_factor
+            else:
+                # No overlap, use original values
+                npz_merge_rescaled[i] = npz_merge[i].copy()
+                npz_err_merge_rescaled[i] = npz_err_merge[i].copy()
+    else:
+        npz_merge_rescaled = npz_merge
+        npz_err_merge_rescaled = npz_err_merge
+
+    for z_i, npz_i, err_i in zip(zvals_rounded, npz_merge_rescaled, npz_err_merge_rescaled):
+        indices = np.searchsorted(zvals, z_i)
+        weights = 1.0 / (err_i**2)
+        value_weight_sum[indices] += npz_i * weights
+        weight_sum[indices] += weights
+
+    valid = weight_sum > 0
+    assert np.all(valid), "No valid weights found, check input data."
+    npz[valid] = value_weight_sum[valid] / weight_sum[valid]
+    npz_err[valid] = np.sqrt(1.0 / weight_sum[valid])
+
+    return zvals, npz, npz_err
         
        
     

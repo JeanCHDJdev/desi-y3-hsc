@@ -230,6 +230,8 @@ class BayesianBSpline:
         fig = plt.figure(figsize=figsize)
         gs = fig.add_gridspec(2, 2, height_ratios=[2, 1], hspace=0.3, wspace=0.25)
         ax_main = fig.add_subplot(gs[0, :])
+                
+        info_text = f'Knots: {self.n_knots}\nDegree: {self.degree}\nBasis functions: {self.n_basis}'
 
         if show_nnls:
             coeffs_nnls, _ = self._get_initial_coeffs_and_amplitude(self.nz)
@@ -243,6 +245,10 @@ class BayesianBSpline:
                 label='NNLS fit', 
                 alpha=0.8
                 )
+            if show_integral_info:
+                nnls_integral = np.trapezoid(nnls_pred_eval, z_eval)
+                info_text += f'\nNNLS integral: {nnls_integral:.3f}'
+
         ax_main.errorbar(
             self.zv, 
             self.nz, 
@@ -293,15 +299,6 @@ class BayesianBSpline:
             linewidth=1, 
             label='mean'
             )
-        
-        info_text = f'Knots: {self.n_knots}\nDegree: {self.degree}\nBasis functions: {self.n_basis}'
-        if show_integral_info:
-            if show_nnls:
-                coeffs_nnls, _ = self._get_initial_coeffs_and_amplitude(self.nz)
-                nnls_pred_eval = basis_eval @ coeffs_nnls
-                nnls_integral = np.trapezoid(nnls_pred_eval, z_eval)
-                info_text += f'\nNNLS integral: {nnls_integral:.3f}'
-
         ax_main.text(
             0.02, 
             0.98, 
@@ -366,7 +363,7 @@ class BayesianBSpline:
 
     def predict(self, z_eval, return_samples=False, n_samples=None):
         """
-        Make predictions at new redshift points
+        Once model is fitted, predict n(z) for new redshift values.
         """
         if self.trace is None:
             raise ValueError("Model must be fitted before prediction. Call fit() first.")
@@ -392,3 +389,76 @@ class BayesianBSpline:
                 'lower_1sig': np.percentile(nz_samples, 16, axis=0),
                 'upper_1sig': np.percentile(nz_samples, 84, axis=0)
             }
+
+    def expect(self, z_eval, return_samples=False, n_samples=None):
+        """
+        Compute the expected value of n(z) for new redshift values.
+        """
+        if self.trace is None:
+            raise ValueError("Model must be fitted before expectation. Call fit() first.")
+
+        z_eval = np.asarray(z_eval)
+        basis_eval = self._create_evaluation_basis(z_eval)
+
+        coeffs_samples = self.coeffs_samples
+        if n_samples is not None:
+            coeffs_samples = coeffs_samples[:n_samples]
+        amplitude_samples = self.amplitude_samples
+        if n_samples is not None:
+            amplitude_samples = amplitude_samples[:n_samples]
+        
+        nz_expectation = (coeffs_samples @ basis_eval.T) * amplitude_samples[:, np.newaxis]
+
+        if return_samples:
+            return nz_expectation
+        else:
+            return {
+                'mean': np.mean(nz_expectation, axis=0),
+                'std': np.std(nz_expectation, axis=0),
+                'lower_1sig': np.percentile(nz_expectation, 16, axis=0),
+                'upper_1sig': np.percentile(nz_expectation, 84, axis=0)
+            }
+
+    def _predict_normalized_pdf(self, z_eval, return_samples=False, n_samples=None):
+        """Predict normalized n(z) as PDF with integral = 1."""
+        if self.trace is None:
+            raise ValueError("Model must be fitted before prediction. Call fit() first.")
+
+        z_eval = np.asarray(z_eval)
+        basis_eval = self._create_evaluation_basis(z_eval)
+
+        coeffs_samples = self.coeffs_samples
+        if n_samples is not None:
+            coeffs_samples = coeffs_samples[:n_samples]
+        amplitude_samples = self.amplitude_samples
+        if n_samples is not None:
+            amplitude_samples = amplitude_samples[:n_samples]
+            
+        nz_samples = (coeffs_samples @ basis_eval.T) * amplitude_samples[:, np.newaxis]
+        integrals = np.trapezoid(nz_samples, z_eval, axis=1)
+        pdf_samples = nz_samples / integrals[:, np.newaxis]
+
+        if return_samples:
+            return pdf_samples
+        else:
+            median = np.percentile(pdf_samples, 50, axis=0)
+            mean = np.mean(pdf_samples, axis=0)
+            std = np.std(pdf_samples, axis=0)
+            lower = np.percentile(pdf_samples, 16, axis=0)
+            upper = np.percentile(pdf_samples, 84, axis=0)
+            return median, mean, std, lower, upper
+
+    def expectation(self, z_eval, n_samples=None):
+        """Compute expectation value <z> of normalized PDF."""
+        if self.trace is None:
+            raise ValueError("Model must be fitted before computing expectation. Call fit() first.")
+
+        z_eval = np.asarray(z_eval)
+        pdf_samples = self._predict_normalized_pdf(z_eval, return_samples=True, n_samples=n_samples)
+        
+        expectation_samples = np.array([
+            np.trapezoid(z_eval * pdf_sample, z_eval) 
+            for pdf_sample in pdf_samples
+        ])
+        
+        return np.mean(expectation_samples), np.std(expectation_samples), expectation_samples
