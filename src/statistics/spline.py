@@ -16,9 +16,12 @@ class BayesianBSpline:
     Bayesian B-splines using PyMC for modeling n(z) distributions
     with Dirichlet priors on coefficients and a free amplitude parameter.
     """
-    def __init__(self, zv, n_knots=20, degree=3):
+    def __init__(self, zv, n_knots=None, degree=3):
+        '''
+        If n_knots is None, use len(zv)//2
+        '''
         self.zv = np.asarray(zv)
-        self.n_knots = n_knots
+        self.n_knots = n_knots if n_knots is not None else len(self.zv) // 2
         self.degree = degree
         self.basis_matrix = None
         self.basis_integrals = None
@@ -71,7 +74,7 @@ class BayesianBSpline:
             n_chains=4, 
             target_accept=0.95, 
             prior_concentration=1.0,
-            base_alpha=0.15
+            base_alpha=0.18
             ):
         """
         Fit the model using PyMC with Dirichlet prior and free amplitude parameter.
@@ -101,11 +104,13 @@ class BayesianBSpline:
 
         assert len(self.nz) == len(self.zv), "nz and zv must have the same length"
         assert len(self.nz_err) == len(self.zv), "nz_err and zv must have the same length"
-        assert all(self.nz_err > 0), "nz_err must be positive"
+        assert all(self.nz_err >= 0), "nz_err must be positive"
         
         self._create_spline_basis()
         self._compute_basis_integrals()
         coeffs_init, initial_amplitude = self._get_initial_coeffs_and_amplitude(self.nz)
+
+        mask = self.nz_err > 0
         with pm.Model() as model:
             # Set Dirichlet alpha based on NNLS results
             # Higher alpha where NNLS found signal, lower where it found zero
@@ -127,11 +132,12 @@ class BayesianBSpline:
                 initval=initial_amplitude
             )
             nz_pred = pm.math.dot(self.basis_matrix, coeffs) * amplitude
+            
             likelihood = pm.Normal(
                 'likelihood', 
-                mu=nz_pred, 
-                sigma=self.nz_err, 
-                observed=self.nz
+                mu=nz_pred[mask], 
+                sigma=self.nz_err[mask], 
+                observed=self.nz[mask]
             )
             trace = pm.sample(
                 draws=n_samples,
@@ -203,10 +209,7 @@ class BayesianBSpline:
             'amplitude_samples': amplitude_samples
         }
     
-    def plot_fit(self, z_eval=None, n_eval_points=200, figsize=(9, 8), show_knots=True, show_integral_info=True, show_nnls=True):
-        """
-        Plot the data, fitted model, and uncertainty bands
-        """
+    def get_samples(self, z_eval=None, n_eval_points=200):
         if self.trace is None:
             raise ValueError("Model must be fitted before plotting. Call fit() first.")
 
@@ -219,13 +222,24 @@ class BayesianBSpline:
         coeffs_samples = self.coeffs_samples
 
         amplitude_samples = self.amplitude_samples
-        nz_samples = (coeffs_samples @ basis_eval.T) * amplitude_samples[:, np.newaxis]
+        return (coeffs_samples @ basis_eval.T) * amplitude_samples[:, np.newaxis]
+    
+    def plot_fit(self, z_eval=None, n_eval_points=200, figsize=(9, 8), show_knots=True, show_integral_info=True, show_nnls=True):
+        """
+        Plot the data, fitted model, and uncertainty bands
+        """
+        if z_eval is None:
+            z_eval = np.linspace(self.zv.min(), self.zv.max(), n_eval_points)
+        nz_samples = self.get_samples(z_eval=z_eval, n_eval_points=n_eval_points)
+        basis_eval = self._create_evaluation_basis(z_eval)
 
         nz_median = np.percentile(nz_samples, 50, axis=0)
         nz_mean = np.mean(nz_samples, axis=0)
         nz_std = np.std(nz_samples, axis=0)
         nz_lower = np.percentile(nz_samples, 16, axis=0)
         nz_upper = np.percentile(nz_samples, 84, axis=0)
+
+        coeffs_samples = self.coeffs_samples
 
         fig = plt.figure(figsize=figsize)
         gs = fig.add_gridspec(2, 2, height_ratios=[2, 1], hspace=0.3, wspace=0.25)
