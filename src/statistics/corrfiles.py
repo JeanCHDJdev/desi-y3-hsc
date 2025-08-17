@@ -3,15 +3,11 @@ Utils to grab and fetch files for the cross-correlation analysis
 and to set up logging.
 '''
 import numpy as np
-import fitsio as fio
 import logging
 import time
 import psutil
 
 from pathlib import Path
-from astropy.table import Table, vstack
-
-import src.statistics.cosmotools as ct
 
 class CorrFileReader():
     '''

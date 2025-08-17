@@ -1,12 +1,6 @@
 import numpy as np
-import pandas as pd
-import fitsio as fio
 import matplotlib.pyplot as plt
 
-from pathlib import Path
-from pycorr import TwoPointEstimator, utils
-from astropy.coordinates import SkyCoord
-from mocpy import MOC
 from scipy.stats import multivariate_normal
 from scipy.integrate import simpson
 from scipy.interpolate import interp1d
@@ -15,8 +9,6 @@ from scipy.optimize import minimize
 from functools import partial
 
 import src.statistics.corrfiles as cf
-import src.statistics.corrutils as cu
-import src.statistics.cosmotools as ct
 
 def hsc_dnnz_error(expect, mids, num_samples=1000): 
     '''

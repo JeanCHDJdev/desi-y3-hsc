@@ -3,15 +3,9 @@ Inference pipeline for the results.
 '''
 
 import numpy as np
-import pandas as pd
-import astropy.cosmology as acosmo
-import fitsio as fio
 
 from pathlib import Path
 from pycorr import TwoPointEstimator
-from astropy.coordinates import SkyCoord
-from mocpy import MOC
-from scipy.stats import multivariate_normal
 
 import src.statistics.corrfiles as corrf
 import src.statistics.combination as comb
@@ -123,7 +117,6 @@ def wss(
         scale_cuts=[], 
         rebin:int=1, 
         integration='single-bin',
-        which_patches:list[int]=None
     ):
     '''
     From the provided path, collate the wss measurements for DESI
@@ -219,7 +212,8 @@ def wss(
         rebin=rebin,
         integration=integration,
         scale_cuts=scale_cuts,
-        which_patches=which_patches,
+        which_patches=None, # this is already determined by estimators...
+        # not very efficient coding from my part here lol
         )
             
 def wpp(
@@ -307,7 +301,6 @@ def compute_npz(
         do_bias_correction=True,
         rebin=1,
         return_chunks=False, 
-        verbose=False
         ):
     '''
     Computes n(z) for the provided tracer and binning.
@@ -345,11 +338,9 @@ def compute_npz(
     return_chunks : bool
         If return_chunks is True, will return the individual values used to compute the n(z) for the tracer,
         in order : `wsp_meas, wpp_meas, wss_meas ...`.
-    verbose : bool
-        If verbose is True, will print the values used to compute the n(z) for the tracer.
     '''
     assert tracer in ['LRG', 'ELGnotqso','ELG_LOPnotqso', 'QSO', 'BGS_ANY', 'Merged'], f'tracer {tracer} not a DESI tracer.'
-    assert tomo_bin in [1, 2, 3, 4], f'tomo_bin {tomo_bin} not a valid bin.'
+    #assert tomo_bin in [1, 2, 3, 4], f'tomo_bin {tomo_bin} not a valid bin.'
     
     # let's grab the binning scheme that we are using
     fr = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
@@ -370,8 +361,7 @@ def compute_npz(
         bin_index1=fine_bin,
         bin_index2=fine_bin,
         scale_cuts=scale_cuts,
-        rebin=rebin,
-        #which_patches=which_patches,
+        rebin=rebin, 
         integration='single-bin'
     )
     wsp_meas, wsp_err, _  = wsp(
@@ -474,7 +464,6 @@ def full_npz_tomo(
         which_patches=[1,2,3,4],
         do_bias_correction=True,
         rebin=1,
-        verbose=False, 
         return_chunks=False,
         ):
     '''
@@ -523,8 +512,6 @@ def full_npz_tomo(
     else:
         fine_redshift = fr.get_bins(tracer)
     hsc_redshift = fr_hsc.get_bins('HSC')
-    if verbose:
-        print(f"Using fine redshift : {fine_redshift}")
 
     # our calibration sample (wpp at zj where j is the fine bin index)
     # get the indices corresponding to the fine bins in the hsc_redshift
@@ -553,7 +540,6 @@ def full_npz_tomo(
             which_patches=which_patches,
             scale_cuts=scale_cuts,
             rebin=rebin,
-            verbose=verbose,
             return_chunks=return_chunks
         )
         
@@ -1005,46 +991,46 @@ def merge_results(zvals_merge, npz_merge, npz_err_merge, precision=0.0001, co_no
 
     npz_merge_rescaled = [np.zeros_like(zvals) for _ in range(len(npz_merge))]
     npz_err_merge_rescaled = [np.zeros_like(zvals) for _ in range(len(npz_err_merge))]
-    
+
     if co_normalize:
         # ensure that all npz_merge arrays are normalized to the same scale
         # by matching on the overlap region
         for i in range(len(npz_merge)):
             if i == 0:
-                # First one is the reference tracer, no scaling needed
+                # First one is the reference tracer.
                 npz_merge_rescaled[i] = npz_merge[i].copy()
                 npz_err_merge_rescaled[i] = npz_err_merge[i].copy()
                 continue
             # Find the overlap values between zvals_rounded[i] and zvals_rounded[0]
             overlap_vals = np.intersect1d(zvals_rounded[i], zvals_rounded[0])
-            if len(overlap_vals) > 0:
-                # Get indices of overlap in both arrays
-                idx_i = np.nonzero(np.isin(zvals_rounded[i], overlap_vals))[0]
-                idx_0 = np.nonzero(np.isin(zvals_rounded[0], overlap_vals))[0]
-                # Compute scale factor using only overlapping points
-                scale_factor = np.mean(npz_merge[i][idx_i] / npz_merge[0][idx_0])
-                npz_merge_rescaled[i] = npz_merge[i] * scale_factor
-                npz_err_merge_rescaled[i] = npz_err_merge[i] * scale_factor
-            else:
-                # No overlap, use original values
-                npz_merge_rescaled[i] = npz_merge[i].copy()
-                npz_err_merge_rescaled[i] = npz_err_merge[i].copy()
+            assert len(overlap_vals) > 0, "No overlap found between tracer arrays, check input data."
+
+            idx_i = np.nonzero(np.isin(zvals_rounded[i], overlap_vals))[0]
+            idx_0 = np.nonzero(np.isin(zvals_rounded[0], overlap_vals))[0]
+
+            scale_factor = np.mean(npz_merge[i][idx_i] / npz_merge[0][idx_0])
+            npz_merge_rescaled[i] = npz_merge[i] * scale_factor
+            npz_err_merge_rescaled[i] = npz_err_merge[i] * scale_factor
     else:
         npz_merge_rescaled = npz_merge
         npz_err_merge_rescaled = npz_err_merge
 
     for z_i, npz_i, err_i in zip(zvals_rounded, npz_merge_rescaled, npz_err_merge_rescaled):
         indices = np.searchsorted(zvals, z_i)
-        weights = 1.0 / (err_i**2)
-        value_weight_sum[indices] += npz_i * weights
-        weight_sum[indices] += weights
+        valid_err = err_i > 0
+        if not any(valid_err):
+            continue
+        weights = 1.0 / (err_i[valid_err]**2)
+        value_weight_sum[indices[valid_err]] += npz_i[valid_err] * weights
+        weight_sum[indices[valid_err]] += weights
 
-    valid = weight_sum > 0
-    assert np.all(valid), "No valid weights found, check input data."
-    npz[valid] = value_weight_sum[valid] / weight_sum[valid]
-    npz_err[valid] = np.sqrt(1.0 / weight_sum[valid])
+    valid_z_range = weight_sum > 0
+    assert any(valid_z_range), "No valid z range found after merging, check input data."
+    npz = np.zeros_like(value_weight_sum, dtype=float)
+    npz_err = np.zeros_like(value_weight_sum, dtype=float)
 
-    return zvals, npz, npz_err
-        
-       
-    
+    npz[valid_z_range] = value_weight_sum[valid_z_range] / weight_sum[valid_z_range]
+    npz_err[valid_z_range] = np.sqrt(1.0 / weight_sum[valid_z_range])
+
+
+    return np.array(zvals), np.array(npz), np.array(npz_err)    
