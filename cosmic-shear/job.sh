@@ -4,13 +4,13 @@
 #SBATCH --nodes 4
 #SBATCH --time 10:00:00
 #SBATCH --constraint cpu
-#SBATCH --account desi
+#SBATCH --account m3058
 #SBATCH --job-name real
 #SBATCH --output /global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/cosmic-shear/logs/cshear-%j.out
 #SBATCH --error /global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/cosmic-shear/logs/cshear-%j.err
 
 umask 0002
-export TQDM_MININTERVAL=120 # export to two minutes
+export TQDM_MININTERVAL=240 # export to four minutes
 
 source /dvs_ro/cfs/projectdirs/des/zuntz/cosmosis-global/setup-cosmosis3
 cd /global/cfs/projectdirs/desi/users/jchdj/cosmosis-standard-library/

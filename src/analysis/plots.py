@@ -187,10 +187,8 @@ class PlotManager:
             file_paths.append(file_path)
             if not self.overwrite and file_path.exists():
                 raise FileExistsError(f"Figure {file_path} already exists. Set overwrite=True in PlotManager to overwrite it.")
-        
-        # Create figure
-        fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize, 
-                              dpi=dpi, facecolor=facecolor, **subplot_kwargs)
+
+        fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize, dpi=dpi, facecolor=facecolor, **subplot_kwargs)
         
         # For complex layouts, remove default axes and yield only the figure
         if custom_layout:
@@ -230,10 +228,11 @@ class PlotManager:
             try:
                 yield fig, ax
                 
-                # Add labels if requested and we have multiple subplots
-                if add_labels and (nrows > 1 or ncols > 1):
-                    add_subplot_labels(ax, position=label_position)
-                
+                if ax is not None:
+                    # Add labels if requested and we have multiple subplots
+                    if add_labels and (nrows > 1 or ncols > 1):
+                        add_subplot_labels(ax, position=label_position)
+                    
                 # Apply tight layout if requested
                 if tight_layout:
                     try:
@@ -245,7 +244,7 @@ class PlotManager:
                 saved_paths = []
                 for file_path in file_paths:
                     fig.savefig(file_path, bbox_inches=bbox_inches, dpi=dpi, 
-                               facecolor=facecolor, edgecolor='none')
+                            facecolor=facecolor, edgecolor='none')
                     saved_paths.append(file_path)
                     logging.info(f"Saved plot: {file_path}")
                 
