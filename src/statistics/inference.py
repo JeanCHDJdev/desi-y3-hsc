@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 from pycorr import TwoPointEstimator
 
-import src.statistics.corrfiles as corrf
+import src.statistics.corrfiles as cf
 import src.statistics.combination as comb
 import src.statistics.corrutils as cu
 import src.statistics.cosmotools as ct
@@ -149,7 +149,7 @@ def wss(
     if path_NGC is not None:
         path_NGC = Path(path_NGC)
         assert path_NGC.exists(), f'Path {path_NGC} does not exist.'
-        frNGC = corrf.CorrFileReader(path_NGC)
+        frNGC = cf.CorrFileReader(path_NGC)
         bins_t1 = frNGC.get_bins(tracer1)
         bins_t2 = frNGC.get_bins(tracer2)
     else:
@@ -157,7 +157,7 @@ def wss(
     if path_SGC is not None:
         path_SGC = Path(path_SGC)
         assert path_SGC.exists(), f'Path {path_SGC} does not exist.'
-        frSGC = corrf.CorrFileReader(path_SGC)
+        frSGC = cf.CorrFileReader(path_SGC)
         bins_t1 = frSGC.get_bins(tracer1)
         bins_t2 = frSGC.get_bins(tracer2)
     else:
@@ -232,7 +232,7 @@ def wpp(
     assert bin_index is not None, 'bin_index must be provided'
 
     estimators = []
-    fr = corrf.CorrFileReader(path)
+    fr = cf.CorrFileReader(path)
     bins_hsc = fr.get_bins('HSC')
 
     files = fr.get_file(bin_index, bin_index, 'HSC', 'HSC', moc=None)
@@ -269,7 +269,7 @@ def wsp(
     p : photometric
     '''
 
-    fr = corrf.CorrFileReader(path)
+    fr = cf.CorrFileReader(path)
     estimators = []
     bins_tracer = fr.get_bins(tracer)
 
@@ -298,9 +298,11 @@ def compute_npz(
         tomo_bin, 
         which_patches,
         scale_cuts, 
-        do_bias_correction=True,
+        do_phot_correction=True,
+        do_spec_correction=True,
         rebin=1,
         return_chunks=False, 
+        precomp_wdm=None,
         ):
     '''
     Computes n(z) for the provided tracer and binning.
@@ -331,8 +333,8 @@ def compute_npz(
     scale_cuts : list
         The scale cuts to apply to the measurements. This is a list of two values, the lower and upper
         bounds of the scale cuts, in comoving Mpc/h.
-    do_bias_correction : bool
-        If do_bias_correction is True, will apply the bias correction to the measurement.
+    do_phot_correction : bool
+        If do_phot_correction is True, will apply the bias correction to the measurement.
         The bias correction is done using the gamma and delta_gamma values from the powerlaw fit.
         If False, no bias correction is applied.
     return_chunks : bool
@@ -343,7 +345,7 @@ def compute_npz(
     #assert tomo_bin in [1, 2, 3, 4], f'tomo_bin {tomo_bin} not a valid bin.'
     
     # let's grab the binning scheme that we are using
-    fr = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
+    fr = cf.CorrFileReader(path_dictionary['DESIxHSC'])
     if tracer == 'Merged':
         fine_redshift = _get_fine_redshift_bins(fr)
     else:
@@ -374,22 +376,45 @@ def compute_npz(
         which_patches=which_patches,
         integration='single-bin'
     )
-    combined_err = comb.combine_error_bars(
-        x=wsp_meas, 
-        xerr=wsp_err, 
-        y=wss_meas, 
-        yerr=wss_err
-        )
-    combined_err /= deltaz
 
-    gamma, delta_gamma = _get_bias_correction() if do_bias_correction else (0, 0)
+    alpha, delta_alpha, gamma, delta_gamma = _get_bias_correction(scale_cut=scale_cuts) if do_phot_correction else (1, 0, 0, 0)
+    if not do_spec_correction:
+        wss_meas = 1
+        wss_err = 0
 
-    result = wsp_meas / (deltaz * np.sqrt((wss_meas)) * (1 + zloc) ** gamma)
-    combined_err = np.sqrt(
-        (combined_err / ((1 + zloc) ** gamma))**2 
-        + np.log(1+zloc) * combined_err * delta_gamma /((1 + zloc) ** gamma)
+    if not do_spec_correction and do_phot_correction: 
+        raise ValueError('If doing photometric correction, must do spectroscopic correction too.')
+
+    # case where we only use cross : we take into account w_dm only
+    factor_wdm = (precomp_wdm)
+    result = wsp_meas / factor_wdm
+    combined_err = wsp_err / factor_wdm
+
+    if do_spec_correction:
+        if do_phot_correction:
+            factor = deltaz # wdm evolution will be encompassed by the powerlaw
+        else:
+            # if not doing phot correction then we take into account evolution of wdm with z for the phot sample
+            # so a square root dependence on wdm, that we multiply by delta_z
+            factor = np.sqrt(deltaz * precomp_wdm)
+        result = wsp_meas / (np.sqrt(wss_meas) * factor) 
+        combined_err = comb.combine_error_bars(
+            x=wsp_meas, 
+            xerr=wsp_err, 
+            y=wss_meas, 
+            yerr=wss_err
+            ) / (factor)
+    if do_phot_correction:
+        result /= alpha * ((1 + zloc) ** gamma)
+        combined_err_prealpha = np.sqrt(
+            (combined_err / ((1 + zloc) ** gamma))**2 
+            + np.log(1+zloc) * combined_err * delta_gamma /((1 + zloc) ** gamma)
+            )
+        combined_err = np.sqrt(
+            (combined_err_prealpha / alpha)**2 
+            + (result * delta_alpha / alpha**2)**2
         )
-    
+
     if return_chunks:
         return wsp_meas, wsp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
     return result, combined_err
@@ -401,22 +426,24 @@ def compute_npz_merged(
         tomo_bin, 
         scale_cuts, 
         which_patches=None,
-        do_bias_correction=True,
+        do_phot_correction=True,
+        do_spec_correction=True,
         rebin=1,
         return_chunks=False, 
-        verbose=False
+        verbose=False,
+        precomp_wdm=None,
         ):
     
     if which_patches is not None:
         raise ValueError("which_patches must be None for merged catalogs")
     
-    fine_redshift = _get_fine_redshift_bins(corrf.CorrFileReader(path_dictionary['DESIxHSC']))
+    fine_redshift = _get_fine_redshift_bins(cf.CorrFileReader(path_dictionary['DESIxHSC']))
 
     # this is the redshift we are at with the desi tracer
     zloc = (fine_redshift[fine_bin-1] + fine_redshift[fine_bin])/2
     deltaz = fine_redshift[fine_bin] - fine_redshift[fine_bin-1]
 
-    frss = corrf.CorrFileReader(path_dictionary['MergedxMerged'])
+    frss = cf.CorrFileReader(path_dictionary['MergedxMerged'])
     file_ss = frss.get_file(fine_bin, fine_bin, tracer, tracer, "Merged")
     estimators_ss = [TwoPointEstimator.load(file_ss)]
     wss_meas, wss_err, _ = single_bin_corr(
@@ -427,7 +454,7 @@ def compute_npz_merged(
         scale_cuts=scale_cuts,
     )
 
-    frsp = corrf.CorrFileReader(path_dictionary['MergedxHSC'])
+    frsp = cf.CorrFileReader(path_dictionary['MergedxHSC'])
     file_sp = frsp.get_file(fine_bin, tomo_bin, tracer, 'HSC', "Merged")
     estimators_sp = [TwoPointEstimator.load(file_sp)]
     wsp_meas, wsp_err, _  = single_bin_corr(
@@ -438,20 +465,43 @@ def compute_npz_merged(
         scale_cuts=scale_cuts,
     )
 
-    combined_err = comb.combine_error_bars(
-        x=wsp_meas, 
-        xerr=wsp_err, 
-        y=wss_meas, 
-        yerr=wss_err
-        ) / deltaz
-    
-    gamma, delta_gamma = _get_bias_correction() if do_bias_correction else (0, 0)
+    alpha, delta_alpha, gamma, delta_gamma = _get_bias_correction(scale_cut=scale_cuts) if do_phot_correction else (1, 0, 0, 0)
+    if not do_spec_correction:
+        wss_meas = 1
+        wss_err = 0
 
-    result = wsp_meas / (deltaz * np.sqrt((wss_meas)) * (1 + zloc) ** gamma)
-    combined_err = np.sqrt(
-        (combined_err / ((1 + zloc) ** gamma))**2 
-        + np.log(1+zloc) * combined_err * delta_gamma /((1 + zloc) ** gamma)
+    if not do_spec_correction and do_phot_correction: 
+        raise ValueError('If doing photometric correction, must do spectroscopic correction too.')
+
+    # case where we only use cross : we take into account w_dm only
+    factor_wdm = (precomp_wdm)
+    result = wsp_meas / factor_wdm
+    combined_err = wsp_err / factor_wdm
+
+    if do_spec_correction:
+        if do_phot_correction:
+            factor = deltaz # wdm evolution will be encompassed by the powerlaw
+        else:
+            # if not doing phot correction then we take into account evolution of wdm with z for the phot sample
+            factor = np.sqrt(deltaz * precomp_wdm)
+        result = wsp_meas / (np.sqrt(wss_meas) * factor) 
+        combined_err = comb.combine_error_bars(
+            x=wsp_meas, 
+            xerr=wsp_err, 
+            y=wss_meas, 
+            yerr=wss_err
+            ) / (factor)
+    if do_phot_correction:
+        result /= alpha * ((1 + zloc) ** gamma)
+        combined_err_prealpha = np.sqrt(
+            (combined_err / ((1 + zloc) ** gamma))**2 
+            + np.log(1+zloc) * combined_err * delta_gamma /((1 + zloc) ** gamma)
+            )
+        combined_err = np.sqrt(
+            (combined_err_prealpha / alpha)**2 
+            + (result * delta_alpha / alpha**2)**2
         )
+
     if return_chunks:
         return wsp_meas, wsp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
     return result, combined_err
@@ -462,9 +512,11 @@ def full_npz_tomo(
         tomo_bin, 
         scale_cuts, 
         which_patches=[1,2,3,4],
-        do_bias_correction=True,
+        do_phot_correction=True,
+        do_spec_correction=True,
         rebin=1,
         return_chunks=False,
+        precomp_wdm=None,
         ):
     '''
     Computes n(z) for the provided tracer and specific tomographic. Returns the array of n(z) values
@@ -492,8 +544,8 @@ def full_npz_tomo(
     scale_cuts : list
         The scale cuts to apply to the measurements. This is a list of two values, the lower and upper
         bounds of the scale cuts, in comoving Mpc/h.
-    do_bias_correction : bool
-        If do_bias_correction is True, will apply the bias correction to the measurement.
+    do_phot_correction : bool
+        If do_phot_correction is True, will apply the bias correction to the measurement.
         The bias correction is done using the gamma and delta_gamma values from the powerlaw fit.
         If False, no bias correction is applied.
     rebin : int
@@ -501,11 +553,14 @@ def full_npz_tomo(
     verbose : bool
         If verbose is True, will print the values used to compute the n(z) for the tracer.
     '''
+    if not (do_phot_correction and do_spec_correction) and precomp_wdm is None:
+        raise ValueError('If not doing bias and spec correction, precomp_wdm must be provided.')
+    
     # let's grab the binning scheme that we are using
-    fr = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
+    fr = cf.CorrFileReader(path_dictionary['DESIxHSC'])
 
     # calibration samples from HSC, if needed
-    fr_hsc = corrf.CorrFileReader(path_dictionary['HSC'])
+    fr_hsc = cf.CorrFileReader(path_dictionary['HSC'])
 
     if tracer == 'Merged':
         fine_redshift = _get_fine_redshift_bins(fr)
@@ -530,17 +585,25 @@ def full_npz_tomo(
         print(f'Using standard method for tracer {tracer} and tomo bin {tomo_bin}.')
         func = compute_npz
 
+    dz = fine_redshift[1] - fine_redshift[0]
+    assert np.all(np.isclose(np.diff(fine_redshift), dz)), 'fine_redshift bins are not uniform'
+
     for i in range(1, len(fine_redshift)):
+        zloc = (fine_redshift[i-1] + fine_redshift[i])/2
+        wdm = precomp_wdm(zloc) / dz # integrated over the fine bin, since this is an interpolator
+
         out = func(
             path_dictionary,
             tracer=tracer,
             fine_bin=i,
-            do_bias_correction=do_bias_correction,
+            do_phot_correction=do_phot_correction,
+            do_spec_correction=do_spec_correction,
             tomo_bin=tomo_bin,
             which_patches=which_patches,
             scale_cuts=scale_cuts,
             rebin=rebin,
-            return_chunks=return_chunks
+            return_chunks=return_chunks,
+            precomp_wdm=wdm
         )
         
         if return_chunks:
@@ -550,12 +613,12 @@ def full_npz_tomo(
             results.append((nz_s, nz_err_s))
 
     if return_chunks:
-        return np.array(results)
+        return np.array(results).T
     else:
         nz, nz_err = zip(*results)
         return np.array(nz), np.array(nz_err)
     
-def _get_fine_redshift_bins(fr: corrf.CorrFileReader, tracer='Merged'):
+def _get_fine_redshift_bins(fr: cf.CorrFileReader, tracer='Merged'):
     dzall = []
     mint = 1089 # cmb redshift should be high enough
     maxt = 0
@@ -583,10 +646,19 @@ def _get_fine_redshift_bins(fr: corrf.CorrFileReader, tracer='Merged'):
         )
     return fine_redshift
 
-def _get_bias_correction():
-    gamma = 0.21524
-    delta_gamma = 0.05757
-    return gamma, delta_gamma
+def _get_bias_correction(scale_cut):
+    if scale_cut == [.3, 3.]:
+        g1 = 0.409
+        delta_g1 = 0.006
+        g2 = 0.466
+        delta_g2 = 0.023
+    elif scale_cut == [1, 5]:
+        g1 = 0.295
+        delta_g1 = 0.007
+        g2 = 0.565
+        delta_g2 = 0.036
+    #g1*(1+z)**g2
+    return g1, delta_g1, g2, delta_g2
     
 def compute_rcc(
         path_dictionary, 
@@ -719,17 +791,17 @@ def full_rcc(
     '''
     # let's grab the binning scheme that we are using
     if tracer1 in ['LRG', 'ELGnotqso', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY']:
-        fr1 = corrf.CorrFileReader(path_dictionary['DESI_NGC'])
+        fr1 = cf.CorrFileReader(path_dictionary['DESI_NGC'])
         tracer1_redshift = fr1.get_bins(tracer1)
     else:
         raise NotImplementedError(f'{tracer1} not a DESI tracer is not implemented functionality.')
 
     # calibration samples
     if tracer2 in ['LRG', 'ELGnotqso', 'QSO', 'BGS_ANY']:
-        fr2 = corrf.CorrFileReader(path_dictionary['DESI_NGC'])
+        fr2 = cf.CorrFileReader(path_dictionary['DESI_NGC'])
     else:
         # this is the HSC tracer
-        fr2 = corrf.CorrFileReader(path_dictionary['HSC'])
+        fr2 = cf.CorrFileReader(path_dictionary['HSC'])
     tracer2_redshift = fr2.get_bins(tracer2)
 
     # let's check that the bins are all respectively the same sizes.
@@ -824,19 +896,19 @@ def merge_estimators(
         ['LRG', 'QSO', 'ELG_LOPnotqso', 'BGS_ANY'].
     '''
 
-    fr_cross = corrf.CorrFileReader(path_dictionary['DESIxHSC'])
+    fr_cross = cf.CorrFileReader(path_dictionary['DESIxHSC'])
     if which_cap == 'all':
         which_cap = ['NGC', 'SGC']
     if isinstance(which_cap, str):
         which_cap = [which_cap]
     ngc = path_dictionary.get('DESI_NGC')
     if ngc is not None and 'NGC' in which_cap:
-        fr_auto_NGC = corrf.CorrFileReader(path_dictionary['DESI_NGC'])
+        fr_auto_NGC = cf.CorrFileReader(path_dictionary['DESI_NGC'])
     else:
         fr_auto_NGC = None
     sgc = path_dictionary.get('DESI_SGC')
     if sgc is not None and 'SGC' in which_cap:
-        fr_auto_SGC = corrf.CorrFileReader(path_dictionary['DESI_SGC'])
+        fr_auto_SGC = cf.CorrFileReader(path_dictionary['DESI_SGC'])
     else:
         fr_auto_SGC = None
     assert fr_cross is not None, 'cross must be provided.'
@@ -853,10 +925,10 @@ def merge_estimators(
             print(f'Using all tomographic bins : {which_tomo}')
 
     if which_tracers == 'all':
-        tracers = ['LRG', 'QSO', 'ELG_LOPnotqso', 'BGS_ANY']
+        tracers = ['LRG', 'QSO', 'ELGnotqso', 'BGS_ANY']
     elif isinstance(which_tracers, str):
         tracers = [which_tracers]
-    assert all(t in ['LRG', 'QSO', 'ELG_LOPnotqso', 'BGS_ANY'] for t in tracers), (
+    assert all(t in ['LRG', 'QSO', 'ELGnotqso', 'BGS_ANY'] for t in tracers), (
         f'which_tracers must be a list of strings in [LRG, QSO, ELG_LOPnotqso, BGS_ANY], got {tracers}'
     )
 
@@ -866,11 +938,11 @@ def merge_estimators(
     dz = np.mean(np.diff(redshift_bins))
 
     if which_patches == 'all':
-        which_patches = [0, 1, 2, 3]  # all patches
+        which_patches = [1, 2, 3, 4]  # all patches
     elif isinstance(which_patches, int):
         which_patches = [which_patches]
-    assert all(w in [0, 1, 2, 3] for w in which_patches), (
-        f'which_patches must be a list of integers in [0, 1, 2, 3], got {which_patches}'
+    assert all(w in [1, 2, 3, 4] for w in which_patches), (
+        f'which_patches must be a list of integers in [1, 2, 3, 4], got {which_patches}'
     )
 
     estimators_cross = []

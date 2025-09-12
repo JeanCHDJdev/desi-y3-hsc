@@ -222,17 +222,54 @@ def redshift_distribution(bounds, tracer, discretization=100):
 
     return zdata["Z"].data
 
-def spectroscopic_bias_model(alpha, beta, z):
-    return alpha * ((1+z)**2) + beta
+def spec_bias(z, tracer='QSO', return_coeffs=False):
+    """
+    Bias model for the different DESI tracer (measured from DR2 data).
+    """
 
-def parametrize_bias(tracer, tomo_bin):
+    params = {
+        'BGS_BRIGHT-21.35': (0.606, 0.524), #(0.60646037, 0.52389492),
+        'LRG': (0.236, 1.346),#(0.23553567, 1.3458994),
+        'ELG_LOPnotqso': (0.151, 0.595), #(0.15066781, 0.59463735),
+        'ELG': (0.155, 0.595), #(0.15487521, 0.59464828),
+        'QSO': (0.252, 0.710) #(0.25207547, 0.71020952)
+        }
+
+    if tracer in params:
+        alpha, beta = params[tracer]
+    else:
+        print(f'Tracer: {tracer} is not ready...')
+        
+    if return_coeffs:
+        return alpha, beta
+    else:
+        return alpha*(1+z)**2 + beta
+
+def _get_bias_correction(scale_cut):
+    if scale_cut == [.3, 3.]:
+        g1 = 0.409
+        delta_g1 = 0.006
+        g2 = 0.466
+        delta_g2 = 0.023
+    elif scale_cut == [1, 5]:
+        g1 = 0.295
+        delta_g1 = 0.007
+        g2 = 0.565
+        delta_g2 = 0.036
+    else:
+        raise ValueError(f"Scale cut {scale_cut} not recognized. Available options are [.3, 3.] and [1, 5].")
+    #g1*(1+z)**g2
+    return g1, delta_g1, g2, delta_g2
+
+def parametrize_bias(tracer, tomo_bin, wdm, scale_cut):
     '''
     Returns the alpha and bias models for the magnification correction.
     These are the models used in the HSC WL-photoz tomographic analysis.
     '''
     # -------------------
     # photo-z bias model
-    bias_model_p = lambda z: (1+z)**0.917
+    a, _, b, _ = _get_bias_correction(scale_cut=scale_cut)
+    bias_model_p = lambda z: a*(1+z)**b * np.sqrt(0.1/wdm(z)) # small tomographic bins are 0.1 in size
 
     # tomographic bins. These measurements are pretty rough.
     match tomo_bin:
@@ -272,11 +309,11 @@ def parametrize_bias(tracer, tomo_bin):
                 fill_value='extrapolate'
             )
             alpha_model_s = lambda z: interpolated_BGS(z)
-            bias_model_s = lambda z: spectroscopic_bias_model(
-                alpha=0.601,
-                beta=0.354,
-                z=z
-            )
+            bias_model_s = lambda z: spec_bias(z=z, tracer='BGS_BRIGHT-21.35')
+            #    alpha=0.601,
+            #    beta=0.354,
+            #    z=z
+            #)
         case 'LRG':
             pz_cuts_south_LRG = np.array([0.4, 0.47, 0.54, 0.6265, 0.713, 0.7865, 0.86, 0.92, 1.02])
             pz_cuts_north_LRG = np.array([0.4, 0.4725, 0.545, 0.632, 0.719, 0.785, 0.851, 0.92, 1.024])
@@ -291,11 +328,11 @@ def parametrize_bias(tracer, tomo_bin):
                 fill_value='extrapolate'
             )
             alpha_model_s = lambda z: 2.5*interpolated_lrg(z)-1
-            bias_model_s = lambda z: spectroscopic_bias_model(
-                alpha=0.245,
-                beta=1.360,
-                z=z
-            )
+            bias_model_s = lambda z: spec_bias(z=z, tracer='LRG')
+                #alpha=0.245,
+                #beta=1.360,
+                #z=z
+            #)
         case 'ELG_LOPnotqso' | 'ELGnotqso':
             alphas = [
                 1.258148799455872,
@@ -313,16 +350,19 @@ def parametrize_bias(tracer, tomo_bin):
                 fill_value='extrapolate'
             )
             alpha_model_s = lambda z: interpolated_ELG(z) # np.sum(alpha_ELG)/2
-            bias_model_s = lambda z: spectroscopic_bias_model(
-                # this has issues with weights. maybe we should be using the parameters 
+            if tracer=='ELG_LOPnotqso':
+                bias_model_s = lambda z: spec_bias(z=z, tracer='ELG_LOPnotqso')
+            else:
+                bias_model_s = lambda z: spec_bias(z=z, tracer='ELG')
+                # this has issues with weights. maybe we should be using the parameters
                 # from Edmond's bias model.
                 #alpha=0.197,
                 #beta=1.354,
                 # Edmond's bias parameters
-                alpha=0.153,
-                beta=0.691,
-                z=z
-            )
+                #alpha=0.153,
+                #beta=0.691,
+                #z=z
+            #)
         case 'QSO':
             # https://arxiv.org/pdf/2506.22416v1
             pz_qso_edges = np.array([0.8, 2.1, 2.5, 3.5])
@@ -335,11 +375,11 @@ def parametrize_bias(tracer, tomo_bin):
                 fill_value='extrapolate'
             )
             alpha_model_s = lambda z: interpolated_QSO(z)
-            bias_model_s = lambda z: spectroscopic_bias_model(
-                alpha=0.192,
-                beta=1.038,
-                z=z
-            )
+            bias_model_s = lambda z: spec_bias(z=z, tracer='QSO')
+                #alpha=0.192,
+                #beta=1.038,
+                #z=z
+            #)
         case _:
             raise ValueError(f"Unknown tracer: {tracer}. Must be one of ['BGS_ANY', 'ELG_LOPnotqso', 'QSO', 'LRG']")
         
@@ -456,12 +496,13 @@ def solve_magnification(
         w_dm(rp_vals, z, integrate=True) 
         for z in zvalues
     ])
+    w_dm_interp = interp1d(zvalues, w_dm_values, axis=0, fill_value="extrapolate")
 
     # make the magnification matrix
     print(f'Computing magnification matrix for {len(zvalues)} redshifts...')
     
     # obtain bias, alpha models (parametrize bias has them hardcoded)
-    alpha_p, alpha_s, bias_p, bias_s = parametrize_bias(tracer=tracer, tomo_bin=tomo_bin)
+    alpha_p, alpha_s, bias_p, bias_s = parametrize_bias(tracer=tracer, tomo_bin=tomo_bin, wdm=w_dm_interp, scale_cut=scale_cut)
     
     Mag = np.array([
         magnification_coefficients(
