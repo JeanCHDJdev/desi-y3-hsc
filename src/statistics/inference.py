@@ -51,11 +51,10 @@ def single_bin_corr(
         integration='single-bin',
         ):
     '''
-    Computes the single bin Landy-Szalay estimator (Schmidt+2013, Ménard+2013)
-    for the wpp, wss and wsp measurements. 
+    From the provided path, collate the measurements on each of the MOCs
+    and return a single bin measurement with error bars.
     '''
-    ## single bin integration
-    # for now assume all estimators have the same binning
+    # assume all estimators have the same binning
     # as estimator.sep
     if isinstance(estimators, TwoPointEstimator):
         estimators = [estimators]
@@ -101,7 +100,7 @@ def single_bin_corr(
         v = wkernel * delta_r
 
         # v @ cov_sc @ v = v^T*\Sigma*v
-        # where \Sigma is the covariance matrix
+        # \Sigma is the covariance matrix => take square root for error contribution
         w_err = np.sqrt(v @ cov_sc @ v)
         return w_bar, w_err, comovsep_sc
     
@@ -629,8 +628,6 @@ def _get_fine_redshift_bins(fr: cf.CorrFileReader, tracer='Merged'):
             tracers = [tracer]
     for t in tracers:
         bin_t = fr.get_bins(t)
-        if bin_t is None and t == 'ELG_LOPnotqso':
-            bin_t = fr.get_bins('ELGnotqso')
         mint = min(mint, min(bin_t))
         maxt = max(maxt, max(bin_t)) 
         dz_t = np.diff(bin_t)
@@ -647,18 +644,7 @@ def _get_fine_redshift_bins(fr: cf.CorrFileReader, tracer='Merged'):
     return fine_redshift
 
 def _get_bias_correction(scale_cut):
-    if scale_cut == [.3, 3.]:
-        g1 = 0.409
-        delta_g1 = 0.006
-        g2 = 0.466
-        delta_g2 = 0.023
-    elif scale_cut == [1, 5]:
-        g1 = 0.295
-        delta_g1 = 0.007
-        g2 = 0.565
-        delta_g2 = 0.036
-    #g1*(1+z)**g2
-    return g1, delta_g1, g2, delta_g2
+    return ct._get_bias_correction(scale_cut=scale_cut)
     
 def compute_rcc(
         path_dictionary, 
@@ -925,11 +911,11 @@ def merge_estimators(
             print(f'Using all tomographic bins : {which_tomo}')
 
     if which_tracers == 'all':
-        tracers = ['LRG', 'QSO', 'ELGnotqso', 'BGS_ANY']
+        tracers = ['LRG', 'QSO', 'ELGnotqso', 'ELG_LOPnotqso', 'BGS_ANY']
     elif isinstance(which_tracers, str):
         tracers = [which_tracers]
-    assert all(t in ['LRG', 'QSO', 'ELGnotqso', 'BGS_ANY'] for t in tracers), (
-        f'which_tracers must be a list of strings in [LRG, QSO, ELG_LOPnotqso, BGS_ANY], got {tracers}'
+    assert all(t in ['LRG', 'QSO', 'ELGnotqso', 'ELG_LOPnotqso', 'BGS_ANY'] for t in tracers), (
+        f'which_tracers must be a list of strings in [LRG, QSO, ELGnotqso, ELG_LOPnotqso, BGS_ANY], got {tracers}'
     )
 
     redshift_bins = _get_fine_redshift_bins(fr_cross)
@@ -981,10 +967,6 @@ def merge_estimators(
                         # combine on MOCs for this tomo bin
                         paths_cross[index_tomo-1].extend(paths_tomo_cross)   
 
-        #if verbose:
-        #    print("Paths for cross-correlations:", paths_cross)
-        #    print("Paths for auto-correlations:", paths_autos)
-        
         estimators_cross.append([
             np.sum(
                 [TwoPointEstimator.load(p).normalize() for p in paths]
@@ -1040,7 +1022,7 @@ def merge_estimators(
     
     return 
 
-def merge_results(zvals_merge, npz_merge, npz_err_merge, precision=0.0001, co_normalize=False):
+def merge_results(zvals_merge, npz_merge, npz_err_merge, precision=0.0001):
     """
     Merge results from different tomographic bins using inverse variance weighting.
     
@@ -1048,6 +1030,7 @@ def merge_results(zvals_merge, npz_merge, npz_err_merge, precision=0.0001, co_no
     - zvals_merge: list of arrays, each containing redshift values for one tracer/bin
     - npz_merge: list of arrays, each containing values at zvals
     - npz_err_merge: list of arrays, each containing errors at zvals
+    - precision: float, the precision to which redshift values are rounded for merging
     
     Returns:
     - zvals: sorted array of unique redshift values
@@ -1061,33 +1044,7 @@ def merge_results(zvals_merge, npz_merge, npz_err_merge, precision=0.0001, co_no
     weight_sum = np.zeros_like(zvals)
     value_weight_sum = np.zeros_like(zvals)
 
-    npz_merge_rescaled = [np.zeros_like(zvals) for _ in range(len(npz_merge))]
-    npz_err_merge_rescaled = [np.zeros_like(zvals) for _ in range(len(npz_err_merge))]
-
-    if co_normalize:
-        # ensure that all npz_merge arrays are normalized to the same scale
-        # by matching on the overlap region
-        for i in range(len(npz_merge)):
-            if i == 0:
-                # First one is the reference tracer.
-                npz_merge_rescaled[i] = npz_merge[i].copy()
-                npz_err_merge_rescaled[i] = npz_err_merge[i].copy()
-                continue
-            # Find the overlap values between zvals_rounded[i] and zvals_rounded[0]
-            overlap_vals = np.intersect1d(zvals_rounded[i], zvals_rounded[0])
-            assert len(overlap_vals) > 0, "No overlap found between tracer arrays, check input data."
-
-            idx_i = np.nonzero(np.isin(zvals_rounded[i], overlap_vals))[0]
-            idx_0 = np.nonzero(np.isin(zvals_rounded[0], overlap_vals))[0]
-
-            scale_factor = np.mean(npz_merge[i][idx_i] / npz_merge[0][idx_0])
-            npz_merge_rescaled[i] = npz_merge[i] * scale_factor
-            npz_err_merge_rescaled[i] = npz_err_merge[i] * scale_factor
-    else:
-        npz_merge_rescaled = npz_merge
-        npz_err_merge_rescaled = npz_err_merge
-
-    for z_i, npz_i, err_i in zip(zvals_rounded, npz_merge_rescaled, npz_err_merge_rescaled):
+    for z_i, npz_i, err_i in zip(zvals_rounded, npz_merge, npz_err_merge):
         indices = np.searchsorted(zvals, z_i)
         valid_err = err_i > 0
         if not any(valid_err):
@@ -1103,6 +1060,5 @@ def merge_results(zvals_merge, npz_merge, npz_err_merge, precision=0.0001, co_no
 
     npz[valid_z_range] = value_weight_sum[valid_z_range] / weight_sum[valid_z_range]
     npz_err[valid_z_range] = np.sqrt(1.0 / weight_sum[valid_z_range])
-
 
     return np.array(zvals), np.array(npz), np.array(npz_err)    

@@ -19,7 +19,7 @@ from astropy.coordinates import SkyCoord
 from pycorr import TwoPointCorrelationFunction, KMeansSubsampler
 
 import src.statistics.cosmotools as ct
-from src.statistics.corrfiles import fetch_desi_files, fetch_hsc_files, get_zeff, setup_crosscorr_logging
+from src.statistics.corrfiles import fetch_desi_files, fetch_hsc_files, setup_crosscorr_logging
 
 class CorrelationMeta(ABC):
     '''

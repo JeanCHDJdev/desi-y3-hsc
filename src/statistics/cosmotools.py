@@ -225,9 +225,11 @@ def redshift_distribution(bounds, tracer, discretization=100):
 def spec_bias(z, tracer='QSO', return_coeffs=False):
     """
     Bias model for the different DESI tracer (measured from DR2 data).
+    Credit : E. Chaussidon, DESI Collaboration, private communication.
     """
-
     params = {
+        # commented values are measurements given by DESI CAI, values in parentheses
+        # are the values used in this work.
         'BGS_BRIGHT-21.35': (0.606, 0.524), #(0.60646037, 0.52389492),
         'LRG': (0.236, 1.346),#(0.23553567, 1.3458994),
         'ELG_LOPnotqso': (0.151, 0.595), #(0.15066781, 0.59463735),
@@ -243,9 +245,15 @@ def spec_bias(z, tracer='QSO', return_coeffs=False):
     if return_coeffs:
         return alpha, beta
     else:
+        # Laurent+2017 on QSOs
         return alpha*(1+z)**2 + beta
 
 def _get_bias_correction(scale_cut):
+    """
+    NOTE : This function is actually returning the wpp correction,
+    hence significant differences between scale cuts. One should correct for dark matter
+    autocorrelation to recover bias.
+    """
     if scale_cut == [.3, 3.]:
         g1 = 0.409
         delta_g1 = 0.006
@@ -266,12 +274,15 @@ def parametrize_bias(tracer, tomo_bin, wdm, scale_cut):
     Returns the alpha and bias models for the magnification correction.
     These are the models used in the HSC WL-photoz tomographic analysis.
     '''
-    # -------------------
-    # photo-z bias model
+    # --------------------------------------
+    # galaxy bias for the photometric tracer
     a, _, b, _ = _get_bias_correction(scale_cut=scale_cut)
-    bias_model_p = lambda z: a*(1+z)**b * np.sqrt(0.1/wdm(z)) # small tomographic bins are 0.1 in size
+    # small tomographic bins are 0.1 in size
+    # wdm is passed as precomputed over the tomographic bins
+    bias_model_p = lambda z: a*(1+z)**b * np.sqrt(0.1/wdm(z))
 
-    # tomographic bins. These measurements are pretty rough.
+    # --------------------------------------
+    # magnification bias for the photometric tracer
     match tomo_bin:
         case 1:
             alpha_model_p = lambda z: -0.996 #-0.990
@@ -284,21 +295,9 @@ def parametrize_bias(tracer, tomo_bin, wdm, scale_cut):
         case _:
             raise ValueError(f"Unknown tomographic bin: {tomo_bin}. Must be one of [1, 2, 3, 4]")
 
-    # -------------------
-    # spectroscopic bias model
+    # --------------------------------------
+    # galaxy and magnification bias for the spectroscopic tracer
     match tracer:
-        # Galaxy bias : 
-        # nb : needs the -6.565 correction to match the alpha * ((1+z) ** 2) + beta formula
-        # BGS_ANY: alpha = 0.342 ± 0.012, beta = 2.812 ± 0.059
-        # LRG: alpha = 0.332 ± 0.008, beta = 3.245 ± 0.029
-        # ELG_LOPnotqso: alpha = 0.197 ± 0.006, beta = 1.354 ± 0.012
-        # QSO: alpha = 0.271 ± 0.008, beta = 2.285 ± 0.017
-
-        # Fitted parameters :
-        # BGS_ANY: alpha = 0.601 ± 0.025, beta = 0.354 ± 0.046
-        # LRG: alpha = 0.245 ± 0.009, beta = 1.360 ± 0.027
-        # ELGnotqso: alpha = 0.153 ± 0.005, beta = 0.691 ± 0.024
-        # QSO: alpha = 0.192 ± 0.005, beta = 1.038 ± 0.033
         case 'BGS_ANY':
             pz_BGS = np.array([0.211, 0.352])
             alpha_bgs = 2.5*np.array([0.81, 0.80])-1
@@ -310,10 +309,6 @@ def parametrize_bias(tracer, tomo_bin, wdm, scale_cut):
             )
             alpha_model_s = lambda z: interpolated_BGS(z)
             bias_model_s = lambda z: spec_bias(z=z, tracer='BGS_BRIGHT-21.35')
-            #    alpha=0.601,
-            #    beta=0.354,
-            #    z=z
-            #)
         case 'LRG':
             pz_cuts_south_LRG = np.array([0.4, 0.47, 0.54, 0.6265, 0.713, 0.7865, 0.86, 0.92, 1.02])
             pz_cuts_north_LRG = np.array([0.4, 0.4725, 0.545, 0.632, 0.719, 0.785, 0.851, 0.92, 1.024])
@@ -329,10 +324,6 @@ def parametrize_bias(tracer, tomo_bin, wdm, scale_cut):
             )
             alpha_model_s = lambda z: 2.5*interpolated_lrg(z)-1
             bias_model_s = lambda z: spec_bias(z=z, tracer='LRG')
-                #alpha=0.245,
-                #beta=1.360,
-                #z=z
-            #)
         case 'ELG_LOPnotqso' | 'ELGnotqso':
             alphas = [
                 1.258148799455872,
@@ -354,15 +345,6 @@ def parametrize_bias(tracer, tomo_bin, wdm, scale_cut):
                 bias_model_s = lambda z: spec_bias(z=z, tracer='ELG_LOPnotqso')
             else:
                 bias_model_s = lambda z: spec_bias(z=z, tracer='ELG')
-                # this has issues with weights. maybe we should be using the parameters
-                # from Edmond's bias model.
-                #alpha=0.197,
-                #beta=1.354,
-                # Edmond's bias parameters
-                #alpha=0.153,
-                #beta=0.691,
-                #z=z
-            #)
         case 'QSO':
             # https://arxiv.org/pdf/2506.22416v1
             pz_qso_edges = np.array([0.8, 2.1, 2.5, 3.5])
@@ -376,10 +358,6 @@ def parametrize_bias(tracer, tomo_bin, wdm, scale_cut):
             )
             alpha_model_s = lambda z: interpolated_QSO(z)
             bias_model_s = lambda z: spec_bias(z=z, tracer='QSO')
-                #alpha=0.192,
-                #beta=1.038,
-                #z=z
-            #)
         case _:
             raise ValueError(f"Unknown tracer: {tracer}. Must be one of ['BGS_ANY', 'ELG_LOPnotqso', 'QSO', 'LRG']")
         
@@ -415,7 +393,7 @@ def magnification_coefficients(
     w_dm_values : np.ndarray, optional
         The dark matter correlation function values at each redshift.
     contribution : str or list, optional
-        The contribution(s) to include: 'uD', 'Du', 'DD', or 'all'.
+        The contribution(s) to incluge: 'ug', 'gu', 'gg', or 'all'.
         
     Returns
     -------
@@ -426,11 +404,11 @@ def magnification_coefficients(
     assert zi_ind >= 0, "zi_ind must be non-negative"
     if isinstance(contribution, str):
         if contribution == 'all':
-            contribution = ['uD', 'Du', 'DD']
+            contribution = ['ug', 'gu', 'gg']
         else:
             contribution = [contribution]
-    assert all(c in ['uD', 'Du', 'DD'] for c in contribution), (
-        "contribution must be 'uD', 'Du', 'DD' or 'all'"
+    assert all(c in ['ug', 'gu', 'gg'] for c in contribution), (
+        "contribution must be 'ug', 'gu', 'gg' or 'all'"
     )
     if w_dm_values is None:
         raise ValueError(
@@ -443,7 +421,7 @@ def magnification_coefficients(
     _Om0 = COSMO_astropy.Om0 # matter density parameter
     _H = COSMO_astropy.H # Hubble parameter at redshift z in km/s/Mpc (NOTE: is callable)
     cosmofactor = (3 * _H0 **2 * _Om0 / _c)
-    dz = np.mean(np.diff(zvalues))  # mean redshift interval
+    dz = np.mean(np.diff(zvalues))  # mean redshift interval (assumes uniform binning)
 
     zi = zvalues[zi_ind]
 
@@ -459,16 +437,16 @@ def magnification_coefficients(
     # order : spectroscopic x photometric
     for zj_ind, zj in enumerate(zvalues):
         # magnification x galaxy contribution (magnification from the spectroscopic tracer)
-        if zj_ind < zi_ind and 'uD' in contribution:
+        if zj_ind < zi_ind and 'ug' in contribution:
             Dn_ji = _Dn_ij(zj, zi)
             magnification[zj_ind] = (
                mag1_const * bias_model_p(zj) * Dn_ji * w_dm_values[zj_ind] / w_dm_values[zi_ind]
             )
         # galaxy x galaxy contribution
-        elif zj_ind == zi_ind and 'DD' in contribution:
+        elif zj_ind == zi_ind and 'gg' in contribution:
             magnification[zj_ind] = 1
         # galaxy x magnification contribution (magnification from the photometric tracer)
-        elif zj_ind > zi_ind and 'Du' in contribution:
+        elif zj_ind > zi_ind and 'gu' in contribution:
             Dn_ij = _Dn_ij(zi, zj)
             magnification[zj_ind] = (
                 mag2_const * alpha_model_p(zj) * Dn_ij
@@ -497,9 +475,6 @@ def solve_magnification(
         for z in zvalues
     ])
     w_dm_interp = interp1d(zvalues, w_dm_values, axis=0, fill_value="extrapolate")
-
-    # make the magnification matrix
-    print(f'Computing magnification matrix for {len(zvalues)} redshifts...')
     
     # obtain bias, alpha models (parametrize bias has them hardcoded)
     alpha_p, alpha_s, bias_p, bias_s = parametrize_bias(tracer=tracer, tomo_bin=tomo_bin, wdm=w_dm_interp, scale_cut=scale_cut)
@@ -521,14 +496,11 @@ def solve_magnification(
     # solve the linear system
     print(f'Solving the linear system for {len(zvalues)} redshifts...')
     Mag_inv = np.linalg.inv(Mag)
-    npz = Mag_inv @ meas_vals
-
-    # TODO : propagate errors from bias models ?
+    # Mag is assumed to be perfectly known, so no error propagation
     dMag = 0
 
+    npz = Mag_inv @ meas_vals
     npz_err = Mag_inv @ meas_err
-    #dMag = np.std(Mag, axis=0)  
-    #npz_err = np.linalg.solve(Mag, (meas_err + dMag @ npz))
     
     if return_matrices:
         return npz, npz_err, w_dm_values, Mag, dMag

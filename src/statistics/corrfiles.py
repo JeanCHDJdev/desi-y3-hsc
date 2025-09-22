@@ -13,34 +13,15 @@ class CorrFileReader():
     '''
     Utility class to grab correctly formatted file names for the cross-correlation
     analysis. Provide a ROOT and the directory has to be with the expected shape.
+
+    Parameters
+    ----------
+    ROOT : str or Path
+        The root directory where the correlation files are stored.
     '''
     def __init__(self, ROOT):
         self.ROOT = Path(ROOT)
         assert self.ROOT.exists(), f"Path {self.ROOT} does not exist"
-        self.dndz_file = None
-
-    def get_zeff_prev(self, tgt1, tgt2):
-        '''
-        Get the effective redshift for given redshift bins. (Outdated method)
-        '''
-        zeff_files = list(
-            Path(self.ROOT / f'{tgt1}x{tgt2}' / 'zeff').glob(f'zeff_{tgt1}x{tgt2}_*.npy')
-            )
-        if len(zeff_files) == 0:
-            raise FileNotFoundError(f"No zeff files found for {tgt1}x{tgt2}")
-        elif len(zeff_files) == 1:
-            # desi tracer (only NGC) : 
-            return np.load(zeff_files[0])
-        elif len(zeff_files) == 2:
-            # assume DESI (NGC and SGC)
-            zeff1 = np.load(zeff_files[0])
-            zeff2 = np.load(zeff_files[1])
-            return (zeff1 + zeff2) / 2
-        else:
-            assert len(zeff_files) == 4
-            # assume HSC (all 4 MOCs)
-
-        return
 
     def get_file(self, b1, b2, tgt1, tgt2, moc):
         """
@@ -62,58 +43,15 @@ class CorrFileReader():
             assert moc in [1, 2, 3, 4], f"MOC should be an integer in [1, 2, 3, 4], not {moc}"
             return f'{DIR}/{tgt1}x{tgt2}_b1x{b1}_b2x{b2}_moc{moc}.npy'
     
-    def get_auto_file(self, b1, tgt, moc):
+    def get_auto_file(self, b, tgt, moc):
         """
         Get the file name for given redshift bins and MOC.
         """
-        return self.get_file(b1, b1, tgt, tgt, moc)
+        return self.get_file(b, b, tgt, tgt, moc)
 
     def get_bins(self, name):
         bins = np.load(f'{self.ROOT}/bins/bins_all.npz')
-        if name not in bins:
-            # backward compatibility for old names, same redshift bins (temporary fix)
-            if name == 'ELG_LOPnotqso':
-                return bins['ELGnotqso']
-            elif name == 'ELGnotqso':
-                return bins['ELG_LOPnotqso']
-            else:
-                raise ValueError(f"Unknown bin name {name}. Available bins are {bins.files}")
-        else:
-            return bins[name]
-        
-    def get_dndz(self, tgt, get='dndz', bin_indice=None):
-        '''
-        Get the dndz for given target.
-        Parameters
-        ----------
-        tgt : str
-            Target name (e.g. 'ELG_LOPnotqso', 'LRG', 'QSO', 'BGS_ANY', 'HSC')
-        get : str
-            What to get from the dndz file. Default is 'dndz', can also be 'bin' or 'wDM'.
-        bin_indice : int
-            Bin index to get the dndz for. Default is None, which means all bins (returns the array).
-        '''
-        if self.dndz_file is None:
-            raise ValueError(
-                f"Cannot find dndz file for {tgt}. Make it first with `make_dndz()` !"
-                )
-        dndz = np.load(self.dndz_file)
-        if f'{tgt}_{get}' not in dndz:
-            raise ValueError(
-                f"Cannot find dndz for {tgt} in {self.dndz_file}. "
-                f"Available dndz are {dndz.files}"
-                )
-        else:
-            if bin_indice is None:
-                return dndz[f'{tgt}_{get}']
-            else:
-                if bin_indice < 0 or bin_indice >= len(dndz[f'{tgt}_{get}']):
-                    raise ValueError(
-                        f"Bin index {bin_indice} out of range for {tgt} in {self.dndz_file}. "
-                        f"Available bins are {dndz[f'{tgt}_{get}']}"
-                        )
-                else:
-                    return dndz[f'{tgt}_{get}'][bin_indice]
+        return bins[name]
     
     def get_cov_results(self, tgt1, tgt2='HSC'):
         """
@@ -246,8 +184,7 @@ def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=0
                 f'hscy3_sim_v{sims_version}.fits'
                 )
         elif randoms:
-            #WARNING : this path root currently does not contain D/UD randoms as they
-            #were deemed unnecessary for the clustering analysis
+            # this path root currently does not contain D/UD randoms as they
             root = Path(
                 '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/randoms'
                 )
@@ -264,61 +201,3 @@ def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=0
     except FileNotFoundError:
         logging.error(f"HSC catalog file not found and randoms = {randoms}") 
         raise
-
-def get_zeff(zlow, zhigh, type='DESI', scheme='simple', **file_settings):
-    '''
-    Get the effective redshift for a given distribution, concatenating over all tracers.
-    '''
-    if scheme == "simple":
-        print("Using simple scheme for effective redshift calculation.")
-        return (zlow + zhigh) / 2
-    raise DeprecationWarning(
-        "Other schemes are deprecated. "
-    )
-    '''
-    elif scheme == "weighted":    
-        file_settings_defaults = {
-            'sims': False,
-            'sims_version': 0
-        }
-        file_settings = {**file_settings_defaults, **file_settings}
-        if type == 'DESI':
-            sv = file_settings["sims_version"]
-            jointz = f"/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/src/statistics/zeff/desi_z_clustering_catalogs{f'_simsv{sv}' if  sv > 0 else ''}.npy"
-            if Path(jointz).exists():
-                ztbl = np.load(jointz)
-            else:
-                print(f"File {jointz} does not exist, fetching DESI files...")
-                tracers = ['ELG_LOPnotqso', 'LRG', 'QSO', 'BGS_ANY']
-                zall = []
-                for t in tracers:
-                    print(f"Fetching DESI files for tracer {t}...")
-                    for cap in ['NGC', 'SGC']:
-                        file = fetch_desi_files(
-                            t, 
-                            randoms=False, 
-                            sims=file_settings['sims'], 
-                            sims_version=file_settings['sims_version'],
-                            cap=cap
-                        )
-                        ztbl = fio.FITS(Path(file))[1]['Z'][:]
-                        zall.append(ztbl)
-                ztbl = np.concatenate(zall)
-                print(f"Writing concatenated redshift table to {jointz}")
-                np.save(jointz, ztbl)
-
-            zeff = np.mean(ztbl[(ztbl > zlow) & (ztbl < zhigh)])
-        
-        elif type == 'HSC':
-            ztbl = np.load(
-                '/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/src/statistics/zeff/hsc_z_clustering_catalogs.npy'
-            )
-            zeff = np.mean(
-                ztbl[(ztbl > zlow) & (ztbl < zhigh)]
-            )
-
-        print(f"Effective redshift for DESI from {zlow} to {zhigh}: {zeff:.4f}")
-        return zeff
-    else:
-        raise ValueError(f"Unknown scheme {scheme}. Available schemes are 'simple' and 'weighted'.")
-    '''
