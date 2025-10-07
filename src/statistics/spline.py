@@ -35,6 +35,9 @@ class BayesianBSpline:
     def _create_spline_basis(self):
         z_min, z_max = self.zv.min(), self.zv.max()
         interior_knots = np.linspace(z_min, z_max, self.n_knots)
+        # if one would like to place the knots differently, for example...
+        # dz = self.zv[1] - self.zv[0]
+        # interior_knots = np.linspace(z_min-dz/2, z_max+dz/2, self.n_knots+1)
         self.knots = np.concatenate([
             np.repeat(interior_knots[0], self.degree),
             interior_knots,
@@ -117,7 +120,6 @@ class BayesianBSpline:
                 sigma=nz_err[mask], 
                 observed=nz[mask]
             )
-        print(init_A)
         return model, mask, dirichlet_alpha, init_A, coeffs_init
 
     def fit(
@@ -129,7 +131,8 @@ class BayesianBSpline:
             n_chains=4, 
             target_accept=0.95, 
             prior_concentration=10.0,
-            base_alpha=0.1
+            base_alpha=0.1,
+            seed=42,
             ):
         """
         Fit the model using PyMC with Dirichlet prior and free amplitude parameter.
@@ -156,10 +159,6 @@ class BayesianBSpline:
         """
         self.nz = np.asarray(nz)
         self.nz_err = np.asarray(nz_err)
-
-        assert len(self.nz) == len(self.zv), "nz and zv must have the same length"
-        assert len(self.nz_err) == len(self.zv), "nz_err and zv must have the same length"
-        assert all(self.nz_err >= 0), "nz_err must be positive"
         
         # Create the PyMC model
         model, mask, dirichlet_alpha, init_A, coeffs_init = self._create_pymc_model(
@@ -189,7 +188,7 @@ class BayesianBSpline:
                 return_inferencedata=True,
                 target_accept=target_accept,
                 progressbar=True,
-                random_seed=123
+                random_seed=seed
             )
 
         self.trace = trace
@@ -351,50 +350,6 @@ class BayesianBSpline:
         
         print(f"Sampling complete. Total samples: {len(self.coeffs_samples)}")
         return self
-    
-    def model_comparison(self, other_models=None):
-        """
-        Perform model comparison using WAIC and LOO.
-        
-        Parameters:
-        -----------
-        other_models : list of BayesianBSpline, optional
-            Other fitted models to compare against
-            
-        Returns:
-        --------
-        dict : Comparison results
-        """
-        if self.trace is None:
-            raise ValueError("Model must be fitted before performing model comparison.")
-        
-        results = {}
-        
-        # Compute WAIC and LOO for this model
-        try:
-            results['waic'] = az.waic(self.trace, log_likelihood='likelihood')
-            results['loo'] = az.loo(self.trace, log_likelihood='likelihood') 
-            print(f"WAIC: {results['waic'].waic:.2f} ± {results['waic'].waic_se:.2f}")
-            print(f"LOO:  {results['loo'].loo:.2f} ± {results['loo'].loo_se:.2f}")
-        except Exception as e:
-            print(f"Could not compute WAIC/LOO: {e}")
-            
-        # Compare with other models if provided
-        if other_models:
-            print("\nModel comparison:")
-            traces_dict = {'current': self.trace}
-            for i, other in enumerate(other_models):
-                if other.trace is not None:
-                    traces_dict[f'model_{i}'] = other.trace
-            
-            try:
-                comparison = az.compare(traces_dict)
-                results['comparison'] = comparison
-                print(comparison)
-            except Exception as e:
-                print(f"Could not perform model comparison: {e}")
-                
-        return results
 
     @classmethod
     def from_saved_model(cls, filename_base):
@@ -408,10 +363,9 @@ class BayesianBSpline:
             
         Returns:
         --------
-        BayesianBSpline : Loaded instance
+        BayesianBSpline
         """
-        # Create a dummy instance first
-        instance = cls(zv=np.array([0, 1]))  # Will be overwritten
+        instance = cls(zv=np.array([0, 1]))
         instance.load_model(filename_base)
         return instance
     
@@ -771,18 +725,3 @@ class BayesianBSpline:
             lower = np.percentile(pdf_samples, 16, axis=0)
             upper = np.percentile(pdf_samples, 84, axis=0)
             return median, mean, std, lower, upper
-
-    def expectation(self, z_eval, n_samples=None):
-        """Compute expectation value <z> of normalized PDF."""
-        if self.trace is None:
-            raise ValueError("Model must be fitted before computing expectation. Call fit() first.")
-
-        z_eval = np.asarray(z_eval)
-        pdf_samples = self._predict_normalized_pdf(z_eval, return_samples=True, n_samples=n_samples)
-        
-        expectation_samples = np.array([
-            np.trapezoid(z_eval * pdf_sample, z_eval) 
-            for pdf_sample in pdf_samples
-        ])
-        
-        return np.mean(expectation_samples), np.std(expectation_samples), expectation_samples

@@ -156,7 +156,7 @@ def p_mat_nonlin(l,z):
 def p_mat_lin(l,z):
     return ccl.power.linear_power(COSMO_ccl, k=(l+0.5)/chi_ccl(z), a=1/(1+z), p_of_k_a='delta_matter:delta_matter')
 
-def w_dm(rp_vals, z, integrate=False, ell_max=12000):
+def w_dm(rp_vals, z, integrate=True, ell_max=12000):
     '''
     w_dm expects rp_vals in h^-1 Mpc.
     '''
@@ -432,7 +432,7 @@ def magnification_coefficients(
     magnification = np.zeros_like(zvalues)
 
     mag1_const = alpha_model_s(zi)/(bias_model_p(zi)*bias_model_s(zi))
-    mag2_const = 1 / bias_model_s(zi)
+    mag2_const = 1 / bias_model_p(zi)
 
     # order : spectroscopic x photometric
     for zj_ind, zj in enumerate(zvalues):
@@ -462,13 +462,9 @@ def solve_magnification(
         zvalues,
         return_matrices=False,
     ):
-    # extract from tuple
     meas_vals, meas_err = meas
 
-    # first, compute w_dm_values for all redshifts
     rp_vals = np.linspace(scale_cut[0], scale_cut[-1], 101)  # in h^-1 Mpc
-    print(f'Computing w_dm for {len(zvalues)} redshifts and {len(rp_vals)} rp values...')
-
     # precompute the angular dark matter correlation function contribution first
     w_dm_values = np.array([
         w_dm(rp_vals, z, integrate=True) 
@@ -494,7 +490,6 @@ def solve_magnification(
     ]) 
 
     # solve the linear system
-    print(f'Solving the linear system for {len(zvalues)} redshifts...')
     Mag_inv = np.linalg.inv(Mag)
     # Mag is assumed to be perfectly known, so no error propagation
     dMag = 0
