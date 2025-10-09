@@ -622,7 +622,7 @@ def _get_fine_redshift_bins(fr: cf.CorrFileReader, tracer='Merged'):
     mint = 1089 # cmb redshift should be high enough
     maxt = 0
     if tracer == 'Merged':
-        tracers = ['LRG', 'ELG_LOPnotqso', 'QSO', 'BGS_ANY']
+        tracers = ['LRG', 'QSO', 'BGS_ANY']
     else:
         if isinstance(tracer, str):
             tracers = [tracer]
@@ -638,7 +638,6 @@ def _get_fine_redshift_bins(fr: cf.CorrFileReader, tracer='Merged'):
     dz = dzall[0]
     del dzall
     fine_redshift = np.arange(
-        # we don't append dz because maxt+dz is the true max of the bins
         mint, maxt, dz
         )
     return fine_redshift
