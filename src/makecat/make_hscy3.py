@@ -43,19 +43,19 @@ def get_psf_ellip(catalog, return_shear=False):
             )
     
 def make_hscy3_cat(
-        fpath_cats = "/pscratch/sd/x/xiangchl/data/catalog/hsc_year3_shape/",
-        fpath_primcats = "catalog_obs_reGaus_public/",
-        fpath_secondary = "/global/cfs/cdirs/desicollab/science/c3/DESI-Lensing/prelim_hscy3/gfarm.ipmu.jp/~surhud/S19ACatalogs/catalog_tracts/",
-        field_names = ["GAMA09H", "GAMA15H", "HECTOMAP", "VVDS", "WIDE12H", "XMM"],
-        # 20 deg region excluded by HSC analysis because of B modes appearing in x-corr
-        # and 4th moment PSF modelling issues
-        use_bmode_mask = True,
-        # if we need to add photo-zs
-        add_photz = True,
-        # which photo-z methods to add, if add_photz is True
-        photoz_method = ["dnnz", "mizuki"],
-        check_all_galaxies = False,
-    ):
+    fpath_cats = "/pscratch/sd/x/xiangchl/data/catalog/hsc_year3_shape/",
+    fpath_primcats = "catalog_obs_reGaus_public/",
+    fpath_secondary = "/global/cfs/cdirs/desicollab/science/c3/DESI-Lensing/prelim_hscy3/gfarm.ipmu.jp/~surhud/S19ACatalogs/catalog_tracts/",
+    field_names = ["GAMA09H", "GAMA15H", "HECTOMAP", "VVDS", "WIDE12H", "XMM"],
+    # 20 deg region excluded by HSC analysis because of B modes appearing in x-corr
+    # and 4th moment PSF modelling issues
+    use_bmode_mask = True,
+    # if we need to add photo-zs
+    add_photz = True,
+    # which photo-z methods to add, if add_photz is True
+    photoz_method = ["dnnz", "mizuki"],
+    check_all_galaxies = False,
+):
     # which HSC bands to use
     MAGNITUDE_BANDS = ['g', 'r', 'i', 'z', 'y']
     
@@ -125,17 +125,13 @@ def make_hscy3_cat(
             
         if add_photz:
             secondary_cats = glob(f"{fpath_secondary}{field_name}_tracts/*_pz.fits")
-            
             if not secondary_cats:
                 print(f"Warning: No secondary catalogs found for field {field_name}")
                 continue
             
-            # Collect all secondary catalog data for this field
             field_secondary_tables = []
-            
             for secondary_cat in tqdm(secondary_cats, desc=f"Processing {field_name}"):
                 mag_cat = secondary_cat.replace('_pz.fits', '_no_m.fits')
-
                 if not (Path(mag_cat).exists() and Path(secondary_cat).exists()):
                     raise FileNotFoundError(
                         f"Required files {mag_cat} or {secondary_cat} do not exist"
@@ -157,10 +153,8 @@ def make_hscy3_cat(
                     continue
             
             if field_secondary_tables:
-                # Combine all secondary data for this field
                 field_secondary_combined = vstack(field_secondary_tables)
-                
-                # Join with primary lens catalog
+
                 joint_tab = join(lenscat, field_secondary_combined, keys='object_id', join_type='inner')
                 field_tables.append(joint_tab)
                 
@@ -200,7 +194,6 @@ def make_hscy3_cat(
     
     all_columns = base_columns + mag_columns_final
     
-    # Add photoz columns if requested
     if add_photz:
         photoz_columns = []
         for method in photoz_method:
@@ -211,12 +204,11 @@ def make_hscy3_cat(
                 f"{method}_photoz_std_best",
             ])
         all_columns.extend(photoz_columns)
-    
-    # Keep only required columns
+
     available_columns = [col for col in all_columns if col in final_lenscat.colnames]
     final_lenscat.keep_columns(available_columns)
 
-    # Apply sign corrections
+    # apply sign corrections
     if 'e_2' in final_lenscat.colnames:
         final_lenscat['e_2'] = -final_lenscat['e_2']
     if 'c_2' in final_lenscat.colnames:
@@ -231,7 +223,7 @@ if __name__ == "__main__":
         print("Starting HSC Y3 catalog creation...")
         final_lenscat = make_hscy3_cat()
         
-        # your output path
+        # change this by your output path. will overwrite by default !
         output_path = "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits"
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         

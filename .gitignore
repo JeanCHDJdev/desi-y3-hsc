@@ -6,6 +6,8 @@ data/**
 #runs
 src/statistics/outputs/**
 nersc/logs/**
+photoz_cuts/outputs/**
+cosmic-shear/chains/**
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
