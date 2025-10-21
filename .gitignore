@@ -1,7 +1,14 @@
 # data 
 data/**
+!data/README.md
+!data/mocs
+!data/bias
+
 *fits
 *parquet
+# for splines
+*pkl
+*nc
 
 #runs
 src/statistics/outputs/**
