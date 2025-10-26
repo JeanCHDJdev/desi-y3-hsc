@@ -1,0 +1,7 @@
+# Measured from the monopole of the 2pcf with FKP between 30 and 65 Mpc/h
+# Based on Y3/LSS/loa-v1/LSScats/v2/nonKP
+# zmin, zmax, zeff, b1, b1_err
+0.100 0.200 0.150 1.335 0.050
+0.200 0.300 0.250 1.480 0.034
+0.300 0.400 0.350 1.605 0.028
+0.400 0.500 0.438 1.799 0.036
