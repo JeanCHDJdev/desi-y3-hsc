@@ -1,8 +1,9 @@
 # data 
 data/**
 !data/README.md
-!data/mocs
-!data/bias
+!data/mocs/** */
+!data/bias/** */
+!data/pz/** */
 
 *fits
 *parquet
