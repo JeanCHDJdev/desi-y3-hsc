@@ -55,7 +55,7 @@ class CorrelationMeta(ABC):
     distance_col = "dist"
 
     # which DR, either DR1 or DR2
-    data_release = "DR1"
+    data_release = "DR2"
 
     ## MOC list
     moc_list = sorted(
@@ -67,38 +67,43 @@ class CorrelationMeta(ABC):
             for i in range(0, 4)
         ]
     )
-
-    # ----------Defining fiducial bins here----------
     # We define the required bins in Mpc/h units (comoving)
     bins_rp = np.logspace(math.log(0.1, 10), math.log(10, 10), 33, base=10)
 
+    # in case we want to do 3D, not very useful for now
     bins_rppi_s = np.linspace(0.0, 200.0, 51)
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
     # bins in DR2
-    bins_bgs = np.arange(0.0, 0.65, 0.05)  # 0 < z < 0.5
-    bins_lrg = np.arange(0.3, 1.25, 0.05)  # 0.3 < z < 1.2
-    bins_elg = np.arange(0.7, 1.65, 0.05)  # 0.7 < z < 1.6 in redshift distribution
-    bins_qso = np.arange(0.7, 2.85, 0.05)  # 0.7 < z < 2.8
+    # bins_bgs = np.arange(0.0, 0.65, 0.05)  # 0 < z < 0.5
+    # bins_lrg = np.arange(0.3, 1.25, 0.05)  # 0.3 < z < 1.2
+    # bins_elg = np.arange(0.7, 1.65, 0.05)  # 0.7 < z < 1.6
+    # bins_qso = np.arange(0.7, 2.85, 0.05)  # 0.7 < z < 2.8
 
     # bins in DR1
     # bins_bgs = np.arange(0.0, 0.55, 0.05) # 0 < z < 0.5
-    # bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.15
-    # bins_elg = np.arange(0.8, 1.65, 0.05) # 0.8 < z < 1.65 in redshift distribution
-    # bins_qso = np.arange(0.8, 2.85, 0.05) # 0.8 < z < 2.85
+    # bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.1
+    # bins_elg = np.arange(0.8, 1.65, 0.05) # 0.8 < z < 1.6
+    # bins_qso = np.arange(0.8, 2.85, 0.05) # 0.8 < z < 2.8
 
+    # bins for HSC bias in DR1
+    # bins_bgs = np.arange(0.0, 0.525, 0.025)  # 0 < z < 0.5
+    # bins_lrg = np.arange(0.4, 1.125, 0.025)  # 0.4 < z < 1.1
+    # bins_elg = np.arange(0.8, 1.625, 0.025)  # 0.8 < z < 1.6
+    # bins_qso = np.arange(0.8, 2.825, 0.025)  # 0.8 < z < 2.8
+    # bins for HSC bias in DR2
+    bins_bgs = np.arange(0.0, 0.625, 0.025)  # 0 < z < 0.6
+    bins_lrg = np.arange(0.3, 1.225, 0.025)  # 0.3 < z < 1.2
+    bins_elg = np.arange(0.7, 1.625, 0.025)  # 0.7 < z < 1.6
+    bins_qso = np.arange(0.7, 2.825, 0.025)  # 0.7 < z < 2.8
     # bins for HSC bias
-    bins_bgs = np.arange(0.0, 0.525, 0.025)  # 0 < z < 0.5
-    bins_lrg = np.arange(0.4, 1.125, 0.025)  # 0.4 < z < 1.15
-    bins_elg = np.arange(0.8, 1.625, 0.025)  # 0.8 < z < 1.65 in redshift distribution
-    bins_qso = np.arange(0.8, 2.825, 0.025)  # 0.8 < z < 2.85
-    bins_hsc = np.arange(0, 2.5, 0.1)
+    bins_hsc = np.arange(0, 1.9, 0.1)
 
     # bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
 
     bins_tracers = {
         "LRG": bins_lrg,
-        "ELG_LOPnotqso": bins_elg,
+        "ELGnotqso": bins_elg,
         "QSO": bins_qso,
         "BGS_ANY": bins_bgs,
         "HSC": bins_hsc,
@@ -144,7 +149,7 @@ class CorrelationMeta(ABC):
         output_dir=None,
         sims_version=0,
         use_zbin=False,
-        weight_type="nonKP",
+        weight_type="PIP",  # "nonKP" if using PIP,
         sample_rate_1=1,
         sample_rate_2=1,
         corr_type="theta",
@@ -170,7 +175,12 @@ class CorrelationMeta(ABC):
         self.use_hsc = False
         self.use_desi = False
 
-        desi_tgt = ["LRG", "ELG_LOPnotqso", "QSO", "BGS_ANY"]
+        desi_tgt = [
+            "LRG",
+            "ELGnotqso",
+            "QSO",
+            "BGS_ANY",
+        ]  # change to "ELGnotqso" for DR2
         hsc_tgt = ["HSC"]
 
         # Idea :
@@ -242,8 +252,7 @@ class CorrelationMeta(ABC):
         # weights : here base (nonKP or PIP) + FKP + ...
         self.w_cols_to_operate = [
             self.w_desi_col,
-            self.w_fkp_desi_col,
-            # self.w_comp_desi_col
+            # self.w_fkp_desi_col,
         ]
 
         self.logger.info(f"Weights : {self.w_cols_to_operate} ")
@@ -321,7 +330,7 @@ class CorrelationMeta(ABC):
         Parameters
         ----------
         tgt : str
-            Target name (e.g. LRG, ELG_LOPnotqso, QSO, BGS_ANY)
+            Target name (e.g. LRG, ELGnotqso, QSO, BGS_ANY)
         bin_redshift : array
             Redshift binning for the target. Will digitize the redshift column
             and make the masks.
@@ -467,7 +476,8 @@ class CorrelationMeta(ABC):
 
         if self.use_zbin:
             # ----------- SYMBOLIC EXPRESSION TAIL REMOVAL ------------
-            # symbolic model to regress out the tail if necessary
+            # symbolic model to regress out the tail if necessary. Experiments to
+            # remove the tail of Bin 3 in the HSC tomographic binning
             # if use_symexpr:
             #    self.logger.info('Calculating symbolic expression for HSC data')
             #    stddnnz = cat['dnnz_photoz_std_best'][:]
@@ -1204,7 +1214,7 @@ def _get_data_to_read(
 
 
 def figure_out_class(tgt1, tgt2=None, jackknife=False):
-    desi_avb = ["LRG", "ELG_LOPnotqso", "QSO", "BGS_ANY"]
+    desi_avb = ["LRG", "ELGnotqso", "QSO", "BGS_ANY"]
     hsc_avb = ["HSC"]
     avb = desi_avb + hsc_avb
     if tgt1 is None and tgt2 is None:
@@ -1229,7 +1239,7 @@ def get_target_couple(tgt1, tgt2=None):
     Utility method to get the target couple for DESI and HSC targets and reordering them
     based on what the script needs.
     """
-    avb = ["LRG", "ELG_LOPnotqso", "QSO", "BGS_ANY", "HSC"]
+    avb = ["LRG", "ELGnotqso", "QSO", "BGS_ANY", "HSC"]
     assert not (
         (tgt1 is None) and (tgt2 is None)
     ), "tgt1 and tgt2 cannot be None simultaneously"

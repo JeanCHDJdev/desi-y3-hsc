@@ -133,7 +133,7 @@ def setup_crosscorr_logging(log_file="logs/output", log_level=logging.INFO):
 def fetch_desi_files(
     tgt,
     randoms=False,
-    weight_type="nonKP",
+    weight_type="PIP",
     sims=False,
     sims_version=0,
     cap=None,
@@ -179,7 +179,12 @@ def fetch_desi_files(
                 )
 
             if weight_type == "PIP":
-                root = Path(root, "PIP")
+                if version == "DR2":
+                    root = Path(root, "PIP")
+                if version == "DR1":
+                    root = Path(
+                        "/global/cfs/projectdirs/desi/survey/catalogs/Y1/LSS/iron/LSScats/v1.5pip"
+                    )
                 path = f'{tgt}_{cap}{"_[0-9]*_" if randoms else "_"}clustering{".ran" if randoms else ".dat"}.fits'
             elif weight_type == "nonKP":
                 if version == "DR2":
