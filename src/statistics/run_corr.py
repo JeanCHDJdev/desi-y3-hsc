@@ -304,7 +304,7 @@ def main():
                     if calib_photoz_bias:
                         if t2 == "HSC":
                             # moreover, if z < 0.9 use DR1 else use DR2
-                            if (bin2[b2 - 1] + bin2[b2]) / 2 > 0.9:  # > if DR1
+                            if (bin2[b2 - 1] + bin2[b2]) / 2 < 0.9:  # > if DR1
                                 logger.info(
                                     f"Skipping cross-correlation for {t1}x{t2}, "
                                     f"bin 1 {b1} : {bin1[b1-1]:.2f}-{bin1[b1]:.2f}, bin 2 {b2} : {bin2[b2-1]:.2f}-{bin2[b2]:.2f} "
