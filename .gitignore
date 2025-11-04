@@ -15,7 +15,10 @@ data/**
 src/statistics/outputs/**
 nersc/logs/**
 photoz_cuts/outputs/**
-cosmic-shear/chains/**
+cosmic_shear/chains/**
+
+## others
+src/statistics/deprecated/** */
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
