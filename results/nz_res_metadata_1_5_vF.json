@@ -1,0 +1,65 @@
+{
+  "scale_cuts": [
+    1,
+    5
+  ],
+  "patches": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "path_dictionaries": {
+    "tomo_1": {
+      "HSC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/v12_correction/autos_HSC",
+      "DESI_NGC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/dr1/autos_NGC",
+      "DESI_SGC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/dr1/autos_SGC",
+      "DESIxHSC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/dr1/cross",
+      "stem": "dr1"
+    },
+    "tomo_2": {
+      "HSC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/v12_correction/autos_HSC",
+      "DESI_NGC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/dr1/autos_NGC",
+      "DESI_SGC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/dr1/autos_SGC",
+      "DESIxHSC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/dr1/cross",
+      "stem": "dr1"
+    },
+    "tomo_3": {
+      "HSC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/v12_correction/autos_HSC",
+      "DESI_NGC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/dr2/autos_NGC",
+      "DESI_SGC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/dr2/autos_SGC",
+      "DESIxHSC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/dr2/cross",
+      "stem": "dr2"
+    },
+    "tomo_4": {
+      "HSC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/v12_correction/autos_HSC",
+      "DESI_NGC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/dr2/autos_NGC",
+      "DESI_SGC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/dr2/autos_SGC",
+      "DESIxHSC": "/global/cfs/cdirs/desicollab/users/jchdj/desi-y3-hsc/src/statistics/outputs/dr2/cross",
+      "stem": "dr2"
+    }
+  },
+  "creation_date": "2025-10-26T09:54:57.474736",
+  "description": "Magnification corrected and raw n(z) measurements for DESI tracers across HSC tomographic bins",
+  "tracers_by_tomo": {
+    "1": [
+      "BGS_ANY",
+      "LRG"
+    ],
+    "2": [
+      "BGS_ANY",
+      "LRG",
+      "QSO"
+    ],
+    "3": [
+      "LRG",
+      "ELGnotqso",
+      "QSO"
+    ],
+    "4": [
+      "LRG",
+      "ELGnotqso",
+      "QSO"
+    ]
+  }
+}
