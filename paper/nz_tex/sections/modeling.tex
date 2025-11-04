@@ -1,0 +1,345 @@
+%#####################################################
+\section{Modeling}
+\label{sec:modeling}
+%#####################################################
+
+
+This section describes the modeling choices and assumptions used to model the sample redshift distributions in the tomographic bins. We first present the estimator used to infer the photometric sample redshift distribution $n_p(z)$ for each bin, then discuss further corrections to potential systematic effects affecting this measurement, such as correcting for magnification effects and photometric sample galaxy bias. One can express the observed projected galaxy density contrast at position $\bm{\hat{\theta}}$ as the contribution of clustering and magnification \cite{DES2021Krause, EuclidClusterRedshifts2025}:
+
+\begin{equation}
+    \delta_{x}^{\mathrm{obs}}(\bm{\hat{\theta}})=\delta_{x}^{\mathrm{g}}(\bm{\hat{\theta}})+
+    %\delta_{x}^{\mathrm{RSD}}(\bm{\hat{\theta}})+
+    \delta_{x}^{\mu}(\bm{\hat{\theta}})
+\end{equation}
+
+where $\delta_{x}^{\mathrm{g}}$ is the line of sight projection of the three dimensional galaxy contrast for galaxy sample $x$ and $\delta_{x}^{\mu}(\bm{\hat{\theta}})$ is the magnification term. Specifically:
+
+\begin{equation}
+    \delta_{x}^{\mathrm{g}}(\bm{\hat{\theta}})=\int n_x(z)\delta_{x}^{\mathrm{g}}(z,\,\bm{\hat{\theta}})\mathrm{d}z
+\end{equation}
+
+where $\delta_{x}^{\mathrm{g}}(z,\,\bm{\hat{\theta}})$ is the 3D galaxy contrast and $n_x(z)$ is the distribution of galaxies in the considered sample $x$. Under the assumption that the universe is isotropic, $\theta$ will now be treated as a scalar variable. When it comes to measuring the angular two-point correlations, one can write \cite{EuclidClusterRedshifts2025}:
+
+\begin{equation}
+    \omega_{x,y}(\theta)=\omega^{\mathrm{g} \times \mathrm{g}}_{x,y}(\theta)
+    %+\omega^{\mathrm{RSD} \times \mathrm{g}}_{x,y}(\theta)+\omega^{\mathrm{g} \times \mathrm{RSD}}_{x,y}(\theta)
+    +\omega^{\mu \times \mathrm{g}}_{x,y}(\theta)+\omega^{\mathrm{g} \times \mu}_{x,y}(\theta)
+\end{equation}
+
+where $\omega^{\mathrm{A} \times \mathrm{B}}_{x,y}=\langle \delta_x^{\mathrm{A}}\delta_y^{\mathrm{B}}\rangle(\theta)$ with $\mathrm{A}, \mathrm{B}$ the respective contributions for sample $x$ and $y$.
+The dominant contribution to the angular two-point correlation is the galaxy contrast ($\mathrm{g} \times \mathrm{g}$). Corrections related to magnification effects ($\mu \times \mathrm{g}, \mathrm{g} \times \mu$) are presented in section \ref{sec:modeling:magnification}. Higher order terms, such as $\mu\times\mu$, are not considered due to being subdominant with respect to any contribution including the galaxy density contribution $\mathrm{g}$. Redshift Space Distortions (RSD) are also neglected in our analysis: such contributions were shown to be negligible for wide projections and small scales used here \cite{2010PhRvD..81f3531B}. 
+
+In most clustering redshift analyses, at least one of the samples (say, $n_x$) is considered in sufficiently narrow redshift bins such that the distribution of each of the bins can be approximated as an indicator function of the redshift interval. Our fiducial bin size for the spectroscopic sample is $\dz_{\mathrm{s}}=0.05$, which is sufficient to capture the shape of distributions as large as the HSC tomographic bins \cite{EuclidClusterRedshifts2025}. Furthermore, as explored by \cite{EuclidClusterRedshifts2025}, large bin width conserves validity of the Limber equation and does not need for further corrections on border effects. Validity of such slicing is explored and $\Delta z_s=0.05$ is found to be adapted even for narrower tomographic bins than the ones used in the present work. It is also useful to express the angular two point correlation functions as a function of projected comoving transverse distance $r_p$, where $r_p=\theta\chi(z)$ with the flat-sky approximation and at small angular scales. This is the transverse comoving distance at redshift $z$ for a $\theta$ angular separation, and is equal to the comoving distance if the curvature of the universe $\Omega_k$ is null. 
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.95\textwidth]{img/sec3/cross_correlation.png}
+    \caption{Example cross-correlation measurements for small spectroscopic slices with HSC bins. Here, the spectroscopic sources are DR1 LRGs, cross-correlated with the first two HSC tomographic bins. Comoving distance is computed at the redshift highlighted in the top left corner of each plot. As the redshift increases, one can see the weaker integrated signal for cross correlations with the first tomographic bin (purple), since the $n(z)$ decreases when far away from the photo-$z$ boundaries, and the stronger signal for the second tomographic bin as the redshifts reaches $z\sim0.6-0.9$ (orange).}
+    \label{fig:cross-corr}
+\end{figure}
+
+For this analysis, the same cosmological parameters as those used by HSC's own clustering redshifts analysis \cite{HSCClusteringRau2023} are used: $\Omega_{\mathrm{DM}}=0.258868$, $\Omega_{\mathrm{b}}=0.048252$, $h=0.6777$, $n_s=0.95$ and $\sigma_8=0.8$\label{cosmology}. For the rest of this work, angular separation will use the projected comoving distance $r_p$ instead of $\theta$ within this cosmology, where the redshift used to compute $r_p$ is the center of the spectroscopic bin used, noted $z_j$ for a bin interval $[z_j+\frac{\dz}{2},z_j+\frac{\dz}{2})$\footnote{For auto-correlations on the photometric dataset used in section \ref{sec:modeling:photoz_gal_bias}, the distances are computed with the mid-point of the tomographic bin in mind.}, with $j$ the index of the bin. This now makes $z$ a parameter for $\omega_{x,y}=\omega_{x,y}(r_p,\,z)$. Therefore, since $r_p$ values and the dark matter autocorrelation function $\xi_m$ used later in this analysis are computed in the context of the aforementioned cosmology, the results are cosmology dependent. With this in mind, we compute results for two scale cuts $0.3-3\hMpc$ and $1-5\hMpc$ and present results for both in section \ref{sec:results}.
+
+%#####################################################
+\subsection{Density contrast}
+%#####################################################
+
+Focusing on the largest contribution term to the cross-correlation vector $\mathrm{g} \times \mathrm{g}$, one can write equation \ref{eq:cross}\cite{Cawthon2022DESY3Boss} with the Limber approximation \cite{Limber1953Approximation}:
+
+\begin{align}\label{eq:cross}
+    \omega_{x,y}^{\mathrm{g}\times\mathrm{g}}(r_p,\,z)
+    &=\int b_x(z)n_x(z)b_y(z)n_y(z)\xi_m(r_p,\,z)\mathrm{d}z\nonumber\\   
+    &\approx r_{xy}(r_p,\,z)\sqrt{\int b_x^2(z)n_x^2(z)\xi_m(r_p,\,z)\mathrm{d}z\int b_y^2(z)n_y^2(z)\xi_m(r_p,\,z)\mathrm{d}z}\nonumber\\
+    &\approx r_{xy}(r_p,\,z)\sqrt{\omega_{x,x}^{\mathrm{g}\times\mathrm{g}}(r_p)\omega_{y,y}^{\mathrm{g}\times\mathrm{g}}(r_p)},
+\end{align}
+
+Here, $\delta_x^{\mathrm{g}}(z,\,\theta)=b_x(z)\delta^{\mathrm{g}}_m(z,\,\theta)$ with $b_x$ the galaxy-matter bias of sample $x$, $\delta^{\mathrm{g}}_m$ the 3D matter density, $\xi_m(z,\theta)$ is the matter 3D two-point correlation function. 
+Finally, $r_{xy}(r_p,\, z)$ is the cross-correlation coefficient between the two galaxy samples, which is assumed to remain constant across redshift within a tomographic bin. This assumption is weaker than that of a linear galaxy bias, but is still expected to fail on very small scales. 
+In the following sections, this work uses equation \ref{eq:cross} over fine redshift bins. The validity of the Limber approximation \cite{Limber1953Approximation} on fine redshift bins is explored in \cite{McQuinnClusterZ2013} and found to remain reasonable.
+Equation \ref{eq:cross} is derived from the Cauchy-Schwarz inequality with the $L^2$ norm where $r_{xy}$ is the proportionality coefficient, here assumed to not evolve with redshift. 
+The goal is to find an optimal compromise between the high signal to noise (SNR) obtainable at the very small angular clustering scales ($\lesssim0.5\,\hMpc$), and this modeling assumption that may be broken on small scales. 
+Example cross-correlation measurements between the DR1 LRGs and the two first tomographic bins used in this analysis are showcased in figure \ref{fig:cross-corr}.
+
+%#####################################################
+\subsection{Integrating over small-scales}
+\label{sec:modeling:integration}
+%#####################################################
+
+
+Following similar notations to \cite{EuclidClusterRedshifts2025, EuclidClusteringRedshifts2023}, subscript $s$ is used for the spectroscopic target class(es) and $p$ for the photometric sample, replacing the generic $x,y$ used previously (with $x=y$ for auto-correlations). $s$ can be any DESI tracer, such as BGS, LRG, ELG or QSO, or a combination of tracers. The photometric sample from HSC corresponding to the tomographic bin $i$ is noted $p_i$, though in the remainder of this work $p$ is often used to describe any tomographic bin.
+The target class selected on that redshift bin is noted $s_j$, and $n_{s_j}(z)=n_s(z_j)$ are used interchangeably. The midpoint $z_j$ is the fiducial redshift for that bin, useful for example to compute comoving scales.\\
+Finally, $\bo_{xy}$ is the scale-averaged angular cross correlation vector, such that (in the case of cross-correlation between $s_j$ and $p_i$):
+
+\begin{equation}
+    \bo_{s_j, \,p_i}(z_j)=\int_{r_{\mathrm{min}}}^{r_{\mathrm{max}}}W(r)\omega_{s_j,\,p_i}(r,\,z_j)\mathrm{d}r
+\end{equation}
+
+with $W(r)\propto r^\beta$ the scale-dependent weighting function. In \texttt{pycorr}\footnote{\textcolor{blue}{\href{https://github.com/cosmodesi/pycorr}{\texttt{github.com/cosmodesi/pycorr}}}}, two-point correlation functions are expressed in terms of the fiducial angular separation $\theta$: the present work expresses bin edges defined with the transverse comoving distance $r_p$. For each narrow spectroscopic bin, $r_p$ distances are computed with \texttt{astropy} \cite{astropy2023paper3} at the mid-point redshift $z_j$. This sets $z_j$ as a parameter for $\bo$. The weighting function $W(r)=r^\beta/\int_{r_{\mathrm{min}}}^{r_{\mathrm{max}}}r^\beta \mathrm{d}r$ is normalized to unity over integration scales, and $\beta=-1$ is chosen following \cite{ménard2014clusteringbasedredshiftestimationmethod, Schmidt2013ClusteringRedshifts}. This weighting function up-weights the smaller scales, where higher clustering signal is expected. Scale cut choices to apply to our correlation functions are represented by $r_{min}$ and $r_{max}$. In literature, other weighting schemes have been explored, such as weighting directly the numerator and denominator of the two-point estimator (described in section \ref{sec:2pcf}), and integrating independently the numerator and denominator \cite{KidsCrossCorrvdB2020,Gatti2018DESY1ClusteringRedshifts,Schmidt2013ClusteringRedshifts}. Alternative weighting schemes are not explored in this work. The fiducial scale cuts of this analysis are $0.3-3\hMpc$: these cuts are more conservative than the cuts on the first clustering redshifts calibration \cite{HSCClusteringRau2023}, $0.1-1\mathrm{Mpc}$. In section \ref{sec:results}, we explore using an even more conservative scale cut ($1-5\hMpc$), and compare the results and error bars obtained. 
+
+%#####################################################
+\subsection{Building the n(z) model}\label{sec:modeling:nz}
+%#####################################################
+
+For a single spectroscopic redshift bin (here, of size $\dz_\mathrm{s}=0.05$), the $n(z)$ distribution is assumed to be an indicator function of the redshift bin ($n_x(z)=\mathbbm{1}_{[z_j-\dz/2,\,z_j+\dz/2)}(z)/\dz$), constant over the redshift interval. One should note that this assumption holds well, except on the edge of the spectroscopic datasets where the $\mathrm{N}(z)$ drops, where it could induce slight biases. In the scope of this work, we decide to not investigate further this issue. Furthermore, neglecting the evolution of both galaxy biases as well as the evolution of the dark matter auto-correlation function over the spectroscopic redshift bin $\dz_\mathrm{s}$ leads to  the Dirac approximation described in many clustering redshifts works \cite{Giannini2024DESClusterSOMPZ,KidsCrossCorrvdB2020,EuclidClusterRedshifts2025}, after integrating and weighting over small scales:
+
+\begin{equation}\label{eq:gxg_approximation}
+    \bo^{\mathrm{g}\times \mathrm{g}}_{sp}(z_j)\approx n_p(z_j)b_s(z_j)b_p(z_j)\bo_{mm}(z_j)
+\end{equation}
+\noindent In particular, the galaxy bias for sample $x$ can be obtained using the auto-correlations functions: $\bo^{\mathrm{g}\times \mathrm{g}}_{xx}(z)\approx b_x(z_j)^2\bo_{mm}(z_j)/\dz$.
+This means the spectroscopic galaxy bias is easy to recover, as the auto-correlation sample can be binned by true, spectroscopic redshift in bins $s_j$. 
+The computation is performed for each of the DESI target classes, as described in section \ref{sec:2pcf}. 
+However, such a measurement is not as easily obtained with photometric auto-correlations, as one cannot trust that the photometric redshifts lie on the defined bin interval.
+A correction needs to be applied to recover the photometric galaxy sample auto-correlations and approximate the galaxy bias redshift evolution: this process described in section \ref{sec:modeling:photoz_gal_bias}. 
+For now, if one assumes that the photometric redshifts are perfectly known, bins $p_j$ of size $\dz$ akin to the spectroscopic bins $s_j$ can be used to probe the photometric bias evolution with equation \ref{eq:gxg_approximation}. 
+Assuming this, the $n_p(z)$ model is:
+
+\begin{equation}\label{eq:nz}
+    n_p(z_j)\approx\frac{\bo_{s_jp}^{\mathrm{g}\times \mathrm{g}}(z_j)}{\dz\sqrt{\bo_{s_js_j}^{\mathrm{g}\times \mathrm{g}}(z_j)\bo_{p_jp_j}^{\mathrm{g}\times \mathrm{g}}(z_j)}}
+\end{equation}
+
+\noindent In equation \ref{eq:nz}, we neglect the redshift evolution of $r_{x,y}$. We further assume $r_{x,y}=1$ to simplify notations, as one can always re-normalize equation \ref{eq:nz} later. In the following subsections, further systematic corrections to this expression are described. In Section \ref{sec:modeling:photoz_gal_bias}, corrections to $\bo_{p_kp_k}$ are discussed in order to recover a proxy for the photometric galaxy bias, since one cannot obtain accurate $p_k$ bins over photometric redshifts due to photo-$z$ scatter. In Section \ref{sec:modeling:magnification}, second-order terms from magnification effects to the observed cross-correlation vector $\bo_{sp}$ are considered.
+
+%#####################################################
+\subsection{Galaxy bias for the photometric sample}\label{sec:modeling:photoz_gal_bias}
+%#####################################################
+
+
+In practice, the true redshifts of the photometric redshift distribution are not known. The photometric galaxy bias has to be taken into account in the $n(z)$ model, but the scatter and potential outliers in each of the redshift bins does not allow us to accurately measure the auto-correlation of the photometric sample in small redshift bins $\bo_{p_kp_k}$. Here, $p_k$ is a smaller tomographic bin of width $\dz_{\mathrm{p}}=0.1$ indexed by $k$: the binning is performed on the photometric redshifts. In this work, $p_k$'s are spread linearly from $z_{\mathrm{p}}\sim0$ to $z_{\mathrm{p}}\sim1.6$: probing the galaxy bias further remains difficult due to the low number densities of QSO in higher redshift bins, without help from other tracers.
+
+If the auto-correlation of the photometric tracer using the photometric redshift binning is noted $\bo_{pp}^{\mathrm{photo}-z}$, galaxy bias can be recovered by measuring $\bo_{pp}^{\mathrm{true}}$, that is, measured as if the sample was binned using true redshifts\footnote{Here, these notations are similar terminology to work done on the Dark Energy Survey clustering redshifts analyses \cite{Cawthon2022DESY3Boss}}. The correction employed in this study is close to previous works \cite{Cawthon2022DESY3Boss, EuclidClusterRedshifts2025,KidsCrossCorrvdB2020}. The correction is performed assuming the product of the photometric tracer galaxy bias with dark matter $b_p(z)\sqrt{\bo_{mm}(z)}$ is constant over $p_k$ bins smaller than the fiducial tomographic bins, following \cite{Cawthon2022DESY3Boss}. A correction to $\bo_{pp}^{\mathrm{photo}-z}$ is obtained by measuring $n_{p_k}(z)$, where $n_{p_k}(z)$ is the clustering redshifts measurement of $n(z)$ over the $p_k$ tomographic bin and is obtained with equation \ref{eq:npkz}:
+\begin{equation}\label{eq:npkz}
+    n_{p_k}(z_j)\propto\frac{\bo_{s,p_k}(z_j)}{\sqrt{\bo_{ss}(z_j)}}
+\end{equation} 
+
+The above expression assumes constant photometric galaxy bias over the smaller tomographic bin, only correcting for the spectroscopic galaxy bias with auto-correlations in order to obtain the true redshift distribution, with $\dz_{\mathrm{p}}=0.1$ as the small photometric redshift bin interval ranging $z\sim0$ to $z\sim1.6$. While $\dz_{\mathrm{p}}=0.1$ is not a small redshift interval for such an assumption, \cite{EuclidClusterRedshifts2025} explores the recovered bias expression differences with different bin sizes and finds similar corrections for $\dz=0.1$ and $\dz=0.02$. We assess the validity of such an approximation in appendix \ref{sec:appendix_pz}.
+
+Since the photometric galaxy bias is assumed to be constant within these bins, the measured distributions are re-normalized and only implement the correction to the spectroscopic bias with $\bo_{ss}$, as shown in equation \ref{eq:npkz}. $n_{p_k}(z)$ is measured with finer spectroscopic redshift bins ($\dz_{\mathrm{s}}=0.025$) as finer tomographic bins need better redshift resolution in order to accurately recover the distributions. Dark matter evolution is also taken into account in the correction, following \cite{EuclidClusterRedshifts2025}: one obtains the following correction to the two-point correlation functions: 
+% TODO: Sven commented here he is not 100% certain he understands how this comes about. It would be good to add a more in-depth explanation ?
+\begin{equation}\label{eq:photoz_corr_correction}
+    \bo_{pp}^{\mathrm{true}}(z_k)\approx\bo_{pp}^{\mathrm{photo}-z}(z_k)\frac{\dz_{\mathrm{p}}^{-2}\int^{z_k+\dz_{\mathrm{p}}/2}_{z_k-\dz_{\mathrm{p}}/2}\bo_{mm}(z)\mathrm{d}z}{\int_0^{\infty}n_{p_k}^2(z)\bo_{mm}(z)\mathrm{d}z}
+\end{equation}
+% I'm not sure which expression explains this correction better.
+%\begin{equation}
+%    \frac{\bo_{pp}^{\mathrm{spec-z}}(z_k)}{\int^{z_k+\dz/2}_{z_k-\dz/2}\bo_{mm}(z)\mathrm{d}z}\approx\frac{\bo_{pp}^{\mathrm{photo-$z$}}(z_k)}{\int_0^{\infty}n_{p_k}^2(z)\bo_{mm}(z)\mathrm{d}z}
+%\end{equation}
+Here, $\bo_{mm}(z)$ is the dark matter angular auto-correlation at redshift $z$ over a $\Delta z$ slice around $z$. Thus, equation \ref{eq:photoz_corr_correction} allows to approximate the correction to $\bo_{pp}^{\mathrm{photo}-z}$, therefore obtaining a proxy for the bias evolution in redshift of the photometric sample.
+
+\begin{figure}[h!]
+    \centering
+    \begin{minipage}[t]{0.35\textwidth}
+        \vspace{0pt} % ensures top alignment
+        \includegraphics[width=\textwidth]{img/sec3/photoz_galaxy_correction.png}
+    \end{minipage}%
+    \hfill
+    \begin{minipage}[t]{0.58\textwidth}
+        \vspace{0pt}
+        \captionof{figure}{
+            \textit{Top panel}: $\sqrt{\bo_{pp}^{\mathrm{true}}}$ and $\sqrt{\bo_{pp}^{\mathrm{photo}-z}}$ with the power law fit through the corrected measurements. This showcases the importance of the correction, as the $\sqrt{\bo_{pp}^{\mathrm{photo}-z}}$ alone does not capture significant galaxy bias evolution, whereas the correction captures a general evolution trend.
+            \\ \\
+            \textit{Middle panel}: Clustering redshifts measurements for a few of the intermediate small tomographic bins ($n_{p_k}(z)$ distributions), highlighting the tomographic bin ranges with the dotted lines. The $n_{p_k}(z)$ are modeled with splines, described further in section \ref{sec:parametrization:bspline}. Nonetheless, the photometric redshift spread and the gradual expectation shift can be seen increasing with redshift, compared to the midpoint of the bins (between the dotted lines).
+            \\ \\
+            \textit{Bottom panel}: Comparing $b_p(z)$ computed with the corrections to $\bo_{pp}$ and a "passive evolution" galaxy sample where the linear bias follows $b_p(z)\propto1/D(z)$ with $D(z)$ the growth factor of the universe.
+            \label{fig:photoz_gal_bias}
+        }
+    \end{minipage}
+\end{figure}
+
+The numerator of the correction corresponds to the influence of the spectroscopic redshift distribution over the tomographic bin, assumed to be flat. The denominator corrects for the photo-$z$ spread due to the chosen algorithm's inaccuracies, as the $n_{p_k}(z)$ distribution cannot be assumed flat over the tomographic bin used. The square root of these corrected auto-correlations is fit to a power-law model (see Figure \ref{fig:photoz_gal_bias}), as done in works from DES\footnote{This analysis includes a free amplitude parameter $\alpha$ in the fit. Though normalization allows one to drop the amplitude term, the error is still included in error propagation.} \cite{Cawthon2022DESY3Boss, Gatti2018DESY1ClusteringRedshifts}, and the fitting errors are propagated to the $p(z)$ measurements.
+
+\begin{equation}\label{eq:photoz_bias_model}
+\sqrt{\bo_{pp}^{\mathrm{true}}}\approx \alpha(1+z)^{\beta}
+\end{equation}
+
+%\begin{figure}
+%    \centering
+%    \includegraphics[width=0.98\textwidth]{img/sec3/photoz_galaxy_correction.png}
+%    \caption{\textit{\cwr{Left Panel}\edit{Top Panel}}: $\sqrt{\edit{\bo_{pp}^{\mathrm{true}}}\cwr{\bo_{pp}^{\mathrm{spec}-z}}}$ and $\sqrt{\bo_{pp}^{\mathrm{photo}-z}}$ with the power law fit through the corrected measurements. This showcases the importance of the correction, as the $\sqrt{\bo_{pp}^{\mathrm{photo}-z}}$ alone does not capture significant galaxy bias evolution, whereas the correction captures a general evolution trend. \textit{Middle panel}: Clustering redshifts measurements for a few of the intermediate small tomographic bins ($n_{p_k}(z)$ distributions), highlighting the tomographic bin ranges with the dotted lines. The $n_{p_k}(z)$ are modeled with splines, described further in section \ref{sec:parametrization:bspline}. Nonetheless, the photometric redshift spread and the gradual expectation shift can be seen increasing with redshift, compared to the midpoint of the bins (between the dotted lines). \textit{\cwr{Left Panel}\edit{Bottom Panel}}: Comparing $b_p(z)$ computed with the corrections to $\bo_{pp}$ and a "passive evolution" galaxy sample where the linear bias follows $b_p(z)\propto1/D(z)$ with $D(z)$ the growth factor of the universe.}
+%    \label{fig:photoz_gal_bias}
+%\end{figure}
+
+\noindent The fit gives $\alpha=0.416\pm 0.004$ and $\beta=0.430\pm{0.0145}$ for the chosen scale cut $0.3-3\,\hMpc$. Values are fit on the expectations of the small tomographic bins. In figure \ref{fig:photoz_gal_bias}, the measurements of galaxy bias and the power law approximation are shown in the left panel, as well as the clustering redshifts measurements for a few of the intermediate tomographic bins used to compute the corrections and characterize the local photo-$z$ spread in the middle panel. In the right panel, the bias evolution of the photometric sample $b_p(z)$ is computed using the dark matter auto-correlation and compared to a passive evolution type sample that would follow $b(z)\propto 1/D(z)$ where $D(z)$ is the (cosmology-dependent) normalized factor of growth. With this correction, the HSC sample bias evolution is slightly faster than the factor of growth but still comparable. This observed behavior is consistent with measurements of the large-scale galaxy bias of HSC Year 1 \cite{Nicola2020TomoclusteringHSCY1}, where proportionality $b(z)\propto1/D(z)$ is observed for flux-limited samples.
+
+%#####################################################
+\subsection{Magnification}\label{sec:modeling:magnification}
+%#####################################################
+
+In this subsection, the impact of second order terms ($\mathrm{g}\times\mu$ and $\mu\times \mathrm{g}$) due to magnification effects are described and modeled. Magnification arises via weak lensing effect, which can magnify or de-magnify galaxy flux, depending on the slope of the luminosity function. This (de)magnification is caused by matter distribution along the line of sight, which is correlated with the galaxy distribution at lower redshifts. In turn this introduces non-zero correlation between high redshift galaxies and low redshift galaxies. The total observed flux of individual galaxies increase caused by magnification affects both the selection function of galaxies \cite{ElvinPoole2023MagnificationModelling} and the photometric redshift algorithm, since both rely on the observed properties of the sample. These biases are dominant when cross-correlating sources that are far apart in redshift. Magnification effects for auto-correlations are neglected. Magnification bias effects are described with the log-number count slope, characterizing the effects on the observed projected number density:
+
+\begin{equation}
+    s_\mu=\frac{\mathrm{dlog_{10}}\mathrm{N}(>m)}{\mathrm{d}m}
+\end{equation}
+
+where $m$ is the limiting magnitude of the sample, and $\mathrm{N}$ is the cumulative number count as a function of limiting magnitude. In practice, $s_\mu$ is a partial derivative, since $\mathrm{N}(>m)$ depends on other selection effects such as redshift binning depending on the sample \cite{Nicola2020TomoclusteringHSCY1}. DESI tracers often have complex selection functions \cite{DESI.Selection.BGS.Hahn2023, DESI.Selection.LRG.Zhou2023, DESI.Selection.ELG.Raichoor2023, DESI.Selection.QSO.Chaussidon2023} and therefore cannot be characterized by a simple magnitude cut. A common technique to probe the magnification bias in that case, used for example when computing the LRG magnification bias \cite{DESI.LRGCross.Magnifcation.Zhou2023}, is to shift the magnitudes in all bands by a small amount $\delta m$ and measure the response on $s_\mu$ after reapplying target selection, going cut by cut. The magnification bias can then be written as  $\alpha_x=2.5s_\mu-1$\cite{Gatti2021ClusteringDESWLsrcDistrib, Gatti2018DESY1ClusteringRedshifts} \footnote{Other parametrizations are common, such as $\alpha=2.5s_\mu$ \cite{DESI.LRGCross.Magnifcation.Zhou2023, MagnificationBiasComplexSelections, ChoiCFHTLensAngularCross2016}, or $\left.\alpha=\frac{\mathrm{dln}(f_1)}{\mathrm{d}m}\right|_m$ \cite{heydenreich2025lensingbordersmeasurementsgalaxygalaxy}, where $f_1$ is the fraction of galaxies passing the cut.}, where $x$ denotes a galaxy sample, either spectroscopic or photometric. 
+
+The formalism developed in works like \cite{DES2021Krause} and used in \cite{Gatti2018DESY1systematics,Cawthon2022DESY3Boss,Gatti2021ClusteringDESWLsrcDistrib,EuclidClusterRedshifts2025} is adopted to model the magnification correction on the cross-correlation vectors. The correction is theoretically obtained using the following:
+
+\begin{equation}
+    W^\mu_x(\chi) = \frac{3 \Omega_m H_0^2}{2 c^2} \int_{\chi}^{\infty} n_x(\chi')\frac{\chi}{a(\chi)}\frac{\chi'-\chi}{\chi'}\mathrm{d}\chi'\quad\text{and}\quad W^\mathrm{g}_x(\chi)=n_x(z)\frac{\mathrm{d}z}{\mathrm{d}\chi}(\chi)
+\end{equation}
+
+where $W^\mu_x(\chi)$ is the tomographic lens efficiency of sample $x$ and $W^\mathrm{g}_x(\chi)$ is the selection function of galaxies in the redshift bin. The expression of the angular cross power-spectrum between fields A, B with the Limber approximation \cite{Limber1953Approximation} gives:
+
+\begin{equation}
+    C_{s_jp_i}^{\mathrm{AB}}(\ell) = \int \frac{W^\mathrm{A}_{s_j}(\chi) W^\mathrm{B}_{p_i}(\chi)}{\chi^2}P_{\mathrm{AB}}\left(k = \frac{\ell + 0.5}{\chi},\,z(\chi)\right)\mathrm{d}\chi
+\end{equation}
+
+and the angular power spectra can be converted into angular correlation functions through a Legendre transformation. Here, $P_{\mathrm{AB}}$ is the corresponding 3D power spectrum model for fields A,B. More in-depth demonstrations can be found in works \cite{Cawthon2022DESY3Boss, EuclidClusterRedshifts2025}. The following expression per tomographic bin $p$ and target class $s$, as demonstrated in Appendix B of \cite{EuclidClusterRedshifts2025}, is obtained:
+
+\begin{equation}
+    \bar{M}(z_j) = \alpha_s(z_j) \sum_{i<j} b_p(z_i)n_p(z_i) \mathcal{D}(z_i, z_j) 
++ b_s(z_j) \sum_{i>j} \alpha_p(z_i)n_p(z_i)\mathcal{D}(z_j, z_i)
+\end{equation}
+with $\mathcal{D}(z_x,z_y)$ defined as:
+\begin{equation}
+    \mathcal{D}(z_x,z_y):=\frac{3H_0^2\Omega_m}{c}\frac{\bo_m(z_j)\dz}{H(z_x)a(z_x)}\frac{\chi(z_y)-\chi(z_x)}{\chi(z_y)}\chi(z_x)
+\end{equation}
+
+In the above expression, $H$ is the Hubble parameter, $H_0=H(z=0)$, $\chi$ is the comoving radial distance, $c$ is the speed of light and $a(z)=1/(1+z)$ is the scale factor of the universe. Our expression differs slightly from \cite{Cawthon2022DESY3Boss} (like \cite{EuclidClusterRedshifts2025}, redshift evolution of $\alpha_s,\alpha_p,b_s,b_p$ is included, though for $\alpha_p$ it will be neglected) and is closer to \cite{EuclidClusterRedshifts2025}, the only difference being that the expression is averaged over comoving scales, removing dependencies on angular variables. The non-linear 2D angular matter power spectrum $\bo_{\mathrm{mm}}(z_j)$ (on a $\Delta z$ redshift slice around $z_j$) is obtained using \texttt{Core Cosmology Library (CCL)}\footnote{\href{https://github.com/LSSTDESC/CCL}{\textcolor{blue}{\texttt{github.com/LSSTDESC/CCL}}}} \cite{CCLChisari2019} with the same fiducial cosmology as previously described and used in HSC's own clustering redshift analysis \cite{HSCClusteringRau2023}, reminded earlier in section \ref{cosmology}. The matter power spectrum is predicted and computed with models from \texttt{halofit} \cite{HalofitTakahashi2012} and \texttt{CLASS}\footnote{\href{https://github.com/lesgourg/class_public}{\textcolor{blue}{\texttt{github.com/lesgourg/class\_public}}}} \cite{CLASSBlas2011}, and any computation of the matter power spectrum in this work uses these predictions. The real space contribution is then computed with the Legendre series transform. Because magnification corrections on the auto correlations are neglected, the magnification correction is a linear system to solve $\mathcal{M}\mathbf{X}=\mathbf{n}$ where $\mathbf{n}$ is the measurement vector, $\mathbf{X}=(n_p(z_j))_{j\in\llbracket1,N_{\mathrm{b}}\rrbracket}$ are the magnification-corrected measurements, $N_\mathrm{b}$ is the number of bins and $\mathcal{M}$ is a "magnification matrix" such that:
+
+\begin{equation}
+    \mathcal{M}=(m_{kl})_{k,l\in\llbracket1,N_{\mathrm{b}}\rrbracket^2}=
+    \begin{cases}
+\frac{1}{\dz\sqrt{\bo_{s_ks_k}\bo_{p_kp_k}}}\alpha_s(z_k)b_p(z_l)\mathcal{D}(z_l,z_k) & \text{if } k < l \text{ ($\mathrm{g}\times\mu $)}\\
+1 & \text{if } k = l \text{ ($\mathrm{g}\times \mathrm{g} $)}\\
+\frac{1}{\dz\sqrt{\bo_{s_ks_k}\bo_{p_kp_k}}}\alpha_p(z_l)b_s(z_k)\mathcal{D}(z_k,z_l) & \text{if } l > k \text{ ($\mu\times \mathrm{g} $)}
+    \end{cases}\label{eq:mag_matrix}
+\end{equation}
+
+\noindent The measurement vector $\mathbf{n}$ is:
+\begin{equation}
+    \mathbf{n}=\left(\frac{\bo_{s_jp_i}}{\dz\sqrt{\bo_{p_jp_j}\bo_{s_js_j}}}\right)_{j\in\llbracket1,N_{\mathrm{b}}\rrbracket}
+\end{equation}
+In parentheses of equation \ref{eq:mag_matrix}, contributions from different effects in the matrix are highlighted. The dominant term is by far the diagonal term, corresponding to the galaxy density contribution $\mathrm{g}\times \mathrm{g}$.
+
+The galaxy bias expressions can be obtained through auto-correlations, as detailed in section \ref{sec:modeling:nz}. For the photometric tracer, the power law approximation described in section \ref{sec:modeling:photoz_gal_bias} is adopted to recover the bias expression, after computing the dark matter auto-correlation. Therefore, the matrix coefficients become:
+
+\begin{equation}
+    m_{kl}=
+    \begin{cases}
+\frac{b_p(z_l)\alpha_s(z_k)}{b_p(z_k)b_s(z_k)\bo_{mm}(z_k)}\mathcal{D}(z_l,z_k) & \text{if } k < l \\
+1 & \text{if } k = l \\
+\frac{\alpha_p(z_l)}{b_p(z_k)\bo_{mm}(z_k)}\mathcal{D}(z_k,z_l) & \text{if } k > l
+    \end{cases}
+\end{equation}
+The magnification corrected measurements are obtained with
+$\mathbf{X}=(n_p(z_j))_{j\in\llbracket1,N_{\mathrm{b}}\rrbracket}$ and the error bars are propagated assuming: 
+\begin{equation}
+    \mathcal{M}(X+\delta X)=(\mathbf{n}+\delta\mathbf{n})\Rightarrow\delta X=\mathcal{M}^{-1}\delta\mathbf{n}
+\end{equation} 
+
+Magnification bias and galaxy bias measurements are not marginalized over further, given the amplitude of the correction with respect to measurements. In the data products of this work, distributions and measurements with and without this correction are included.
+
+\label{sec:modeling:magnification:bias}
+
+The next paragraphs describe the galaxy bias and magnification bias measurements used in the context of this analysis for our magnification correction.
+
+\paragraph{Galaxy bias}\label{sec:modeling:magnification:bias:gal} 
+For the spectroscopic sample, the galaxy bias used to correct for magnification effects is measured using auto-correlation measurements on the spectroscopic tracer. To model the galaxy bias of any spectroscopic tracer, the parametrization introduced by \cite{Laurent2017QSOBias}, and also used by \cite{Chaussidon2025QSOLRGPNG} is implemented:
+
+\begin{equation}
+    b_s(z)=c_s(1+z)^2+d_s
+\end{equation}
+
+The linear galaxy bias is obtained with the monopole of the auto-correlation functions, with the technique described in \cite{Chaussidon2025QSOLRGPNG}. Measurements are fit to each of the target classes\footnote{The measurement of the galaxy bias for BGS is performed on the \texttt{BGS\_BRIGHT-21.35} sample. More details about this selection can be found in the DESI DR2 Baryon Acoustic Oscillation (BAO) work \cite{DESI.DR2.II.BAO}. The linear galaxy bias difference between the two samples (\texttt{BGS\_ANY} and \texttt{BGS\_BRIGHT-21.35)} is assumed to be negligible in the context of the magnification correction.} between scales of $30$ to $65\hMpc$ with the DESI fiducial cosmology (described in, for example, \cite{DESI.2024.III.FiducialCosmology.BAO}). While one could use the existing auto-correlation functions to measure linear galaxy bias in the magnification correction, a more robust bias measurement that overcomes small-scale nonlinearities and projection effects is obtained by measuring the 3D auto-correlation on larger scales. Nonetheless, the galaxy bias measurements obtained with the small scale angular auto-correlations are consistent with the larger scale measurements. The fitted parameters are given in the following Table \ref{tab:galaxy_bias}. 
+
+{\renewcommand{\arraystretch}{1.2}
+\begin{table}[h]
+\centering
+\caption{Galaxy bias model coefficients fitted to the DR2 two-point auto-correlation functions, within the DESI fiducial cosmology presented in \cite{DESI.2024.III.FiducialCosmology.BAO} and reduced $\chi^2$ statistic of the fit. The coefficients are assumed to be the same for DR1.}
+\begin{tabular}{c|c|c|c}
+\hline
+\textbf{Tracer} & $c_s$ & $d_s$ & $\chi^2_\mathrm{r}$\\
+\hline
+%BGS & 0.601 & 0.354 \\
+%LRG & 0.245 & 1.360 \\
+%ELG & 0.153 & 0.691 \\
+%QSO & 0.192 & 1.038 \\
+%'BGS_BRIGHT-21.35': (0.606, 0.524), #(0.60646037, 0.52389492),
+%'LRG': (0.234, 1.345),#(0.23553567, 1.3458994),
+%'ELG_LOPnotqso': (0.151, 0.595), #(0.15066781, 0.59463735),
+%'ELG': (0.155, 0.595), #(0.15487521, 0.59464828),
+%'QSO': (0.252, 0.710)
+BGS & $0.606\pm{0.073}$ & $0.524\pm{0.129}$ & $0.59$ \\
+LRG & $0.236\pm{0.019}$ & $1.346\pm{0.058}$ & $1.39$\\
+%ELG-LOP & $0.151\pm{0.012}$ & $0.595\pm{0.059}$ & $0.82$\\
+ELG & $0.155\pm{0.012}$ & $0.595\pm{0.057}$ & $1.53$ \\ 
+QSO & $0.252\pm{0.008}$ & $0.710\pm{0.058}$ & $1.62$ \\
+%BGS_BRIGHT-21.35 fit parameters:
+%  a = 0.6065 ± 0.0729
+%  b = 0.5228 ± 0.1289
+%  χ²/dof = 0.59
+%LRG fit parameters:
+%  a = 0.2355 ± 0.0189
+%  b = 1.3459 ± 0.0577
+%  χ²/dof = 1.39
+%ELGnotqso fit parameters:
+%  a = 0.1549 ± 0.0120
+%  b = 0.5946 ± 0.0565
+%  χ²/dof = 0.82
+%ELG_LOPnotqso fit parameters:
+%  a = 0.1507 ± 0.0124
+%  b = 0.5946 ± 0.0588
+%  χ²/dof = 1.53
+%QSO fit parameters:
+%  a = 0.2521 ± 0.0080
+%  b = 0.7102 ± 0.0577
+%  χ²/dof = 1.62
+\end{tabular}
+\label{tab:galaxy_bias}
+\end{table}
+}
+
+For the photometric sample galaxy bias, the fitted power-law described in \ref{sec:modeling:photoz_gal_bias} as correction to $\sqrt{\bo_{pp}^{\mathrm{photo}-z}}$ can be used to recover the expression of $b_p(z)$ at all redshifts using the power-law fit.
+
+\paragraph{Magnification bias}
+\label{sec:modeling:magnification:bias:mag}
+The number count slope $s_\mu$ and magnification bias $\alpha_x$ were introduced in section earlier \ref{sec:modeling:magnification}. For HSC, the magnitude cut $i_{\mathrm{band}}-a_i<24.5$ is considered to be the dominant selection function in HSC, where $i_{\mathrm{band}}$ is the HSC i-band \texttt{cModel} magnitude\footnote{Details on the HSC \texttt{cModel} magnitudes can be found in sub-subsection 4.9.9 of \cite{BoschHSCpipelineY1}.}, and $a_i$ is the absorption for $i$ band. Magnification slope coefficients for HSC are assumed constant per tomographic bin. Tomographic bins are affected by two significant selections that could alter the magnification slope: the calibration cut, detailed in section \ref{sec:data:hsc} for the first two tomographic bins, and the selection based on binning with photometric redshifts. In a HSC Y1 analysis performed in \cite{Nicola2020TomoclusteringHSCY1}, only the magnitude selection was considered, hence the same assumption is kept. Following the approach described in that work to estimate $s_\mu$,  a fourth order polynomial is fit to the cumulative number counts. The polynomial is then derived, log-scaled and evaluated at the limiting magnitude to obtain $s_\mu$. Measurements can be found in the following table \ref{tab:mag_bias:hsc}.
+
+\begin{table}[h]
+\centering
+\caption{Magnification bias for each tomographic bin. Redshift evolution within tomographic bins is neglected.}
+\begin{tabular}{c|c}
+\hline
+\textbf{Tomographic bin} & $s_\mu$ \\
+\hline
+Bin 1 ($z:0.3-0.6$) & 0.002 \\
+Bin 2 ($z:0.6-0.9$) & 0.065\\
+Bin 3 ($z:0.9-1.2$) & 0.142 \\
+Bin 4 ($z:1.2-1.5$) & 0.206 \\
+\end{tabular}
+\label{tab:mag_bias:hsc}
+\end{table}
+
+In the case of the DESI dataset, magnification measurements are obtained from literature \cite{Sailer2025EvolutionStructureMagnificationBiasBGS, DESI.LRGCross.Magnifcation.Zhou2023, debelsunce2025QSOmagCMBLensing} as well as from measurements performed with the same methodology as \cite{heydenreich2025lensingbordersmeasurementsgalaxygalaxy} for ELGs. For ELGs, it is assumed that ELG-\texttt{LOP} and ELG-\texttt{LOP}+\texttt{VLO} have the same magnification bias (combined under the ELG tag), computed exclusively on the ELG-\texttt{LOP} target class\footnote{The largest bias from ELG magnification effects is on Bin 3's high redshift tail. This happens at the higher redshift range of ELGs ($z\gtrsim1.1$), where there are significantly less ELGs from ELG-\texttt{VLO}, as shown in Figure \ref{fig:density_z}.}. The magnification biases are compiled under table \ref{tab:mag_bias:desi}.
+
+\begin{table}[h]
+\centering
+\caption{Magnification slope for each tracer and effective redshift. For LRGs, the provided $\bar{z}$ redshifts are the mid-point redshift of the photometric redshift bins used to compute the magnification coefficient. The effect of photo-$z$ bias or scatter is not considered further in the measurement.}
+\begin{tabular}{c|c|c}
+\hline
+\textbf{Tracer} & $s_\mu$ & $\bar{z}$ \\
+\hline
+\multirow{2}{*}{BGS \cite{Sailer2025EvolutionStructureMagnificationBiasBGS}} & 0.81 & 0.211 \\
+                    & 0.80 & 0.352 \\
+\hline
+\multirow{8}{*}{LRG \cite{DESI.LRGCross.Magnifcation.Zhou2023}} 
+& 0.954 $\pm$ 0.027 & 0.44 \\
+& 0.988 $\pm$ 0.025 & 0.51 \\
+& 1.040 $\pm$ 0.021 & 0.59 \\
+& 1.047 $\pm$ 0.018 & 0.67 \\
+& 0.999 $\pm$ 0.021 & 0.75 \\
+& 0.957 $\pm$ 0.017 & 0.82 \\
+& 0.914 $\pm$ 0.018 & 0.89 \\
+& 1.078 $\pm$ 0.020 & 0.97 \\
+\hline 
+\multirow{2}{*}{ELG} & 0.546 $\pm$ 0.005 & 0.95 \\
+                    & 0.666 $\pm$ 0.005 & 1.35 \\
+\hline
+\multirow{3}{*}{QSO \cite{debelsunce2025QSOmagCMBLensing}} & 0.099 & 1.44 \\
+                    & 0.185 & 2.27 \\
+                    & 0.284 & 2.75 \\
+\end{tabular}
+\label{tab:mag_bias:desi}
+\end{table}
+
+Magnification biases are linearly interpolated with these measurements, following choices made by works in DES \cite{Gatti2021ClusteringDESWLsrcDistrib} (for example for the redMaGiC sample). In order to be accurate, magnification biases would require a single measurement per spectroscopic bin $j$, but given the amplitude of the correction with respect to the $\mathrm{g}\times \mathrm{g}$ contribution, interpolation is assumed to be negligible within this correction.

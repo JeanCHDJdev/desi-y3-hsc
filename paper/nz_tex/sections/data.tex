@@ -1,0 +1,81 @@
+%#####################################################
+\section{Data}
+\label{sec:data}
+%#####################################################
+
+This section describes the datasets and catalogs used in this analysis. 
+DR1 refers to DESI Data Release 1\footnote{\href{https://data.desi.lbl.gov/doc/releases/dr1/}{\textcolor{blue}{data.desi.lbl.gov/doc/releases/dr1/}}}\cite{DESI.DR1.I.Presentation}, and DR2 refers to DESI Data Release 2. Data for DR1 was obtained with main survey observations spanning May 2021 to June 2022, while data for DR2 spans May 2021 to April 2024. To this, data releases also include survey validation observations from December 2020 to May 2021.
+Compliance with DESI internal policies required the use of DESI DR2 to be limited to the calibration of the two highest HSC tomographic bins: $0.9 < z_{\mathrm{p}}\leq1.2$ and $1.2 < z_{\mathrm{p}}\leq1.5$. We use the public DESI DR1 dataset for the remaining tomographic bins: $0.3 < z_{\mathrm{p}}\leq0.6$ and $0.6 < z_{\mathrm{p}}\leq0.9$, where $z_p$ is the photometric redshift derived from HSC presented in section \ref{sec:data:hsc}. 
+For measurements on tomographic bins different from the fiducial HSC \cite{HSCClusteringRau2023, CosmoShearLi2023HSCY3, Dalal2023CosmoShearHSC} ones (for example, in section \ref{sec:modeling:photoz_gal_bias}), DR1 is used for any tomographic bin such that $z_{\mathrm{p}}\lesssim0.9$, and DR2 elsewhere ($z_{\mathrm{p}}>0.9$), where $z_{\mathrm{p}}$ is the center of the tomographic bin in photometric redshift. 
+The DESI dataset is further described hereafter, in section \ref{sec:data:desi}. 
+The photometric sample we calibrate is the S19A HSC-SSP PDR3 Shape Catalog (HSC) \cite{HSCShapeCataloguePDR3Li2022}, described in \ref{sec:data:hsc}. The three catalogs' footprints are displayed in Figure \ref{fig:footprint}.
+
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.95\textwidth]{img/sec2/footprint.png}
+    \caption{Sky coverage of DESI DR1 \cite{DESI.DR1.I.Presentation} (pink outline), DR2 (orange outline and HSC Year 3 Shape Catalog \cite{HSCShapeCataloguePDR3Li2022} (red outline), with the galactic plane (gray line). An area centered around $\mathrm{RA}\sim355^\circ$, $\mathrm{DEC}\sim0^\circ$ is highlighted with density maps to compare the coverage of DESI DR1 and DR2 of the same area covering a chunk of the footprint of HSC Y3's \texttt{VVDS} field. The HSC data lands in areas of high overall completeness for DESI, as these areas were targeted in priority. DESI DR2 improves over DR1 with better overall completeness, especially for the ELGs and in the northern \texttt{HECTOMAP} field (roughly $\mathrm{RA}\sim40^\circ$, $\mathrm{DEC}\sim240^\circ$).}
+    \label{fig:footprint}
+\end{figure}
+
+
+%#####################################################
+\subsection{DESI Large Scale Structure Catalog}
+\label{sec:data:desi}
+%#####################################################
+
+For both DESI DR1 and DR2, calibrations are performed with the Large Scale Structure (LSS) catalogs of the DESI survey \cite{DESIConstructionLSS2024}. The LSS catalogs provide weighted clustering and random catalogs tailored to the specifics of the DESI survey for each of the target classes used. 
+The LSS catalogs take into account imaging systematics, selection and footprint effects, possible redshift failures, tiling overlap, as well as other effects -- the full description of which can be found in the DESI data model\footnote{\href{https://desidatamodel.readthedocs.io/en/latest/DESI_ROOT/survey/catalogs/RELEASE/LSS/SPECPROD/LSScats/VERSION/data_clustering.html}{\textcolor{blue}{desidatamodel.readthedocs.io/LSSCats}}} and in in refs \cite{DESIConstructionLSS2024, DESI.2024.II.SampleDef}. 
+
+This work uses multiple target classes: the BGS \cite{DESI.Selection.BGS.Hahn2023}, the LRGs \cite{DESI.Selection.LRG.Zhou2023}, the ELGs \cite{DESI.Selection.ELG.Raichoor2023} and the QSOs \cite{DESI.Selection.QSO.Chaussidon2023} as described above. 
+The target classes' redshift ranges used in this study are described in Table \ref{tab:desi_z_bounds}, per data release, and the redshift density distribution for both data releases over the HSC footprint is showcased in Figure \ref{fig:density_z}. 
+DESI uses priority ranking to perform fiber assignment on targets \cite{FiberSystem.Poppett.2024}. For the BGS sample, this work uses the \texttt{BGS\_ANY} sample, which includes both the \texttt{BGS\_BRIGHT} and \texttt{BGS\_FAINT} samples, and hereafter referred to as BGS. More details can be found in the BGS selection description, under section 3 of \cite{DESI.Selection.BGS.Hahn2023}.
+For the ELG sample, we decide to not use DR1 ELGs in this work, as their very low completeness interferes with the auto-correlation measurements and provides only little information for the two first tomographic bins due to low redshift overlap. In DR2, as shown by Figure \ref{fig:footprint}, the local density is much higher and we can now measure auto-correlation of ELGs in this context.
+For the ELG sample, this analysis uses the LOw-Priority (\texttt{LOP}) sample \cite{DESI.Selection.ELG.Raichoor2023} preferentially selects high redshift ELGs at $1.1\lesssim z\lesssim1.6$ . 
+In DR2, in addition to \texttt{LOP}, we use the Very LOw priority (\texttt{VLO}) sample for ELGs, which focuses on targets in $0.6\lesssim z\lesssim1.1$. Indeed, the inclusion of \texttt{VLO} to the LSS catalogs is a new feature of DR2 compared to DR1, as displayed in figure \ref{fig:density_z}.
+
+\begin{table}[h]
+\centering
+\caption{Redshift ranges as inclusive bin edges used for each data release per tracer.}
+\begin{tabular}{c|c|c}
+\hline
+\textbf{Tracer} & \textbf{DR1} & \textbf{DR2} \\
+\hline
+BGS & $0-0.5$ & $0-0.6$ \\
+LRG & $0.4-1.1$ & $0.3-1.2$ \\
+ELG (LOP+VLO) & - & $0.7-1.6$ \\
+QSO & $0.8-2.8$ & $0.7-2.8$ \\
+\end{tabular}
+\label{tab:desi_z_bounds}
+\end{table}
+
+Note that for DR2, some sources are expected outside of the bounds described in Table \ref{tab:desi_z_bounds} and shown in Figure \ref{fig:density_z}.
+Their lower number densities and negligible overlap with the two highest redshift tomographic bins of HSC motivates our choice for redshift cuts. 
+For example, information from low redshift ELGs ($\lesssim0.7$) is not included.
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.95\textwidth]{img/sec2/density_z.png}
+    \caption{\textit{Upper panel:} N(z) angular density per redshift from the HSC catalog, using photometric redshifts from the \texttt{DNNz} algorithm \cite{DNNZHSCNishizawa2020}. The effect of the calibration cut on HSC is displayed, removing problematic sources up to $z_{\mathrm{best}}^{\mathtt{DNNz}}\leq0.9$ (dotted histogram), as well as HSC's four tomographic bin selections (shaded colors, including the calibration cut). \textit{Lower panel:} N(z) angular density per redshift of the DESI Large Scale Structure clustering catalogs \cite{DESIConstructionLSS2024}, showcasing the combined tracers distribution (light blue) in the HSC footprint and individual tracers (BGS, ELG, LRG and QSOs). DR1 is represented in dotted lines and DR2 is represented in full lines. In this figure, ELGs are distinguished between ELG-LOP (DR1 analysis) and ELG-LOP+VLO (DR2 analysis). Since most of the HSC footprint is already included in DR1, adding DR2 does not provide an improvement as big as one could expect, though there still are density differences as showcased in Figure \ref{fig:footprint}. Per tomographic bin, the effective number density counts of photometric sources are 3.77, 5.07, 4.00 and 2.12 arcmin$^{-2}$ \cite{PSFModellingHSCZhang2023} after applying the calibration cut.}
+    \label{fig:density_z}
+\end{figure}
+
+
+%#####################################################
+\subsection{HSC-SSP PDR3 Shape Catalog}
+\label{sec:data:hsc}
+%#####################################################
+
+The weak lensing catalog calibrated in this study is the S19A galaxy shape catalog \cite{HSCShapeCataloguePDR3Li2022} provided by the Public Data Release 3 (PDR3) \cite{HSC2022datarelease3} of the Hyper Suprime-Cam Subaru Strategic Program. This catalog builds upon $i_{\mathrm{band}}$ imaging data obtained from 2014 to 2019 in the Wide fields of the HSC survey, at a mean $i_{\mathrm{band}}$ seeing of $0.59''$ \cite{HSCShapeCataloguePDR3Li2022}. A conservative $i_{\mathrm{band}}<24.5$ magnitude cut is applied to the dataset. The catalog itself is split into 6 fields named \texttt{HECTOMAP}, \texttt{XMM}, \texttt{VVDS}, \texttt{GAMA09H}, \texttt{GAMA15H} and \texttt{WIDE12H}. 
+
+%In the first tomographic bin calibration study, 
+As a preliminary step, a \textit{calibration cut} is applied to the first two tomographic bins of the HSC shape catalog. 
+It removes $\sim31\%$ of sources in the first bin, and $\sim8\%$ of sources in the second bin. The cut, shown in equation \ref{eq:calib_cut}, is not applied on the third and fourth bin. This selection is performed in order to remove possible outliers in the individual probability density functions from the photo-$z$ algorithm reporting multi-modal distributions with a second, smaller peak around $z\sim3$. The cut depends on the $95\%$ confidence interval boundaries of the \texttt{DNNz} \cite{DNNZHSCNishizawa2020} and \texttt{Mizuki} \cite{MizukiHSCTanaka2015} photometric redshift algorithms, such that:
+
+\begin{equation}\label{eq:calib_cut}
+(z^{\texttt{DNNz}}_{95,\,\mathrm{max}}-z^{\texttt{DNNz}}_{95,\,\mathrm{min}})<2.7\;\;\&\;\;(z^{\texttt{Mizuki}}_{95,\,\mathrm{max}}-z^{\texttt{Mizuki}}_{95,\,\mathrm{min}})<2.7
+\end{equation}
+
+Moreover, for the rest of this analysis, when using redshifts outside of the HSC tomographic bins, the calibration cut is applied to all sources with redshifts between $z\sim0$ and $z\sim0.3$. This removes about $\sim16\%$ of the sources within that redshift range. Redshifts outside the fiducial tomographic bins are used to evaluate galaxy bias evolution for HSC, in section \ref{sec:modeling:photoz_gal_bias}. The fiducial redshift value kept to determine if a redshift is included in a bin or not is $z_{\mathrm{best}}^{\texttt{DNNz}}$. The $_\mathrm{best}$ subscript notes the redshift point estimate that minimizes the risk function, $R(z_{\mathrm{p}})=\int P(z)L(\frac{z_{\mathrm{p}}-z}{1+z})\mathrm{d}z$, based on the individual probability density function $P(z)$ obtained through $\texttt{DNNz}$, and with $L(x)$ a loss function. More details can be found in the following works \cite{HSCPHotozTanaka2017, DNNZHSCNishizawa2020}. 
+%TODO: maybe later in the analysis, once clustering redshifts has been introduced, show the amplitude of the clustering redshifts and have a discussion on "are these sources really that bad". Could be added to appendix. => This is maybe out of scope.

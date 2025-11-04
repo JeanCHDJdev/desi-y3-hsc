@@ -1,0 +1,53 @@
+\section{Tomographic bin widths in the photometric galaxy bias approximation} \label{sec:appendix_pz}
+In this appendix, the effects of the width and photo-$z$ spread for the galaxy bias measurement described in section \ref{sec:modeling:photoz_gal_bias} are investigated. 
+In the aforementioned section, the choice is to use $\dz=0.1$ tomographic bins in order to recover galaxy bias.
+We verify here if such an approximation is valid and verify if the fairly wide profiles of the distributions presented in Figure \ref{fig:photoz_gal_bias} do not significantly affect the recovered bias expression, compared to a correction where one would use much narrower tomographic bins such as in \cite{Cawthon2022DESY3Boss} ($\dz=0.02$). 
+In fact, using very narrow tomographic bins to probe galaxy bias leads to its own set of difficulties, as one must take into account new systematics such as border effects with adjacent bins, validity of the Limber equation, and use spectroscopic bins with minimal data.
+Effects of using different tomographic bin widths for this correction were explored in \cite{EuclidClusterRedshifts2025}.
+
+For this model, we assume that the underlying photometric galaxy bias $b_p^{\rm true}$ follows three different forms (case a,b and c): 
+\begin{equation}\label{eq:app:bias_models}
+b_p^{\rm true}(z)=
+    \begin{cases}
+        1\quad\quad\quad\;\;\text{(a, constant evolution)}\\ 1/D(z)\quad\text{(b, passive evolution)}\\ 1+z^2\quad\;\,\text{(c, strong evolution)}
+    \end{cases}
+\end{equation}
+
+where $D(z)$ is the factor of growth of the universe. 
+The measured distributions for tomographic bins are assumed to follow $n^\mathrm{meas}_{p_k}(z)$ distributions where $p_k$ are the successive tomographic bins. 
+In this context, the $p$ subscript is used to describe a generic tomographic bin, different from the fiducial HSC tomographic bins presented in the main corpus of this work.
+Case 1 will assume the $n_{p_k}$ distributions measured in section \ref{sec:modeling:photoz_gal_bias} are the $n^\mathrm{meas}_{p_k}$ distributions for the tomographic bins.
+Case 2 will be treated with gaussian tomographic bins $n^\mathrm{meas}_{p_k}\sim\mathcal{N}(z_k,\,0.1)$ where $z_k$ is the center redshift of the tomographic bin $p_k$. We choose $0.1$ in order to compare with the standard deviations observed on the tomographic bins, as displayed in figure \ref{fig:appendix_nz_models}. Case 1 is shown in full lines, while case 2 is shown in dashed lines. 
+\begin{figure}
+    \centering
+    \includegraphics[width=0.98\textwidth]{img/appendix/photoz_bias_models.png}
+    \caption{Photo-z $n_{pk}^{\mathrm{meas}}$ tomographic bins used in this model for (i) Tomographic bins derived from section \ref{sec:modeling:photoz_gal_bias} and (ii) gaussian tomographic bins $\sim\mathcal{N}(z_k,\,0.1)$ centered on the midpoint of the photometric redshift bins $z_k$. The inset plot of the figure showcases the standard deviation $\sigma(n_{p_k}(z))$ for the successive bins, compared to the chosen $0.1$ level for the Gaussian bins scenario.}
+    \label{fig:appendix_nz_models}
+\end{figure}
+We further add a inset figure characterizing the standard deviation of the distributions for each bin in case 1 (crimson histogram); compared to the chosen $0.1$ standard deviation value assumed for the gaussian scenario (gold line).
+In section \ref{sec:modeling:photoz_gal_bias}, $b_p(z)\sqrt{\bo_{mm}(z)}$ is assumed to be constant over the tomographic bin. Other works assume $b_p(z)$ is constant over the tomographic bin: we note the quantity we consider constant in our approximation to be $\gamma(z)$, where $\gamma(z)=b(z)\sqrt{\bo_{mm}(z)}$ (method 1, $\tilde{n}_1(z)\propto\bo_{sp}(z)/\sqrt{\bo_{ss}(z)}$, used in \cite{Cawthon2022DESY3Boss} and in section \ref{sec:modeling:photoz_gal_bias}) or $\gamma(z)=b(z)$ (method 2, $\tilde{n}_2(z)\propto\bo_{sp}(z)/\sqrt{\bo_{ss}(z)\bo_{mm}(z)}$, used in \cite{EuclidClusterRedshifts2025}). 
+As such, the theoretical true distributions $n_{p_k}^{\rm true}$ with respect to the measurements follow:
+\begin{equation}
+    n_{p_k}^{\mathrm{true}}(z)=\frac{n^{\mathrm{meas}}_{p_k}(z)\frac{1}{\gamma(z)}}{\int_0^{+\infty} n^{\mathrm{meas}}_{p_k}(z')\frac{1}{\gamma(z')}\mathrm{d}z'}
+\end{equation}
+Given $b_p^\mathrm{true}(z)$ usually increases with redshift, $\sqrt{\bo_{mm}(z)}$ and $b_p(z)$ are competing effects. 
+Therefore, $\tilde{n}_1(z)$ better approximates the underlying true $n(z)$ than $\tilde{n}_2(z)$ for biases $b_p^\mathrm{true}(z)$ that evolve sufficiently fast. 
+Here, sufficiently fast implies that the optimal case to recover the exact $n(z)$ with $\tilde{n}_1$ is obtained for $b_p(z)\propto1/\sqrt{\bo_{mm}(z)}$, while the optimal case for $\tilde{n}_2$ is $b_p$ constant (case a in equation \ref{eq:app:bias_models}): one can compare the local amplitudes of $\left|\frac{\mathrm{d}\gamma(z)}{\mathrm{dz}}\frac{1}{\gamma(z)}\right|$.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.98\textwidth]{img/appendix/photoz_bias_correction.png}
+    \caption{Relative error measurements on the bias for each scenario. We find that the bias deviations are contained to the $\%$ level.}
+    \label{fig:appendix_gal_bias}
+\end{figure}
+
+The theoretical measured photometric sample cross-correlation $\bo_{pp}(z)$ is given by using equation \ref{eq:cross} in the case of auto-correlations:
+\begin{equation}
+    \bo_{p_kp_k}(z_k)=\int_0^{+\infty}b^{\mathrm{true}}_p(z)^2n^{\mathrm{true}}_{p_k}(z)^2\bo_{mm}(z)\mathrm{d}z
+\end{equation}
+Using the expression derived in section \ref{sec:modeling:photoz_gal_bias}, the theoretical measured galaxy bias $b_p^{\rm meas}$ with the tomographic bins can be obtained:
+\begin{equation}
+    b_p^{\rm meas}(z_k)=\sqrt{\frac{\bo_{p_kp_k}(z_k)}{\int_0^{+\infty}n_{p_k}^{\rm meas}(z)^2\bo_{mm}(z)\mathrm{d}z}}
+\end{equation}
+In figure \ref{fig:appendix_gal_bias}, we display respectively the relative error $\Delta b_p/b_p(z)=(b_p^{\rm meas}(z)-b_p^{\rm true}(z))/b_p^{\rm true}(z)$ in percentage for each bin, as well as the reconstructed bias with tomographic bins. The relative error, just like the power law fit of section \ref{sec:modeling:photoz_gal_bias}, is computed by evaluating at the expectation value of the tomographic bin. Each subplot corresponds to a different method ($\tilde{n}_1$ or $\tilde{n}_2$) or a different tomographic bin case (1 or 2) with different $b^\mathrm{true}_p(z)$ expressions.
+We conclude with this appendix that the tomographic bin approximation at $\Delta z_p=0.1$ presents no significant issues when recovering the general bias trend, since we observe local deviations from the true galaxy bias model of at most $\sim1.7\%$. This result shows that the method is highly effective at recovering the global trend for galaxy bias evolution.

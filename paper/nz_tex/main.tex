@@ -1,0 +1,188 @@
+\documentclass[a4paper,11pt]{article}
+\pdfoutput=1 % if your are submitting a pdflatex (i.e. if you have
+             % images in pdf, png or jpg format)
+
+\usepackage{jcappub} % for details on the use of the package, please
+                     % see the JCAP-author-manual
+\usepackage[T1]{fontenc} % if needed
+
+% in order to review comments
+\usepackage{xcolor}
+\usepackage[normalem]{ulem} 
+\usepackage{soul}  
+\usepackage{tikz}
+\usepackage{wrapfig}
+
+% for CWR
+\newcommand{\cwr}[1]{%
+  \ifmmode
+    \tikz[baseline=(X.base)]{
+      \node[inner sep=0pt, text=red] (X) {$#1$};
+      \draw[red, line width=0.5pt] (X.west|-X.center) -- (X.east|-X.center);
+      \draw[red, line width=0.5pt] (X.west|-X.south) -- (X.east|-X.south);
+    }
+  \else
+    \textcolor{red}{\uline{\sout{#1}}}
+  \fi
+}
+\newcommand{\edit}[1]{\textcolor{blue}{\uwave{#1}}}
+
+% simplified commands for this paper
+\newcommand{\hMpc}{\mathrm{h}^{-1}\mathrm{Mpc}}
+\newcommand{\bo}{\bar{\omega}}
+\newcommand{\dz}{\Delta z}
+
+\newcommand{\vdag}{(v)^\dagger}
+\newcommand\aastex{AAS\TeX}
+\newcommand\latex{La\TeX}
+
+\usepackage{orcidlink}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{bbm}
+\usepackage{stmaryrd}
+\usepackage{bm}
+\usepackage{graphicx}  % For including images
+\usepackage{tikz}      % For drawing
+\usetikzlibrary{positioning, decorations.pathreplacing} % Extra features for positioning and arrows
+\usepackage{subcaption}
+\usepackage{adjustbox}
+\usepackage{comment}
+
+
+\usepackage{color,hyperref}
+%\definecolor{darkblue}{rgb}{0.1,0.4,0.5}
+%\hypersetup{colorlinks,breaklinks, linkcolor=darkblue,urlcolor=darkblue,anchorcolor=darkblue,citecolor=darkblue}
+\newcommand{\sgg}[1]{\textbf{\color{cyan} SGG: #1}}
+
+\usepackage{lineno}
+
+
+\title{\boldmath Full calibration of the tomographic redshift distribution from the HSC PDR3 Shape Catalog with DESI}
+
+%\author[1,2]{J. Choppin de Janvry\,\orcidlink{0009-0008-8066-446X}}
+%\author[1,3]{S. Gontcho A Gontcho,}
+%\author[1,2]{U. Seljak,}
+%\author[4]{DESI Collaboration}
+
+%\affiliation[1]{Physics Division, Lawrence Berkeley National Laboratory, Berkeley, CA 94720, USA}
+%\affiliation[2]{Department of Physics, University of California, Berkeley, CA 94720, USA}
+%\affiliation[3]{Department of Astronomy, University of Virginia, Charlottesville, VA 22904, USA}
+%\affiliation[4]{and other DESI collaborator affiliations}
+
+\author[1,2]{J.~Choppin de Janvry\,\orcidlink{0009-0008-8066-446X}}
+\author[1,3]{S.~Gontcho A Gontcho\,\orcidlink{0000-0003-3142-233X}}
+\author[2,4]{U.~Seljak}
+\author[1,2]{A.~Baleato Lizancos\,\orcidlink{0000-0002-0232-6480}}
+\author[1]{E.~Chaussidon\,\orcidlink{0000-0001-8996-4874}}
+\author[5]{W.~d'Assignies\,\orcidlink{0000-0002-9719-1717}}
+\author[6]{J.~DeRose\,\orcidlink{0000-0002-0728-0960}}
+\author[7]{S.~Heydenreich\,\orcidlink{0000-0002-7273-4076}}
+\author[8,9]{E.~Paillas\,\orcidlink{0000-0002-4637-2868}}
+\author[4]{D.~Valcin\,\orcidlink{0000-0003-0129-0620}}
+\author[10]{T.~Zhang\,\orcidlink{0000-0002-5596-198X}}
+\author[1]{J.~Aguilar}
+\author[11]{S.~Ahlen\,\orcidlink{0000-0001-6098-7247}}
+\author[12,13]{D.~Bianchi\,\orcidlink{0000-0001-9712-0006}}
+\author[14]{D.~Brooks}
+\author[1]{T.~Claybaugh}
+\author[1]{A.~Cuceu\,\orcidlink{0000-0002-2169-0595}}
+\author[15]{A.~de la Macorra\,\orcidlink{0000-0002-1769-1640}}
+\author[14]{P.~Doel}
+\author[16,17]{J.~E.~Forero-Romero\,\orcidlink{0000-0002-2890-3725}}
+\author[18]{G.~Gutierrez}
+\author[19,20,21]{K.~Honscheid\,\orcidlink{0000-0002-6550-2023}}
+\author[22]{M.~Ishak\,\orcidlink{0000-0002-6024-466X}}
+\author[23]{R.~Joyce\,\orcidlink{0000-0003-0201-5241}}
+\author[24]{R.~Kehoe}
+\author[1]{T.~Kisner\,\orcidlink{0000-0003-3510-7134}}
+\author[1]{M.~Landriau\,\orcidlink{0000-0003-1838-8528}}
+\author[5,25]{M.~Manera\,\orcidlink{0000-0003-4962-8934}}
+\author[23]{A.~Meisner\,\orcidlink{0000-0002-1125-7384}}
+\author[5,26]{R.~Miquel}
+\author[27]{S.~Nadathur\,\orcidlink{0000-0001-9070-3102}}
+\author[28,29,30]{W.~J.~Percival\,\orcidlink{0000-0002-0644-5727}}
+\author[31]{F.~Prada\,\orcidlink{0000-0001-7145-8674}}
+\author[32]{I.~P\'erez-R\`afols\,\orcidlink{0000-0001-6979-0125}}
+\author[33]{G.~Rossi}
+\author[34]{E.~Sanchez\,\orcidlink{0000-0002-9646-8198}}
+\author[1]{D.~Schlegel}
+\author[23]{D.~Sprayberry}
+\author[35]{G.~Tarl\'{e}\,\orcidlink{0000-0003-1704-0781}}
+\author[23]{B.~A.~Weaver}
+\author[1]{R.~Zhou\,\orcidlink{0000-0001-5381-4372}}
+
+\affiliation[1]{Lawrence Berkeley National Laboratory, 1 Cyclotron Road, Berkeley, CA 94720, USA}
+\affiliation[2]{Department of Physics, University of California, Berkeley, 366 LeConte Hall MC 7300, Berkeley, CA 94720-7300, USA}
+\affiliation[3]{University of Virginia, Department of Astronomy, Charlottesville, VA 22904, USA}
+\affiliation[4]{University of California, Berkeley, 110 Sproul Hall \#5800 Berkeley, CA 94720, USA}
+\affiliation[5]{Institut de F\'{i}sica d’Altes Energies (IFAE), The Barcelona Institute of Science and Technology, Edifici Cn, Campus UAB, 08193, Bellaterra (Barcelona), Spain}
+\affiliation[6]{Physics Department, Brookhaven National Laboratory, Upton, NY 11973, USA}
+\affiliation[7]{Department of Astronomy and Astrophysics, UCO/Lick Observatory, University of California, 1156 High Street, Santa Cruz, CA 95064, USA}
+\affiliation[8]{Instituto de Estudios Astrof\'isicos, Facultad de Ingenier\'ia y Ciencias, Universidad Diego Portales, Av. Ej\'ercito Libertador 441, Santiago, Chile}
+\affiliation[9]{Steward Observatory, University of Arizona, 933 N. Cherry Avenue, Tucson, AZ 85721, USA}
+\affiliation[10]{Department of Physics \& Astronomy and Pittsburgh Particle Physics, Astrophysics, and Cosmology Center (PITT PACC), University of Pittsburgh, 3941 O'Hara Street, Pittsburgh, PA 15260, USA}
+\affiliation[11]{Department of Physics, Boston University, 590 Commonwealth Avenue, Boston, MA 02215 USA}
+\affiliation[12]{Dipartimento di Fisica ``Aldo Pontremoli'', Universit\`a degli Studi di Milano, Via Celoria 16, I-20133 Milano, Italy}
+\affiliation[13]{INAF-Osservatorio Astronomico di Brera, Via Brera 28, 20122 Milano, Italy}
+\affiliation[14]{Department of Physics \& Astronomy, University College London, Gower Street, London, WC1E 6BT, UK}
+\affiliation[15]{Instituto de F\'{\i}sica, Universidad Nacional Aut\'{o}noma de M\'{e}xico,  Circuito de la Investigaci\'{o}n Cient\'{\i}fica, Ciudad Universitaria, Cd. de M\'{e}xico  C.~P.~04510,  M\'{e}xico}
+\affiliation[16]{Departamento de F\'isica, Universidad de los Andes, Cra. 1 No. 18A-10, Edificio Ip, CP 111711, Bogot\'a, Colombia}
+\affiliation[17]{Observatorio Astron\'omico, Universidad de los Andes, Cra. 1 No. 18A-10, Edificio H, CP 111711 Bogot\'a, Colombia}
+\affiliation[18]{Fermi National Accelerator Laboratory, PO Box 500, Batavia, IL 60510, USA}
+\affiliation[19]{Center for Cosmology and AstroParticle Physics, The Ohio State University, 191 West Woodruff Avenue, Columbus, OH 43210, USA}
+\affiliation[20]{Department of Physics, The Ohio State University, 191 West Woodruff Avenue, Columbus, OH 43210, USA}
+\affiliation[21]{The Ohio State University, Columbus, 43210 OH, USA}
+\affiliation[22]{Department of Physics, The University of Texas at Dallas, 800 W. Campbell Rd., Richardson, TX 75080, USA}
+\affiliation[23]{NSF NOIRLab, 950 N. Cherry Ave., Tucson, AZ 85719, USA}
+\affiliation[24]{Department of Physics, Southern Methodist University, 3215 Daniel Avenue, Dallas, TX 75275, USA}
+\affiliation[25]{Departament de F\'{i}sica, Serra H\'{u}nter, Universitat Aut\`{o}noma de Barcelona, 08193 Bellaterra (Barcelona), Spain}
+\affiliation[26]{Instituci\'{o} Catalana de Recerca i Estudis Avan\c{c}ats, Passeig de Llu\'{\i}s Companys, 23, 08010 Barcelona, Spain}
+\affiliation[27]{Institute of Cosmology and Gravitation, University of Portsmouth, Dennis Sciama Building, Portsmouth, PO1 3FX, UK}
+\affiliation[28]{Department of Physics and Astronomy, University of Waterloo, 200 University Ave W, Waterloo, ON N2L 3G1, Canada}
+\affiliation[29]{Perimeter Institute for Theoretical Physics, 31 Caroline St. North, Waterloo, ON N2L 2Y5, Canada}
+\affiliation[30]{Waterloo Centre for Astrophysics, University of Waterloo, 200 University Ave W, Waterloo, ON N2L 3G1, Canada}
+\affiliation[31]{Instituto de Astrof\'{i}sica de Andaluc\'{i}a (CSIC), Glorieta de la Astronom\'{i}a, s/n, E-18008 Granada, Spain}
+\affiliation[32]{Departament de F\'isica, EEBE, Universitat Polit\`ecnica de Catalunya, c/Eduard Maristany 10, 08930 Barcelona, Spain}
+\affiliation[33]{Department of Physics and Astronomy, Sejong University, 209 Neungdong-ro, Gwangjin-gu, Seoul 05006, Republic of Korea}
+\affiliation[34]{CIEMAT, Avenida Complutense 40, E-28040 Madrid, Spain}
+\affiliation[35]{University of Michigan, 500 S. State Street, Ann Arbor, MI 48109, USA}
+
+\emailAdd{jean.choppindejanvrydev@gmail.com}
+\emailAdd{satya@virginia.edu}
+\emailAdd{useljak@berkeley.edu}
+
+\abstract{The calibration of tomographic redshift distributions 
+is essential for cosmological analysis of weak lensing data.  
+In this work, we calibrate all four tomographic bins of the Hyper Suprime Camera (HSC) weak lensing catalog with the Dark Energy Spectroscopic Instrument (DESI) Data Release 1 and 2 using the clustering redshifts technique. We include $z>1.2$ redshift sources such as emission line galaxies (ELG) and quasars (QSO) sources in our calibration, which were not available in the previous HSC calibration (Rau et al, 2022), allowing a complete calibration of all the redshift bins. We find the first tomographic bin exhibits a small shift towards low redshifts. The second bin is in good agreement with the photometric calibration, while third and fourth bin exhibit a shift towards higher redshifts. However, these shifts are considerably smaller than the shifts obtained in the HSC Year 3 cosmic shear analyses. We evaluate the impact of galaxy bias and magnification effects from all the samples on the measurements, finding them to be small, and we propose corrections to reduce them further. We model the redshift distributions with splines and compare our results to previous analyses as well as to other parameterizations found in literature. For the two high-redshift tomographic bins, we find the shifts to higher redshifts with respect to the measurements performed in Rau+2022 to be $\Delta z_3=-0.039^{+0.020}_{-0.021}$ and $\Delta z_4=-0.048^{+0.012}_{-0.012}$.}
+
+\begin{document} 
+\maketitle
+\flushbottom
+
+\linenumbers
+
+
+\input{sections/introduction}
+
+\input{sections/data}
+
+\input{sections/modeling}
+
+\input{sections/correlations}
+
+\input{sections/parametrization}
+
+\input{sections/results}
+
+\input{sections/conclusion}
+
+\input{sections/acknowledgements}
+
+\bibliographystyle{JHEP}
+\bibliography{src/desi,src/hsc,src/othersurveys,src/software,src/methods,src/clusterz}
+
+\appendix
+\input{sections/appendix}
+
+\end{document}

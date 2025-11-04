@@ -1,0 +1,74 @@
+\section{Parametrization methods}
+\label{sec:parametrization}
+
+This section presents our parametrization choices for the tomographic redshift distributions for each bin. The benefit of such modeling is to regularize and smooth out the $n(z)$ distributions, as some measurements statistically fluctuate to negative values. We compare some literature approaches, and introduce a new parametrization based on splines. The hierarchical Bayesian method proposed in \cite{Rau2022compositelikelihood, HSCClusteringRau2023} leveraging both the \textbf{PhotZ} (photometry calibration) and \textbf{WX} (clustering redshifts measurements) distributions is not implemented, due to inconsistencies between the two calibrations: we therefore rely only on the clustering redshift measurements. 
+%We note that the HSC cosmic shear analysis decides to leave redshift bias from bins 3 and 4 as free parameters, marginalizing over a uniform prior bounded by $[-1,1]$. 
+
+%TODO: figure out how to explain the bayesian analysis from HSC ? I'm not sure if it is relevant. MM Rau has a whole paper on Tikhonov regularization and bayesian inference but it's unclear to me if we should talk about it.
+\subsection{Combining tracers}
+\label{sec:results:combine_tracers}
+
+Before parameterizing, once the $n(z)$ for each target class is measured and, if necessary, corrected for other systematic effects such as magnification or galaxy bias, only target classes with significant overlap with the bin signal are retained. As such, Bin 1 ($z\sim0.3-0.6$) uses measurements from the BGS, LRGs and ELG-LOP. Bin 2 ($z\sim0.6-0.9$) uses every target class available, including QSOs. In Bin 3 ($z\sim0.9-1.2$) and Bin 4 ($z\sim1.2-1.5$), BGS derived constraints are removed as they present no significant overlap in redshift. Still, cross-correlations between all tracers and the tomographic bins are computed to assert consistency will null measurements on the redshift ranges of excluded tracers\footnote{When performing clustering redshifts measurements on smaller tomographic bins of width $\dz_{\mathrm{p}}$ centered on $z_k$ while correcting for sample galaxy bias (see \ref{sec:modeling:photoz_gal_bias}), we use the available tracers in bins of centers included in $\left[z_k-3\dz_{\mathrm{p}},\,z_k+3\dz_{\mathrm{p}}\right]$ per tomographic bin $k$. Bin $z\sim0.-0.025$ is not taken into account due to very low densities (as reported by Figure \ref{fig:density_z} for the HSC sample) and high variance biasing the spline model}. For each bin, after combining results, the measurements are restricted to the following ranges: in Bin 1, the model is retained between $z\sim0$ and $0.8$; in Bin 2, between $z\sim0.3$ and $1.3$; in Bin 3, between $z\sim0.3$ and $2.1$; and in Bin 4, between $z\sim0.7$ and $2.1$. Once the measurements for each necessary target class within a single tomographic bin are obtained, the target classes are combined into a single measurement using inverse variance weighting\footnote{When combining measurements if retaining only the cross-correlations (without correcting for auto-correlations), the measurements are combined on the two-point correlation counts themselves instead, due to normalization differences between target classes because of the amplitude of the auto-correlations. Hence, the samples are treated as a single "combined" target class.}:
+
+\begin{equation}
+   n(z_j)=\left(\sum\limits_{t\in\mathcal{T}_j}\frac{1}{\sigma_t^2}\right)^{-1}\sum\limits_{t\in\mathcal{T}_j}\frac{n_t(z_j)}{\sigma_t^2}\pm\sqrt{\left(\sum\limits_{t\in\mathcal{T}_j}\frac{1}{\sigma_t^2}\right)^{-1}}\quad\forall j\in\llbracket 1,\,N_{b}\rrbracket
+\end{equation}
+
+where $\mathcal{T}_j$ is the set of target classes used at redshift $z_j$, $n_t(z_j)$ is the measurement of $n(z)$ derived from target class $t$ at redshift $z_j$  with the associated error $\sigma_t$. Cross-covariance effects between tracers on overlapping spectroscopic redshifts are not taken into account. This ultimately affects our measurements with some over-confidence on multi-target redshift ranges (for example, between $z\sim0.7$ and $z\sim1.2$, ELGs, LRGs and QSOs overlap and are all used in the analysis): this is not modeled further in the context of this work and could be improved upon in future works. % Should we mention this effect is minor w/ respect to, e.g., the considered scale cuts ?
+
+\subsection{Suppressed Gaussian Processes}
+\label{sec:parametrization:sgp}
+
+A recently developed approach introduced and implemented in Euclid methodological analyses for clustering redshifts \cite{EuclidClusteringRedshifts2023, EuclidClusterRedshifts2025} involves using gaussian processes that are then suppressed in order to model measurements in a non-parametric way. In short, the data is modeled using Gaussian Processes (GP) with a Matérn kernel, setting a slope of $\nu_{\mathrm{GP}}=1.5$ and a fixed length scale $l_{\mathrm{GP}}=\dz$. In this work, GPs are implemented using \texttt{scikit-learn}\footnote{\href{https://github.com/scikit-learn/scikit-learn}{\textcolor{blue}{\texttt{github.com/scikit-learn/scikit-learn}}}} \cite{ScikitLearnPedregosa2011} and the suppression function proposed in \cite{EuclidClusteringRedshifts2023, EuclidClusterRedshifts2025}, varying the damping factor. The suppression function implemented depends on $x$, the convolution of a gaussian window with the local Signal to Noise Ratio (SNR) of the measurements, and a dampening factor $k$. The suppression function is as follows:
+
+\begin{equation}\label{eq:suppression_function}
+S(x, k) =
+\begin{cases}
+0 & \text{if } x < 0 \\
+1 - (1 - x)^k\; & \text{if } 0 < x < 1, \\
+1 & \text{if } x > 1.
+\end{cases}
+\end{equation}
+
+Such a suppression function tends to suppress real, tail like effects in large tomographic bins with important scatter. This is not as worrisome for experiments like LSST, expecting narrower tomographic bins, but poses issues with tomographic bins in other weak lensing surveys such as HSC (the concerning bin being Bin 3 with a long, high-redshift tail, for example) \cite{HSCClusteringRau2023} or DES (for example, Bin 4) \cite{Gatti2021ClusteringDESWLsrcDistrib} that are spread out. Fine-tuning the suppression function could be an option to explore in order to correctly use the suppressed gaussian processes model, but is not explored further in the scope of this paper.
+
+\subsection{B-spline parametrization}
+\label{sec:parametrization:bspline}
+
+The $n(z)$ distributions are modeled with univariate basis splines (B-splines) over the redshift range. B-splines are families $(B_i)_{i\in\llbracket 1,n\rrbracket}$ of piece-wise polynomials of order $k\geq1$, with $p=k-1$ being the degree of the polynomials. These are defined by a sequence of knots $t_0 \leq t_1 \leq \dots \leq t_{m}$, with knots $t_0,\dots t_p$ and $t_{m-p},\dots, t_m$ known as external knots, usually repeated in order to support the first and last B-splines of the basis.
+The other knots lie on the range one is interested in and are known as internal knots. Knots will now refer to the internal knots. B-splines are defined by recursion using the Cox-de Boor formula:
+
+\begin{equation}
+\begin{aligned}
+\forall\;p\in\mathbb{N}\quad B_{i,p}(z):=
+\begin{cases}
+\displaystyle \mathbbm{1}_{[t_i,t_{i+1})}(z) \quad \text{if } p=0, \\
+\frac{z - t_i}{t_{i+p} - t_i} \, B_{i,p-1}(z) 
++ \frac{t_{i+p+1} - z}{t_{i+p+1} - t_{i+1}} \, B_{i+1,p-1}(z). \quad \text{if } p > 1
+\end{cases}
+\end{aligned}
+\end{equation}
+
+where $\mathbbm{1}_{[t_i,t_{i+1})}$ is the indicator function of $[t_i,t_{i+1})$, null when $z\notin [t_i,t_{i+1}[$ or if $t_i=t_{i+1}$. B-splines are by construction non-negative, and an example basis for the distribution in Bin 2 is shown in the bottom left panel of figure \ref{fig:spline_showcase}.
+For this model, one can use M-splines, where $B_{i,\,p}(z)$ are normalized to integrate to 1: such a change only affects the prior of the normalization factor $A$ described in the following model \ref{eq:model_nz_bspline}.  
+To obtain our $n(z)$ distributions with $\hat{n}(z)$, $\hat{n}(z)$ is parametrized as a function of our B-spline basis $(B_{i,\,p})_{i\in\llbracket 1,m\rrbracket}$, free coefficients $(c_i)_{i\in\llbracket 1,m\rrbracket}$, and a free amplitude parameter $A$ to account for re-normalization. Therefore:
+\begin{equation}\label{eq:model_nz_bspline}
+    \hat{n}(z)=A\sum\limits_{i=1}^{m}c_iB_{i,\,p}(z)
+\end{equation}
+
+The $c_i$ coefficients are subject to a Dirichlet prior \textbf{Dir}$(\bm{\alpha})$, which implies the $c_i$ coefficients lie on the standard $m-1$ simplex: that is, $\sum^m_{i=1}c_i=1$ and $c_i\in[0,1]$ for all $i\in\llbracket1,\,m\rrbracket$. 
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.96\textwidth]{img/sec5/spline_showcase.png}
+    \caption{\textit{Top panel:} Bin 2 data (as presented in section \ref{sec:results} with all corrections) underlaid with the spline distribution (red, posterior median and $1\sigma$ contour) and some example samples from the spline modeling (indigo). Position of interior knots are shown in gray dotted lines. The NNLS result of equation \ref{eq:model_nz_bspline} is shown in dashed navy. \textit{Bottom left panel:} B-spline functions $(B_i)_{i\in\llbracket 1,n\rrbracket}$ over the redshift range. \textit{Bottom right panel:} In the bottom plot, we show the posterior median coefficient distribution over the samples with associated standard deviations, where $c_i$ coefficients are constrained to be positive. Above, the $\mathbf{Dir}(\alpha)$ prior is showcased, per expression \ref{eq:dir_prior}.} 
+    \label{fig:spline_showcase}
+\end{figure}
+
+In order to refine this prior, prior concentrations defined by the $\bm{\alpha}$ vector on the $c_i$'s are adapted to encourage these coefficients to use values closer to 0 where the measurements are consistent with $0$ (that is, where the cross-correlation signal is consistent with 0, modulo statistical fluctuations), which means little to no contribution from that spline function in the basis. Such refinement of the $\bm{\alpha}$ vector is guessed by solving Non-Negative Least Squares (NNLS) using equation \ref{eq:model_nz_bspline} against the $n(z)$ measurements (and fixing $A$ to 1), obtaining coefficients $c_i^{(\mathrm{NNLS})}$. When solving NNLS in this scenario, varying errors for each measurements are not taken into account, and results are only used as a guess for the prior. Two hyperparameters are defined to tune this prior: the base $a_0$ being the minimal prior concentration to ensure sampling of the Bayesian model and a boost factor $b$ that controls the local prior concentration. Therefore:
+
+\begin{equation}\label{eq:dir_prior}
+    \alpha_i=a_0+bc_i^{(\mathrm{NNLS)}} \quad \forall i\in\llbracket1,\,m\rrbracket
+\end{equation}
+
+This analysis chose $b=3$ and $a_0=0.05$. The prior \textbf{Dir}$(\bm{\alpha})$ set on Bin 2 of the tomographic bins is given as example in Figure \ref{fig:spline_showcase} in the bottom right panel. The knots are uniformly distributed on the redshift grid with one knot every two data points: their positions are shown in dashed gray in figure \ref{fig:spline_showcase}. The free amplitude coefficient is subject to a broad gaussian prior over the initial amplitude $A_0$ parameter computed with NNLS, with a standard deviation of $0.25A_0$. The spline models are obtained with Bayesian analysis using the software package \texttt{pymc}\footnote{\href{https://github.com/pymc-devs/pymc}{\textcolor{blue}{github.com/pymc-devs/pymc}}} \cite{Abril-Pla_PyMC_a_modern_2023}.

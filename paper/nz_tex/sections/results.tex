@@ -1,0 +1,121 @@
+\section{Results}
+\label{sec:results}
+
+This section presents the calibrated $n(z)$ distributions and the expectations we measure on each of the tomographic Bins. The measurements of this work are put in context of the previous clustering redshift analysis \cite{HSCClusteringRau2023} on the HSC dataset, as well as the cosmic shear results \cite{Dalal2023CosmoShearHSC, CosmoShearLi2023HSCY3}, cosmic shear ratios (CSR) calibration \cite{Rana2025HSCY3CosmicShearRatios} and the combination of galaxy clustering with weak lensing (GC-WL) measurements \cite{Zhang2025RedshiftGCPointMass} of the photometric redshift shifts.  
+Redshift expectation values are measured as the first moment of the posterior draws from the spline model described in section \ref{sec:parametrization} for each Bin. 
+The resulting expectation value for each draw is split into 16$^{th}$, 50$^{th}$ and 84$^{th}$ percentiles in order to obtain error measurements and the center expectation value. 
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.95\textwidth]{img/sec6/nz_spline_tomo1.png}
+    \includegraphics[width=0.95\textwidth]{img/sec6/all_tomo.png}
+    \caption{\textit{Upper panel}: Calibrated distributions on tomographic Bin 1 ($z\sim0.3-0.6$), showing the impact of the different corrections on the shape of the distribution. For each color, we include an additional correction. No bias evolution corresponds to only using cross-correlations with dark matter evolution. $b(z)$ corrections account for spectroscopic galaxy bias with auto-correlations ($b_s(z)$), and photometric galaxy bias ($b_p(z)$), as described in section \ref{sec:modeling:photoz_gal_bias}. Finally, the last correction are the magnification corrections $\mu$, described in section \ref{sec:modeling:magnification}. Measurements are offset for readability. We observe similar shifts with these corrections for all bins, as displayed in Table \ref{tab:shifts_results} and Figure \ref{fig:shifts}. \textit{Lower panel}: Model distributions on each of the 4 tomographic bins, with the clustering redshift measurements and the photometry calibrated distributions \textbf{PhotZ} (in hatched gray) replicated from Figure 8 of \cite{HSCClusteringRau2023}. Distributions are shown with all corrections included.}
+    \label{fig:distributions}
+\end{figure}
+
+The impact of the successive corrections made to the clustering redshifts measurements are shown with Bin 1 as an example in the upper panel of Figure \ref{fig:distributions}. 
+Similar global shifts are observed on every tomographic Bin due to the successive corrections. 
+In the lower panel of Figure \ref{fig:distributions}, measurements with all corrections and the associated spline models are shown. 
+For comparison, we replicate the \textbf{PhotZ} photometry calibrated distributions presented in Figure 8 of \cite{HSCClusteringRau2023}. $\dz$ "shift" values are reported in Table \ref{tab:shifts_results} and displayed in Figure \ref{fig:shifts}. These shifts are measured as a difference of mean values with respect to the reported Y3 Total distribution means obtained in \cite{HSCClusteringRau2023}. Per convention, a negative shift implies the considered measurement has a preference for a higher expectation value compared to the Y3 Total measurement.  
+{\renewcommand{\arraystretch}{1.2}
+\begin{table}[h!]
+\centering
+\caption{\textit{HSC calibration results}: Measurements from the clustering redshift analysis \cite{HSCClusteringRau2023}. The \textbf{PhotZ} calibration measurements correspond to the hatched gray background curves from photometry calibration shown in Figure \ref{fig:distributions} and in Figure 8 of \cite{HSCClusteringRau2023}. \textbf{WX} adds in calibration from the clustering redshifts measurements with the \texttt{CAMIRA} LRG sample. The Bayesian surprise term is the Kullback-Leibler divergence, characterizing the information gained from the addition of cross-correlations over the \textbf{PhotZ} calibration. Values in brackets are the standard deviation for the considered measurement. For the following table sections, measurements displayed correspond to shifts with respect to the "Y3 Total" measurement. A negative shift denotes a shift of the new measurements towards higher redshifts. \textit{Cosmic Shear Results}: For Y3 power spectrum and real space cosmic shear measurements, uniform prior $\mathcal{U}(-1,1)$ was set on the shift parameters: the measurements in the table report the mode of the posterior distribution. Y3 CSR and Y3 GC-WL respectively correspond to the photo-$z$ shift measurements performed using Cosmic Shear Ratios (CSR) \cite{Rana2025HSCY3CosmicShearRatios} and the combined information from Galaxy Clustering and Weak Lensing (GC-WL) \cite{Zhang2025RedshiftGCPointMass}. \textit{This work}: Shifts measured for two scale cuts $0.3-3\,\hMpc$ and $1-5\,\hMpc$, excluding magnification corrections (first row) and including the magnification corrections (second row) for all four tomographic bins. The sections \textit{Cosmic Shear Results} and \textit{This work} showcase the results as shifts with respect to the Y3 Total measurements.}
+\begin{tabular}{c|c|c|c|c}
+\textbf{Measurement} & \textbf{Bin 1} & \textbf{Bin 2} & \textbf{Bin 3} & \textbf{Bin 4} \\
+\hline
+\multicolumn{4}{c}{\textbf{HSC calibration results \cite{HSCClusteringRau2023}}} \\ \hline
+%\textbf{Y1 Analysis} & 0.44 [0.0285] & 0.77 [0.014] & 1.05 [0.0383] & 1.33 [0.0376] \\
+\textbf{Y3 PhotZ (DNNz)} & 0.463 [0.005] & 0.766 [0.004] & 1.084 [0.004] & 1.330 [0.003] \\
+\textbf{Y3 DEMPz} & 0.463 & 0.777 & 1.097 & 1.350 \\
+\textbf{Y3 PhotoZ \& WX} & 0.452 [0.004] & 0.766 [0.003] & 1.081 [0.004] & - \\
+\textbf{Y3 Bayesian Surprise} & 3.84 & 0.10 & 0.28 & - \\
+\textbf{Y3 Total} & 0.452 [0.024] & 0.766 [0.022] & 1.081 [0.031] & 1.330 [0.034] \\
+\hline
+\multicolumn{4}{c}{\textbf{Cosmic shear results}} \\ \hline
+\textbf{Y3 Power Spectrum \cite{Dalal2023CosmoShearHSC}} 
+    & - 
+    & - 
+    & $-0.075^{+0.056}_{-0.059}$ 
+    & $-0.157^{+0.094}_{-0.111}$ \\ %MAP (-0.046) (-0.144)
+\textbf{Y3 Real Space \cite{CosmoShearLi2023HSCY3}} 
+    & - 
+    & - 
+    & $-0.115^{+0.052}_{-0.058}$ 
+    & $-0.192^{+0.088}_{-0.088}$ \\ %MAP: (-0.120) (-0.190)
+\textbf{Y3 CSR \cite{Rana2025HSCY3CosmicShearRatios}} 
+    & - 
+    & $+0.002^{+0.021}_{-0.022}$
+    & $-0.002^{+0.085}_{-0.217}$ 
+    & $-0.292^{+0.229}_{-0.324}$ \\
+\textbf{Y3 GC-WL \cite{Zhang2025RedshiftGCPointMass}}
+    & - 
+    & -
+    & $-0.112^{+0.046}_{-0.049}$ 
+    & $-0.185^{+0.071}_{-0.081}$ \\
+\hline
+\multicolumn{4}{c}{\textbf{This work, $\mathbf{[0.3,3]\,\hMpc}$}} \\ \hline
+\textbf{B-spline | $b_s(z)$, $b_p(z)$} 
+    & $+0.025^{+0.008}_{-0.008}$ 
+    & $-0.009^{+0.008}_{-0.008}$
+    & $-0.041^{+0.019}_{-0.018}$
+    & $-0.048^{+0.012}_{-0.011}$ \\ 
+\textbf{B-spline | $b_s(z)$, $b_p(z)$, $\mu$} 
+    & $+0.029^{+0.008}_{-0.008}$ 
+    & $-0.003^{+0.009}_{-0.009}$
+    & $-0.039^{+0.020}_{-0.021}$
+    & $-0.048^{+0.012}_{-0.012}$ \\
+\hline
+\multicolumn{4}{c}{\textbf{This work, $\mathbf{[1,5]\,\hMpc}$}} \\ \hline
+\textbf{B-spline | $b_s(z)$, $b_p(z)$} 
+    & $+0.026^{+0.013}_{-0.013}$ 
+    & $-0.022^{+0.014}_{-0.013}$
+    & $-0.036^{+0.028}_{-0.025}$
+    & $-0.056^{+0.016}_{-0.015}$ \\
+\textbf{B-spline | $b_s(z)$, $b_p(z)$, $\mu$} 
+    & $+0.028^{+0.013}_{-0.014}$
+    & $-0.019^{+0.015}_{-0.014}$ 
+    & $-0.033^{+0.030}_{-0.026}$ 
+    & $-0.055^{+0.017}_{-0.016}$ \\
+\end{tabular}
+\label{tab:shifts_results} 
+\end{table}}
+
+The shift parameter results offer competitive measurements exclusively from clustering redshifts, as showcased in Figure \ref{fig:shifts}. In this work, we follow the recommendations from the first HSC analysis (see notes (iv) and (v) of Section 7 from \cite{HSCClusteringRau2023}), by modeling the evolution of the galaxy-dark matter bias for both the photometric sample and the spectroscopic sample, as well as corrections due to magnification effects. Moreover, the calibration sample we use here has redshifts $z\gtrsim1.2$ with QSO and ELG sources, allowing for complete calibration of Bin 3 and Bin 4, and the calibration sample is entirely composed of spectroscopic redshifts. 
+
+As such, in the upper panel of Figure \ref{fig:distributions}, we can notice the relative impact of each of the calibrations on tomographic Bin 1. 
+This work hints at biases in Bin 1 calibration, as displayed in Figure \ref{fig:shifts}. 
+We explain this discrepancy with the successive corrections to correct galaxy bias with the auto-correlation measurements. 
+With the "No bias evolution" correction, the measurement is $n_p(z_j)\propto \bo_{sp}(z_j)/\bo_{mm}(z_j)$ and is more in-line with reported measurements of \textbf{WX} from the CAMIRA LRG sample. Moreover, as reported by Table \ref{tab:galaxy_bias}, the BGS galaxies ($z\sim0-0.5$) have strong bias evolution, hence provoking significant shifts towards lower redshift expectations. 
+This linear galaxy bias measurement is further corroborated by two-point angular measurements used in the auto-correlation correction. 
+Note that clustering redshifts measurements of $n(z)$ that do not take into account galaxy bias evolution are not necessarily comparable due to evolution rate differences from different calibration samples, hence partially explaining the mild difference we see between \textbf{PhotZ \& WX} and the measurement with no bias evolution made in this work.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.98\textwidth]{img/sec6/shifts.png}
+    \caption{Shift values for each of the 4 tomographic bins in the catalog from posterior draws compared to Y3 Total, Y3 \textbf{PhotZ}, Y3 \textbf{PhotZ \& WX} described in \cite{HSCClusteringRau2023} and replicated in Table \ref{tab:shifts_results}.
+    Note that the \textbf{PhotZ} errors do not include systematics, and that \textbf{WX} has incomplete redshift coverage, or is completely absent, for Bin 3 and Bin 4, respectively. The results are compared to Cosmic Shear Ratio (CSR) \cite{Rana2025HSCY3CosmicShearRatios} photo-$z$ shift calibration, combined galaxy clustering and weak lensing (GC-WL) \cite{Zhang2025RedshiftGCPointMass} shift measurements, angular power spectrum cosmic shear \cite{Dalal2023CosmoShearHSC}, and two-point correlation cosmic shear \cite{CosmoShearLi2023HSCY3} posterior modes. We display the effect of the successive corrections to $n(z)$. No bias evolution corresponds to only using the cross-correlations with dark matter evolution over the bin. $b_s(z)$ and $b_p(z)$ respectively correspond to the corrections of the bias evolution for the spectroscopic sample and the photometric sample, discussed in sections \ref{sec:modeling:nz} and \ref{sec:modeling:photoz_gal_bias}. When correcting only for $b_s(z)$, we take into account dark matter evolution. Finally, $\mu$ is the magnification correction detailed in section \ref{sec:modeling:magnification}. We showcase the impact of choosing a different, more conservative scale cut such as $1-5\,\hMpc$. The shaded gold area corresponds to our fiducial result with all calibrations included over scales $0.3-3\,\hMpc$, projected to compare with other measurements.} 
+    \label{fig:shifts}
+\end{figure}
+
+In Bin 2, we observe full consistency with the HSC Y3 results for both scale cuts.
+This result is consistent with the Cosmic Shear Ratio photo-$z$ \cite{Rana2025HSCY3CosmicShearRatios} calibration. 
+Bin 2 has the highest relative magnification correction: still, magnification has a minor effect with respect to the other corrections made to the $n(z)$ measurement. 
+In Bin 2, we decide to not use ELGs from DR1 as they are subject to significant fiber collisions: about $\sim35\%$ of ELGs were observed in DR1, resulting in approximately $\sim50\%$ missing small-scale pairs \cite{Pinon2025FiberAssign}.
+This effect is much less significant at larger scales $1-5\,\hMpc$ as we leave the regime of small-scale fiber assignment issues, especially for the higher redshift range. 
+The consistency showcased between our measurements at different scales furthermore supports that fiber assignment systematics do not introduce bias in the measurements, as detailed in section \ref{sec:2pcf}. 
+We notice Bin 2 presents minor shifts with respect to the smaller scale measurements, however this seems entirely driven by a single redshift bin and subsequently unrelated to fiber assignment issues. 
+In contrast, the large scale incompleteness is corrected by the completeness weights included in the measurements. 
+With subsequent data releases for DESI, the ELG completeness and fiber assignment issues are expected to significantly improve. 
+In that regard, further improving these measurements is left for future work.
+
+Bin 3 and Bin 4 leverage the DESI DR2 dataset for the calibrated $n(z)$. 
+Due to their high galaxy bias, the measurements for the QSO sample offer very good insights in calibrating high-redshift ranges, despite the low number densities reported in Figure \ref{fig:density_z}. 
+We measure a shift towards higher redshifts: however, the shift is less strong that the shifts predicted by GC-WL and cosmic shear analyses. CSR analysis for Bin 3 shows better consistency with the shifts inferred in the present work, though the larger error bars allow the measurement to remain consistent with the remaining calibrations. 
+Moreover, in Bin 3, the \textbf{PhotZ} calibration predicted significant tail-like effects on the high redshift range $z\sim1.3-1.8$. 
+While Bin 3 has partial clustering redshifts measurements to calibrate the distributions in \cite{HSCClusteringRau2023}, the tail-like effect is not probed by cross-correlations due to the limited redshift range of the CAMIRA LRG sample ($z\lesssim1.2$).
+The tail contribution is measured in this analysis and we find it has stronger amplitude than initially expected by the \textbf{PhotZ} distribution, as shown in Figure \ref{fig:distributions}. 
+This can be used to explain our noticeable shift in the tomographic mean with respect to the calibration provided in the first analysis, where clustering measurements spanned up to $z\sim1.2$ and therefore did not have clustering insights for the tail effects.
+This result is more in-line with the expected possible shift in $\dz_3$ reported by the cosmic shear analyses \cite{Dalal2023CosmoShearHSC, CosmoShearLi2023HSCY3}, though still lower than reported by these analyses. 
+In the lower panel of Figure \ref{fig:distributions}, we show the $n(z)$ distributions for the four tomographic bins on the same figure. We underlay the figure with the hatched distributions from \textbf{PhotZ} calibration for each of the bins. 
+When it comes to cosmology dependence of these results, they are two-fold: cosmology impacts the scale cuts we define for this analysis, and cosmology intervenes in the dark matter auto-correlation $\bo_{mm}$ function. In any correction that does not include both $b_s(z)$ and $b_p(z)$, we compensate our measurements with $\bo_{mm}(z)$. However, if one corrects for both $b_s(z)$ and $b_p(z)$ with the measured auto-correlations (for example, any measurement showcased in Table \ref{tab:shifts_results}), then $\bo_{mm}$ is encompassed in the auto-correlation vectors, and therefore we do not introduce cosmology dependence from the computation, except from chosen scale cuts. As reported by \cite{HSCClusteringRau2023}, for fairly extreme cosmologies at the $2\sigma$ contour of Stage III surveys, one can see up to $\sim10\%$ effects in the redshift scaling of $\bo_{mm}$. In this work, in the context of fiducial results, this dependence only affects the magnification corrections presented in section \ref{sec:modeling:magnification} as they rely on the theoretical dark matter auto-correlation: this scaling effect is  not considered in this work with respect to the other assumptions relevant to the magnification correction.
