@@ -5,6 +5,9 @@ data/**
 !data/bias/** */
 !data/pz/** */
 
+# job logs
+cosmic_shear/logs/**
+
 *fits
 *parquet
 # for splines
