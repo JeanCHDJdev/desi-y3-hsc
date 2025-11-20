@@ -2,7 +2,7 @@
 
 #SBATCH --qos regular
 #SBATCH --nodes 4
-#SBATCH --time 10:00:00
+#SBATCH --time 5:00:00
 #SBATCH --constraint cpu
 #SBATCH --account m3058
 #SBATCH --job-name real-0.3-3-no-z4
