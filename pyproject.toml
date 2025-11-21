@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "desi-y3-hsc"
 version = "0.1.0"
-description = "A Python package for various desi hsc scripts"
+description = "pyproject for the analysis of the cross-correlation between DESI Y3 and HSC and subsequent cosmic shear analysis."
 authors = [
     { name = "Jean Choppin de Janvry", email = "jean.choppindejanvrydev@gmail.com" }
 ]

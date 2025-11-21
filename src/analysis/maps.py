@@ -1,3 +1,4 @@
+## Code provided by S. Heydenreich, adapted to the purposes of this analysis.
 import numpy as np
 import healpy as hp
 import os
@@ -56,16 +57,6 @@ def get_vertices_from_pixels(pixels, inside, nside):
     vertices[:, :, 0] = hp.pix2ang(nside, pixels, nest=False, lonlat=True)[0]
     vertices[:, :, 1] = hp.pix2ang(nside, pixels, nest=False, lonlat=True)[1]
     return vertices[inside]
-
-
-def get_mask(galaxy):
-    import os
-
-    gal_fname = os.path.join(
-        "/global/homes/s/sven/code/", "galaxy_overlaps", "masks", galaxy + ".fits"
-    )
-    gal_mask = hp.read_map(gal_fname).astype(bool)
-    return gal_mask
 
 
 def vertex_with_edge(skmcls, vertices, color=None, vmin=None, vmax=None, **kwargs):

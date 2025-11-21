@@ -1,0 +1,96 @@
+\documentclass[a4paper,11pt]{article}
+\pdfoutput=1 % if your are submitting a pdflatex (i.e. if you have
+             % images in pdf, png or jpg format)
+
+\usepackage{jcappub} % for details on the use of the package, please
+                     % see the JCAP-author-manual
+\usepackage[T1]{fontenc} % if needed
+
+% simplified commands for this paper
+\newcommand{\hMpc}{\mathrm{h}^{-1}\mathrm{Mpc}}
+\newcommand{\bo}{\bar{\omega}}
+\newcommand{\dz}{\Delta z}
+
+\newcommand{\vdag}{(v)^\dagger}
+\newcommand\aastex{AAS\TeX}
+\newcommand\latex{La\TeX}
+
+\usepackage{orcidlink}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{bbm}
+\usepackage{stmaryrd}
+\usepackage{bm}
+\usepackage{graphicx}  % For including images
+\usepackage{tikz}      % For drawing
+\usetikzlibrary{positioning, decorations.pathreplacing} % Extra features for positioning and arrows
+\usepackage{subcaption}
+\usepackage{adjustbox}
+\usepackage{comment}
+
+
+\usepackage{color,hyperref}
+%\definecolor{darkblue}{rgb}{0.1,0.4,0.5}
+%\hypersetup{colorlinks,breaklinks, linkcolor=darkblue,urlcolor=darkblue,anchorcolor=darkblue,citecolor=darkblue}
+\newcommand{\sgg}[1]{\textbf{\color{cyan} SGG: #1}}
+\newcommand{\tianqing}[1]{\textbf{\color{teal} TQ: #1}}
+\newcommand{\todo}[1]{\textbf{\color{red} TO DO: #1}}
+\newcommand{\jean}[1]{\textbf{\color{orange} JCdJ: #1}}
+
+\usepackage{lineno}
+
+
+\title{\boldmath Cosmic Shear constraints from HSC Year 3 with clustering calibration of the tomographic redshift distributions from DESI}
+
+\author[1,2]{J. Choppin de Janvry\,\orcidlink{0009-0008-8066-446X}}
+\author[3]{B. Dai,}
+\author[1,4]{S. Gontcho A Gontcho,}
+\author[1,2]{U. Seljak,}
+\author[5]{T. Zhang\,\orcidlink{0000-0002-5596-198X}}
+
+\affiliation[1]{Physics Division, Lawrence Berkeley National Laboratory, Berkeley, CA 94720, USA}
+\affiliation[2]{Department of Physics, University of California, Berkeley, CA 94720, USA}
+\affiliation[3]{School of Natural Sciences, Institute for Advanced Study, 1 Einstein Drive, Princeton, New
+Jersey 08540, USA}
+\affiliation[4]{Department of Astronomy, University of Virginia, Charlottesville, VA 22904, USA}
+%\affiliation[5]{Virginia Institute for Theoretical Astronomy, University of Virginia, Charlottesville, VA 22904, USA}
+\affiliation[5]{Department of Physics and Astronomy and PITT PACC, University of Pittsburgh, Pittsburgh, PA 15260, USA}
+
+\emailAdd{jean.choppindejanvrydev@gmail.com}
+\emailAdd{biwei@ias.edu}
+\emailAdd{satya@virginia.edu}
+\emailAdd{useljak@berkeley.edu}
+\emailAdd{tq.zhang@pitt.edu}
+
+\abstract{We reanalyze cosmological constraints from Hyper Suprime-Cam (HSC) Y3 
+shear-shear correlation function using new calibration of the tomographic redshift distribution via the clustering redshifts method with DESI spectroscopy presented in Choppin De Janvry {\it et al.} (2025a) \cite{ChoppinDeJanvry2025a}.  
+We present both importance sampling of the original MCMC chains by HSC, applying the weights of our newly calibrated $\Delta z$ priors, as well as full MCMC analysis with new photometric redshift distributions, finding consistent results between the two. 
+We obtain the growth of structure parameter $S_8\equiv\sigma_8\sqrt{\Omega_m/0.3}=0.805^{+0.019}_{-0.018}$, compared to previous HSC Y3 result of $S_8=0.769^{+0.031}_{-0.034}$, which is a 1.8 reduction of error due to the improved clustering redshift calibrations, with the central value shifting considerably higher towards Planck cosmology. 
+With the new photometric redshift calibration, HSC Y3 has comparable constraining power to the recent KIDS Legacy and DES Y3. Combining all three gives $S_8=0.813^{+0.009}_{-0.010}$, which can be compared to $S_8=0.828\pm 0.012$ from CMB lensing. Overall there is no evidence for deviation from Planck on $S_8$ in any of the weak lensing analyses, and combining galaxy lensing with CMB lensing gives a sub-percent constraint $S_8=0.818\pm 0.007$, comparable in both precision and value to the most recent Planck+ACT+DESI constraint $S_8=0.812\pm 0.007$. } 
+
+\begin{document} 
+\maketitle
+\flushbottom
+
+\linenumbers
+
+\input{sections/introduction}
+
+\input{sections/data}
+
+\input{sections/method}
+
+\input{sections/results}
+
+\input{sections/conclusion}
+
+\newpage
+\input{sections/acknowledgements}
+
+\appendix
+\input{sections/appendix}
+
+\bibliographystyle{JHEP}
+\bibliography{src/intro,src/desi,src/hsc,src/method,src/software,src/references,src/s8,src/others}
+ 
+\end{document}

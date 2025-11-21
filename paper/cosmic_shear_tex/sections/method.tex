@@ -1,0 +1,42 @@
+\section{Method}
+\label{sec:method}
+
+%\todo{Present the methodology used to recover the P(k) and extrapolate cosmological constraints}
+%\tianqing{I think the methodology should be presented in two sub-sections, one for importance weighting, one for the likelihood analysis. I have taken the liberty to re-organize these text.}
+%\jean{I agree. Thank you for this change. Should we cover anything about the theoretical basics, or do we delegate this to citing Li+2023 ?}
+%\sgg{Delegate to Li+2023.}
+
+This section presents the methodology followed in this analysis to recover cosmological constraints. We obtain cosmological constraints in two independent approaches: (a) In Section~\ref{sec:method:importance}, we apply importance weighting to the redshift distribution parameters of the fiducial HSC Y3 cosmic shear chains \cite{Li2023_HSCY3_CosmicShear,Dalal2023CosmoShearHSC} based on our new redshift parameter priors; (b) in Section~\ref{sec:method:mcmc}, we re-run likelihood analysis using the fiducial HSC cosmic shear, with our updated redshift distribution and redshift parameter priors. 
+
+
+\subsection{Importance Weighting}
+\label{sec:method:importance}
+
+Our first approach is to apply importance weights to the photometric redshift shifts $\Delta z$ on the original chains \cite{Li2023_HSCY3_CosmicShear}. The importance weights are only applied to the last two tomographic bins, leveraging the broad uniform ($\mathcal{U}(-1,1)$) that were applied to the shift parameters in the original analysis. No resampling is applied to the first two bins, because of their narrow gaussian prior already set by original HSC analysis. Bin 1's new calibration presents a slight shift compared to the original $n(z)$ presented in \cite{HSCClusteringRau2023}, but does not offer significant cosmological information due to being at low redshifts ($0.3\lesssim z\lesssim0.6$), so reweighting for bin 1 is neglected. Bin 2's calibration is fully consistent with the calibration presented by Cosmic Shear Ratios \cite{Rana2025HSCY3CosmicShearRatios} and the original calibration \cite{HSCClusteringRau2023}. The obtained result is also consistent with the sampling result, as shown in section \ref{sec:results}, however, the posterior volume is larger, attributed to larger priors on the first two Bins. The weights $w^{(k)}_i$ derived for Bin $k\in\{3,\,4\}$ are:
+\begin{equation}
+    w^{(k)}_i=e^{\left(\frac{\mu^{(k)}_i-\mu^{(k)}}{\sigma^{(k)}}\right)}
+\end{equation}
+where $\mu^{(k)}_i$ is the mean redshift shift of Bin $k$ of posterior draw $i$ from the original chain, $\mu^{(k)}$, $\sigma^{(k)}$ are respectively the mean and standard deviations of the new prior. Since no weighting is originally applied from the uniform prior, we can multiply the existing weights in MCMC chains with $w^{(k)}_i$.
+
+\subsection{Likelihood Analysis}
+\label{sec:method:mcmc}
+
+Our second approach towards cosmological parameter inference is to re-run the HSC Y3 fiducial likelihood analysis with our DESI-calibrated redshift distribution $n(z)$ for all four tomographic bins. 
+
+The real-space cosmic shear likelihood analysis follows the setup presented in \cite{Li2023_HSCY3_CosmicShear} as close as possible, which enables us to highlight the effects caused solely by the photometric redshift calibration. Our analysis setup follows the modeling choices in \cite{Li2023_HSCY3_CosmicShear} in terms of the calculation of the Baryonic physics, galaxy intrinsic alignment, shear multiplicative bias, and PSF additive bias. 
+For all parameters besides the photo-$z$ parameters, we follow the choices performed in \cite{Li2023_HSCY3_CosmicShear, Dalal2023CosmoShearHSC} and implement a total of 23 free parameters. The cosmological inference is implemented in the public software \texttt{CosmoSIS}\footnote{\href{https://github.com/cosmosis-developers/cosmosis-standard-library}{\textcolor{blue}{github.com/cosmosis-developers/cosmosis-standard-library}}} and the configuration files used in this analysis are made available through the common repository for this work and the companion $n(z)$ calibration analysis \citep{ChoppinDeJanvry2025a}: \href{https://github.com/JeanCHDJdev/desi-y3-hsc}{\textcolor{blue}{github.com/jeanchdjdev/desi-y3-hsc}}. The priors for all of the 23 parameters are described in table \ref{tab:post}. The fixed parameters are given in table \ref{tab:fixed} in appendix \ref{sec:appendix}.
+For the matter power spectrum, we use the CAMB\footnote{\href{https://camb.info/}{\textcolor{blue} {camb.info}}} \cite{LewisCAMB2011} linear power spectrum emulator, in a divergent approach from using the BACCO suite of emulators  \cite{Arico2022BACCOEmulator} \footnote{\href{https://baccoemu.readthedocs.io/en/latest/}{\textcolor{blue}{baccoemu.readthedocs.io}}} used in \cite{Li2023_HSCY3_CosmicShear}. It is shown that there is no significant different in cosmology results between CAMB and BACCO emulator for HSC Y3 \cite{Li2023_HSCY3_CosmicShear}.
+
+
+The two-point correlation functions (TPCF) of galaxy shear are denoted $\xi_\pm$ \cite{Li2023_HSCY3_CosmicShear} and are measured on the shear catalog introduced in section \ref{sec:data:hsc}.
+We also follow the same formalism when it comes to likelihood calculation, compared to \cite{Li2023_HSCY3_CosmicShear}.
+The scale cut applied in this analysis is the same as  \cite{Li2023_HSCY3_CosmicShear}: $7.1 < \theta < 56.6$ [arcmin] for $\xi_+(\theta)$, and $31.2 < \theta < 248$ [arcmin] for $\xi_+(\theta)$. We adopted the same covariance matrix calculated by 1404 mock HSC Y3 catalogs. We also apply the same Hartlap factor \cite{Hartlap2008} to the likelihood calculation to account for covariance matrix underestimation due to limited mock catalogs. In the HSC Y3 fiducial pipeline, the $S_8$ parameter is not sampled and is instead a computed property from the other sampled parameters. 
+
+%\subsection{Sampling}
+The sampler we used for the likelihood analysis is \texttt{pocoMC}\footnote{\href{https://pocomc.readthedocs.io/en/latest/}{\textcolor{blue}{pocomc.readthedocs.io}}} \cite{karamanis2022pocoMC1, karamanis2022pocoMC2}. \texttt{pocoMC} utilizes the Preconditioned Monte Carlo (PMC) algorithm which offers significant speed-ups over more traditional approaches such as Markov Chain Monte Carlo (MCMC). We verify \texttt{pocoMC} accurately recovers the fiducial HSC chains in \texttt{CosmoSIS}. 2D posteriors for parameters are obtained with the \texttt{getDist}\footnote{\href{https://getdist.readthedocs.io/en/latest/}{\textcolor{blue}{getdist.readthedocs.io}}} \cite{getDistLewis2025} package. Comparatively to \cite{Li2023_HSCY3_CosmicShear}, this work does not use the \texttt{ChainConsumer}\footnote{\href{https://samreay.github.io/ChainConsumer/}{\textcolor{blue}{samreay.github.io/ChainConsumer/}}} \cite{ChainConsumer_Hinton2016} package to treat the chains, due to potential biases incorporated by the boundary effects and smoothing of MC samples at the border with Kernel Density Estimation (KDE) mentioned in Appendix A of \cite{Li2023_HSCY3_CosmicShear}. However, constraints are also computed with \texttt{ChainConsumer} and consistency with \texttt{getDist} is confirmed for parameters $S_8$ and $\Omega_m$.
+
+In this work, the posterior of cosmological parameter constraints is presented in the form of:
+\begin{equation}\label{eq:presentation}
+    \text{1D mode} ^ {+34\%} _ {-34\%}\;\text{(MAP)}
+\end{equation}
+where the 1D mode is the is 1D mode of the marginalized 1D posterior distribution, the MAP is the Maximum A Posteriori point of the chain, and the error interval is the asymmetric $34\%$ confidence interval obtained with the $68\%$ interval from the cumulative density function. The values themselves are presented as obtained by \texttt{getDist} using \texttt{MCSamples.get1DDensity} and the weights are obtained through the sampling from \texttt{pocoMC} or included in the fiducial HSC Y3 chains.

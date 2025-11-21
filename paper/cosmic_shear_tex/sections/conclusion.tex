@@ -1,0 +1,30 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+In this work, we provide cosmological constraints from cosmic shear with DESI-calibrated HSC Year 3 $n(z)$ tomographic bin distributions. We find $S_8=0.805\pm{0.018}$ when using information from clustering redshifts in the re-calibration analysis. Leveraging clustering information from quasars and emission line galaxies (above $z\gtrsim0.8$), the calibrated priors of Bins 3 and Bin 4 are shown to be significantly less biased compared to the self-calibration shift posteriors, as displayed in Figure~\ref{fig:corner_resampling_sc} and Figure~\ref{fig:param_sigma_shifts}. While our 
+derived photometric bias is not zero, our results
+show that the original photometric calibrations of HSC are not very biased. 
+
+Our result can be compared to previous HSC Y3 result of $S_8=0.769^{+0.031}_{-0.034}$. Our result gives a 1.8 reduction of error due to the improved clustering redshift calibrations, with  
+the central value shifting considerably higher towards Planck cosmology. 
+Our reanalysis makes HSC competitive with other Stage 3 lensing surveys such as DES \cite{Amon2022CosmoShearDES, Secco2022CosmoShearDES} and KiDS \cite{Wright2025_KiDSLegacy}. In combination with DES and KiDS leads to the combined result $S_8=0.813^{+0.009}_{-0.008}$, competitive with the CMB lensing measurements. Further combining galaxy lensing with CMB lensing leads to the sub-percent $S_8=0.818\pm0.007$ constraint. In contrast to the $S_8$ $\sim2\sigma$ tension with CMB results originally found for HSC Y3 in \cite{Li2023_HSCY3_CosmicShear, Dalal2023CosmoShearHSC}, the findings of this work show no evidence of significant deviations from Planck $S_8$ measurements for HSC and for HSC combined with DES and KIDS Legacy. The compatibility with Planck results from the measurements of this analysis as well as the joint constraints from the Stage III weak lensing surveys suggest that the suspected "$S_8$ tension" \cite{DiValentino_S8_tension} was primarily systematics driven and has now been largely eliminated 
+from all of the WL analyses. We emphasize
+that we focus on WL only analyses here: the 
+analyses combining WL with galaxy clustering 
+have additional potential systematics that 
+may complicate their interpretation, and are
+not included here. 
+
+Our results suggest that clustering calibration of 
+WL photometric redshifts plays a crucial role in achieving the 
+goals of WL surveys. We expect the same to 
+apply to the 
+upcoming weak lensing releases of Stage III surveys such as the Dark Energy Survey Year 6 and HSC Public Data Release 4, as well as the upcoming releases of Stage IV weak lensing surveys such as Euclid \cite{EuclidI2024overview} and the Vera C. Rubin Legacy Survey of Space and Time \cite{LSST2019survey}. Assuming photometric 
+redshifts can be reliably calibrated with the spectroscopic surveys such as DESI, these will provide new percent-level constraints on the growth of structure of the universe, further validating the standard cosmological model.
+% ideas on reformulating the above, or is it okay like this ?
+
+%\todo{summarize our awesome result that keep pushing the stakes in the lensing is low buzz.}
+
+The code used for this work, the chains, and all the data to replicate the figures of this paper is made publicly available at \href{https://github.com/JeanCHDJdev/desi-y3-hsc/}{\textcolor{blue}{github.com/jeanchdjdev/desi-y3-hsc}}. For the specific cosmic shear analysis, this work is compiled under the \texttt{cosmic\_shear} directory of the repository.
+
+%\sgg{I believe you should have one github holding the code for both papers. However, distinguish which is which by organizing it into two different sub-folder.} => Done; we have a specific cosmic_shear folder... the rest is allocated to the n(z) work.
