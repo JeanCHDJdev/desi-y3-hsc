@@ -7,7 +7,7 @@ from scipy.stats import norm
 from pathlib import Path
 from getdist import MCSamples
 
-def load_and_process_data(filepath, new_priors=None, displace_mean_frompriors=None, pop_params=None, rename_priors=None, rename_dict=None):
+def load_and_process_data(filepath, new_priors=None, displace_mean_frompriors=None, pop_params=None, rename_priors=None):
     """
     Load and process MCMC chain data
     
@@ -25,8 +25,6 @@ def load_and_process_data(filepath, new_priors=None, displace_mean_frompriors=No
         Dictionary for renaming prior parameters. Keys are old names, values are new names.
     rename_dict : dict, optional
         Dictionary for renaming parameters. Keys are new names, values are old names.
-    flip_pz_shift : bool, optional
-        Whether to flip the sign of photo-z shift parameters.
     """
     with open(filepath, "r") as f:
         header = f.readline().lstrip("#").strip().split()
@@ -40,7 +38,9 @@ def load_and_process_data(filepath, new_priors=None, displace_mean_frompriors=No
     
     if rename_priors is not None:
         for k,v in rename_priors.items():
-            df[v] = df[k]
+            # safe renaming
+            if k in df.columns and v not in df.columns:
+                df[v] = df[k]
 
     if pop_params is not None:
         if isinstance(pop_params, str):
@@ -213,7 +213,7 @@ def summarize_samples(dfs_list, samples_list, params, filename, colors, linestyl
                         plt.grid()
                         plt.xlabel(p)
                         plt.ylabel("Density")
-                        plt.xlim(0.1, 0.4)
+                        #plt.xlim(0.1, 0.4)
                         
                     line = (
                         f"{p:35s} | Mode: {posterior_mode:.4f}, "
