@@ -144,6 +144,17 @@ def confidence_interval(x, cdf, level=0.68):
     upper = np.interp(x=upper_prob, xp=cdf, fp=x)
     return lower, upper
 
+def asymmetric_confidence_interval(x, pdf, cdf, frac=0.34):
+    idx_mode = np.argmax(pdf)
+    cdf_mode = cdf[idx_mode]
+
+    lower_prob = max(0, cdf_mode - frac)
+    upper_prob = min(1, cdf_mode + frac)
+
+    lower = np.interp(lower_prob, cdf, x)
+    upper = np.interp(upper_prob, cdf, x)
+
+    return lower, upper
 
 def analyze_param(df_post_reweight, samples: MCSamples, param: str):
     """Analyze a single parameter from the posterior reweighted dataframe."""
@@ -164,8 +175,8 @@ def analyze_param(df_post_reweight, samples: MCSamples, param: str):
     cdf = np.cumsum(pdf * dx)
     cdf /= cdf[-1]
 
-    ci_68 = confidence_interval(x, cdf, 0.68)
-    ci_95 = confidence_interval(x, cdf, 0.95)
+    ci_68 = asymmetric_confidence_interval(x, pdf, cdf, 0.34)
+    ci_95 = asymmetric_confidence_interval(x, pdf, cdf, 0.475)
 
     return MAP_val, posterior_mode, posterior_mean, ci_68, ci_95
 
