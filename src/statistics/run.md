@@ -62,15 +62,28 @@ OUTDIR="-o outputs/calibrationPIP/dr1/autos_SGC" && DEFAULT_FLAGS="-s 0 -ns 100 
 ```bash
 ### DR1: ###
 # A :
-OUTDIR="-o outputs/calibrationPIP/dr1/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -z -j -w PIP" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 LRG
+OUTDIR="-o outputs/calibrationPIP/dr1/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -j -w PIP" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 LRG
 # B :
-OUTDIR="-o outputs/calibrationPIP/dr1/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -z -j -w PIP" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 BGS_ANY && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 ELG_LOPnotqso
+OUTDIR="-o outputs/calibrationPIP/dr1/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -j -w PIP" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 BGS_ANY && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 ELG_LOPnotqso
 ### DR2: ###
 # A :
-OUTDIR="-o outputs/calibrationPIP/dr2/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -z -j -w PIP" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 LRG
+OUTDIR="-o outputs/calibrationPIP/dr2/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -j -w PIP" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 LRG
 # B :
-OUTDIR="-o outputs/calibrationPIP/dr2/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -z -j -w PIP" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 BGS_ANY && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 ELGnotqso
+OUTDIR="-o outputs/calibrationPIP/dr2/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -j -w PIP" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 BGS_ANY && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 ELGnotqso
 ```
+
+### Bin 4 QSO (appendix B):
+--------
+```bash
+OUTDIR="-o outputs/calibration_bin4_qso/dr1/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -z -j -w nonKP" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO
+```
+
+### Bin 5 (appendix B):
+--------
+```bash
+OUTDIR="-o outputs/calibration_bin5/dr2/cross" && DEFAULT_FLAGS="-t2 HSC -ns 100 -s 0 -j -w nonKP" && setcc && python run_corr.py $OUTDIR $DEFAULT_FLAGS -t1 QSO
+```
+
 
 ## Simulations :
 -----------------

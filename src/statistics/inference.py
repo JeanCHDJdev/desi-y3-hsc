@@ -666,6 +666,8 @@ def _get_fine_redshift_bins(fr: cf.CorrFileReader, tracer="Merged"):
     else:
         if isinstance(tracer, str):
             tracers = [tracer]
+        else:
+            tracers = tracer
     for t in tracers:
         bin_t = fr.get_bins(t)
         mint = min(mint, min(bin_t))
@@ -966,7 +968,7 @@ def merge_estimators(
         t in ["LRG", "QSO", "ELGnotqso", "ELG_LOPnotqso", "BGS_ANY"] for t in tracers
     ), f"which_tracers must be a list of strings in [LRG, QSO, ELGnotqso, ELG_LOPnotqso, BGS_ANY], got {tracers}"
 
-    redshift_bins = _get_fine_redshift_bins(fr_cross)
+    redshift_bins = _get_fine_redshift_bins(fr_cross, tracer=tracers)
     tracer_bins = {t: fr_cross.get_bins(t) for t in tracers}
     redshift_bin_centers = 0.5 * (redshift_bins[:-1] + redshift_bins[1:])
     dz = np.mean(np.diff(redshift_bins))

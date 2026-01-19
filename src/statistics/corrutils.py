@@ -52,7 +52,7 @@ class CorrelationMeta(ABC):
     z_desi_randoms_col = "Z"
 
     # use redshift column to go to the h-1Mpc distance
-    distance_col = "dist"
+    distance_col = "dist" # pointless in 2D, this was for some 3D tests at the time.
 
     # which DR, either DR1 or DR2
     data_release = "DR2"
@@ -91,16 +91,33 @@ class CorrelationMeta(ABC):
     # bins_lrg = np.arange(0.4, 1.125, 0.025)  # 0.4 < z < 1.1
     # bins_elg = np.arange(0.8, 1.625, 0.025)  # 0.8 < z < 1.6
     # bins_qso = np.arange(0.8, 2.825, 0.025)  # 0.8 < z < 2.8
+    
     # bins for HSC bias in DR2
-    bins_bgs = np.arange(0.0, 0.625, 0.025)  # 0 < z < 0.6
-    bins_lrg = np.arange(0.3, 1.225, 0.025)  # 0.3 < z < 1.2
-    bins_elg = np.arange(0.7, 1.625, 0.025)  # 0.7 < z < 1.6
-    bins_qso = np.arange(0.7, 2.825, 0.025)  # 0.7 < z < 2.8
+    # bins_bgs = np.arange(0.0, 0.625, 0.025)  # 0 < z < 0.6
+    # bins_lrg = np.arange(0.3, 1.225, 0.025)  # 0.3 < z < 1.2
+    # bins_elg = np.arange(0.7, 1.625, 0.025)  # 0.7 < z < 1.6
+    # bins_qso = np.arange(0.7, 2.825, 0.025)  # 0.7 < z < 2.8
+    
     # bins for HSC bias
-    bins_hsc = np.arange(0, 1.9, 0.1)
+    # bins_hsc = np.arange(0, 1.9, 0.1)
+    
+    # bins for cross-corr of bin 4 dr 1 with QSO
+    #bins_qso = np.arange(0.8, 2.85, 0.05)
+    #bins_lrg = np.arange(0., 0.2, 0.1) # includes useless bins
+    #bins_elg = np.arange(0., 0.2, 0.1)
+    #bins_bgs = np.arange(0., 0.2, 0.1)
 
-    # bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    #bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
 
+    
+    # bins for cross-corr of fake bin 5 with dr 2 QSO
+    bins_qso = np.arange(0.7, 2.85, 0.05)
+    bins_lrg = np.arange(0., 0.2, 0.1) # includes useless bins
+    bins_elg = np.arange(0., 0.2, 0.1)
+    bins_bgs = np.arange(0., 0.2, 0.1)
+    bins_hsc = np.arange(1.8, 2.1, 0.2) # bin is 1.8 <= photoz < 2.0
+    is_bin_5_test = True
+    
     bins_tracers = {
         "LRG": bins_lrg,
         "ELGnotqso": bins_elg,
@@ -149,12 +166,16 @@ class CorrelationMeta(ABC):
         output_dir=None,
         sims_version=0,
         use_zbin=False,
-        weight_type="PIP",  # "nonKP" if using PIP,
+        weight_type="nonKP",  # "PIP" if using PIP,
         sample_rate_1=1,
         sample_rate_2=1,
         corr_type="theta",
         nproc=None,
     ):
+        ## this is somewhat deprecated so verify
+        assert sample_rate_1 == sample_rate_2 == 1, "Proceed with caution if subsampling."
+        if self.is_bin_5_test:
+            logger.warning("Warning : is_bin_5_test activated.")
         assert logger is not None, "Logger not provided"
         self.logger = logger
 
@@ -238,6 +259,10 @@ class CorrelationMeta(ABC):
         # once targets are figured out we can call the bins
         self.bin_redshift1 = self.bins_tracers[tgt1]
         self.bin_redshift2 = self.bins_tracers[tgt2]
+
+        if self.is_bin_5_test:
+            for z5 in self.bin_redshift2:
+                assert z5 > 1.6
 
         # which edges and correlation type to use :
         self.corr_type = corr_type
@@ -462,6 +487,15 @@ class CorrelationMeta(ABC):
                 else None
             ),
         )
+        if self.is_bin_5_test:
+            ## 25% subsampling rate in order 
+            rng_samp = np.random.Generator(np.random.PCG64DXSM(seed=24))
+            lcat = cat.shape[0]
+            cat = cat[rng_samp.choice(lcat, size=int(0.25 * lcat), replace=False)]
+            self.logger.info(
+                f"Proceeding with Bin 5 test."
+            )
+
         self.logger.info(
             f"Read HSC data in {time.time()-tih:.2f} seconds ({len(cat)} rows)"
         )

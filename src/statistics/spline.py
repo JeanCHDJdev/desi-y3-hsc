@@ -204,13 +204,13 @@ class BayesianBSpline:
         print(f"Model fitting complete. Summary: {summary}")
 
         if summary["r_hat"].max() > 1.1:
-            print("Warning: R-hat > 1.1 detected. Consider more tuning or samples.")
+            print("Warning: R-hat > 1.1")
 
         return self
 
     def save_model(self, filename_base):
         """
-        Save the fitted model using PyMC's native trace format + minimal metadata.
+        Save the fitted model and metadata.
 
         This saves two files:
         1. {filename_base}.nc - The PyMC InferenceData (trace) in NetCDF format
@@ -249,7 +249,7 @@ class BayesianBSpline:
 
     def load_model(self, filename_base):
         """
-        Load a model from saved trace + metadata files and recreate the PyMC model.
+        Load a model from saved trace + metadata files.
 
         Parameters:
         -----------
