@@ -467,9 +467,9 @@ def compute_npz_merged(
     deltaz = fine_redshift[fine_bin] - fine_redshift[fine_bin - 1]
 
     frss = cf.CorrFileReader(path_dictionary["MergedxMerged"])
-    file_ss = frss.get_file(fine_bin, fine_bin, tracer, tracer, "Merged")
+    file_ss = frss.get_file(fine_bin, fine_bin, "Merged", "Merged", "Merged")
     frsp = cf.CorrFileReader(path_dictionary["MergedxHSC"])
-    file_sp = frsp.get_file(fine_bin, tomo_bin, tracer, "HSC", "Merged")
+    file_sp = frsp.get_file(fine_bin, tomo_bin, "Merged", "HSC", "Merged")
 
     # in case the file is not available on the redshift range... mostly useful for tomo = 1
     if not Path(file_ss).exists() or not Path(file_sp).exists():
@@ -549,6 +549,7 @@ def full_npz_tomo(
     rebin=1,
     return_chunks=False,
     precomp_wdm=None,
+    mode="Standard",
 ):
     """
     Computes n(z) for the provided tracer and specific tomographic. Returns the array of n(z) values
@@ -596,8 +597,8 @@ def full_npz_tomo(
     # calibration samples from HSC, if needed
     fr_hsc = cf.CorrFileReader(path_dictionary["HSC"])
 
-    if tracer == "Merged":
-        fine_redshift = _get_fine_redshift_bins(fr)
+    if mode == "Merged":
+        fine_redshift = _get_fine_redshift_bins(fr, tracer=tracer)
     else:
         fine_redshift = fr.get_bins(tracer)
     hsc_redshift = fr_hsc.get_bins("HSC")
@@ -612,7 +613,7 @@ def full_npz_tomo(
     ), f"len(hsc_bins) = {len(hsc_bins)} != len(fine_redshift) = {len(fine_redshift)}"
 
     results = []
-    if tracer == "Merged":
+    if mode == "Merged":
         print(f"Using merged method for tracer {tracer} and tomo bin {tomo_bin}.")
         func = compute_npz_merged
     else:
