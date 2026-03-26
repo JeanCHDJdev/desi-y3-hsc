@@ -7,6 +7,10 @@ from astropy.cosmology import FlatLambdaCDM
 from astropy.table import vstack, Table
 from scipy.interpolate import interp1d
 
+import sys
+project_root ="/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/"
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 import src.statistics.corrfiles as cf
 
 # Define the cosmology model and global constants.

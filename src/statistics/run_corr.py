@@ -13,8 +13,11 @@ from pathlib import Path
 from argparse import ArgumentParser
 from pycorr import setup_logging
 
+import sys
+project_root ="/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/"
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 import src.statistics.corrutils as cu
-
 
 def parse_args():
     parser = ArgumentParser()

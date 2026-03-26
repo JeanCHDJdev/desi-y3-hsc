@@ -3,10 +3,16 @@ Inference pipeline for the results.
 """
 
 import numpy as np
+import sys
+import os
 
 from pathlib import Path
 from pycorr import TwoPointEstimator
 
+import sys
+project_root ="/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/"
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 import src.statistics.corrfiles as cf
 import src.statistics.combination as comb
 import src.statistics.corrutils as cu
@@ -83,20 +89,29 @@ def single_bin_corr(
     corr_sc = corr[scale_mask]
     comovsep_sc = comovsep[scale_mask]
     cov_sc = cov[scale_mask][:, scale_mask]
+    
+    if len(comovsep_sc) == 0:                                                                       # copilot
+        return 0.0, 0.0, comovsep_sc
 
     if integration == "none":
         return corr_sc, np.sqrt(np.diag(cov_sc)), comovsep_sc
+
+    if len(comovsep_sc) == 1:                                                                       # copilot
+        # For single point, the integral is the value itself (normalized kernel = 1)
+        w_bar = corr_sc[0]
+        w_err = np.sqrt(cov_sc[0, 0])
+        return w_bar, w_err, comovsep_sc
 
     # now do the single bin integration with $W(r)\propto r^{\beta}$ (default $\beta$ = -1)$
     wkernel = comovsep_sc ** (
         beta
     )  # note that we have already cut down weights to match the scale cuts.
     # divide by the integral of the kernel to normalize it
-    wkernel /= np.trapezoid(y=wkernel, x=comovsep_sc)
+    wkernel /= np.trapz(y=wkernel, x=comovsep_sc)
 
     if integration == "single-bin":
         # compute the error bars given the covariance matrix
-        w_bar = np.trapezoid(
+        w_bar = np.trapz(
             y=np.multiply(wkernel, corr[scale_mask]), x=comovsep[scale_mask]
         )
         # weights are trapezoidal integration weights so :
@@ -1085,7 +1100,12 @@ def merge_estimators(
     return
 
 
-def merge_results(zvals_merge, npz_merge, npz_err_merge, precision=0.0001):
+def merge_results(
+    zvals_merge,
+    npz_merge,
+    npz_err_merge,
+    precision=0.0001,
+):
     """
     Merge results from different tomographic bins using inverse variance weighting.
 
@@ -1093,7 +1113,7 @@ def merge_results(zvals_merge, npz_merge, npz_err_merge, precision=0.0001):
     - zvals_merge: list of arrays, each containing redshift values for one tracer/bin
     - npz_merge: list of arrays, each containing values at zvals
     - npz_err_merge: list of arrays, each containing errors at zvals
-    - precision: float, the precision to which redshift values are rounded for merging
+        - precision: float, the precision to which redshift values are rounded for merging
 
     Returns:
     - zvals: sorted array of unique redshift values

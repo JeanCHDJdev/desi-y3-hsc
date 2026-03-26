@@ -19,6 +19,10 @@ from astropy import units as u
 from astropy.coordinates import SkyCoord
 from pycorr import TwoPointCorrelationFunction, KMeansSubsampler
 
+import sys
+project_root ="/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/"
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 import src.statistics.cosmotools as ct
 from src.statistics.corrfiles import (
     fetch_desi_files,
@@ -61,7 +65,7 @@ class CorrelationMeta(ABC):
     moc_list = sorted(
         [
             Path(
-                "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/mocs/",
+                "/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/data/mocs/",
                 f"hsc_moc{i+1}.fits",
             )
             for i in range(0, 4)
@@ -75,10 +79,10 @@ class CorrelationMeta(ABC):
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
     # bins in DR2
-    # bins_bgs = np.arange(0.0, 0.65, 0.05)  # 0 < z < 0.5
-    # bins_lrg = np.arange(0.3, 1.25, 0.05)  # 0.3 < z < 1.2
-    # bins_elg = np.arange(0.7, 1.65, 0.05)  # 0.7 < z < 1.6
-    # bins_qso = np.arange(0.7, 2.85, 0.05)  # 0.7 < z < 2.8
+    bins_bgs = np.arange(0.0, 0.65, 0.05)  # 0 < z < 0.6
+    bins_lrg = np.arange(0.3, 1.25, 0.05)  # 0.3 < z < 1.2
+    bins_elg = np.arange(0.7, 1.65, 0.05)  # 0.7 < z < 1.6
+    bins_qso = np.arange(0.7, 2.85, 0.05)  # 0.7 < z < 2.8
 
     # bins in DR1
     # bins_bgs = np.arange(0.0, 0.55, 0.05) # 0 < z < 0.5
@@ -107,16 +111,16 @@ class CorrelationMeta(ABC):
     #bins_elg = np.arange(0., 0.2, 0.1)
     #bins_bgs = np.arange(0., 0.2, 0.1)
 
-    #bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
 
     
     # bins for cross-corr of fake bin 5 with dr 2 QSO
-    bins_qso = np.arange(0.7, 2.85, 0.05)
-    bins_lrg = np.arange(0., 0.2, 0.1) # includes useless bins
-    bins_elg = np.arange(0., 0.2, 0.1)
-    bins_bgs = np.arange(0., 0.2, 0.1)
-    bins_hsc = np.arange(1.8, 2.1, 0.2) # bin is 1.8 <= photoz < 2.0
-    is_bin_5_test = True
+    #bins_qso = np.arange(0.7, 2.85, 0.05)
+    #bins_lrg = np.arange(0., 0.2, 0.1) # includes useless bins
+    #bins_elg = np.arange(0., 0.2, 0.1)
+    #bins_bgs = np.arange(0., 0.2, 0.1)
+    #bins_hsc = np.arange(1.8, 2.1, 0.2) # bin is 1.8 <= photoz < 2.0
+    is_bin_5_test = False
     
     bins_tracers = {
         "LRG": bins_lrg,
@@ -821,7 +825,6 @@ class CorrelationMeta(ABC):
 
         return dp1, dp2, rp1, rp2, dw1, dw2, rw1, rw2
 
-
 class CrossCorrelation(CorrelationMeta):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -829,7 +832,7 @@ class CrossCorrelation(CorrelationMeta):
     def run_corr(self):
 
         dp1, dp2, rp1, rp2, dw1, dw2, rw1, rw2 = self.make_corr_data()
-
+               
         tpcf = TwoPointCorrelationFunction(
             edges=self.theta_edges,
             # davis peebles has a weird, non symetric ordering where we have to give it
@@ -867,6 +870,7 @@ class CrossCorrelation(CorrelationMeta):
             position_type=self.pos_type,  # 'rd' for RA/Dec
             engine="corrfunc",
             estimator=self.estimator_type,
+            gpu=False
         )
         tpcf.save(self.outfile)
 
