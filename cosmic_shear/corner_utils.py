@@ -233,10 +233,10 @@ def summarize_samples(dfs_list, samples_list, params, filename, colors, linestyl
                     dx = np.mean(np.diff(x))
                     param_cdf = np.cumsum(prob * dx) / np.sum(prob * dx)
 
-                    ci_68 = confidence_interval(param_density.x, param_cdf, 0.68)
-                    ci_95 = confidence_interval(param_density.x, param_cdf, 0.95)
+                    ci_68 = asymmetric_confidence_interval(x, prob, param_cdf, 0.34)
+                    ci_95 = asymmetric_confidence_interval(x, prob, param_cdf, 0.475)
 
-                    if p == "cosmological_parameters--omega_m":
+                    if p == "cosmological_parameters--S_8":
                         plt.plot(
                             x,
                             P,
@@ -267,13 +267,19 @@ def summarize_samples(dfs_list, samples_list, params, filename, colors, linestyl
                         plt.ylabel("Density")
                         # plt.xlim(0.1, 0.4)
 
+                    upper_err_68 = ci_68[1] - posterior_mode
+                    lower_err_68 = posterior_mode - ci_68[0]
+                    latex_mode = (
+                        f"${posterior_mode:.3f}^{{+{upper_err_68:.3f}}}"
+                        f"_{{-{lower_err_68:.3f}}}\\;({MAP_val:.3f})$"
+                    )
                     line = (
                         f"{p:35s} | Mode: {posterior_mode:.4f}, "
                         f"MAP: {MAP_val:.4f}, "
                         f"Mean: {posterior_mean:.4f} "
                         f"68%-: {ci_68[0]:.4f}, 68%+: {ci_68[1]:.4f}, "
                         f"95%-: {ci_95[0]:.4f}, 95%+: {ci_95[1]:.4f}, LaTeX: "
-                        f"{samples.getLatex(p)}"
+                        f"{latex_mode}"
                     )
                     print(line)
                     f.write(line + "\n")
