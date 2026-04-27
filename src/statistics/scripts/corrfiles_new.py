@@ -10,6 +10,11 @@ import psutil
 
 from pathlib import Path
 
+import config_loader as cl
+
+username = cl.username
+hsc_catalog = cl.hsc_catalog
+desi_version = cl.desi_version
 
 class CorrFileReader:
     """
@@ -137,7 +142,7 @@ def fetch_desi_files(
     sims=False,
     sims_version=0,
     cap=None,
-    version="DR2",
+    version=desi_version,
 ):
     if cap is None:
         raise ValueError("cap cannot be None. Please provide a value.")
@@ -154,7 +159,7 @@ def fetch_desi_files(
     try:
         if sims:
             sims_root = (
-                "/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/data/sims/"
+                f"/global/cfs/projectdirs/desi/users/{username}/desi-y3-hsc/data/sims/"
             )
             if randoms:
                 return Path(sims_root, "randoms", f"{tgt}_ran_hsc_zcorr.fits")
@@ -214,7 +219,7 @@ def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=0
     try:
         if sims:
             sims_root = (
-                "/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/data/sims/"
+                f"/global/cfs/projectdirs/desi/users/{username}/desi-y3-hsc/data/sims/"
             )
             if randoms:
                 return Path(
@@ -226,14 +231,14 @@ def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=0
         elif randoms:
             # this path root currently does not contain D/UD randoms as they
             root = Path(
-                "/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/data/hsc/randoms"
+                f"/global/cfs/projectdirs/desi/users/{username}/desi-y3-hsc/data/hsc/randoms"
             )
             return list(
                 root.glob(f'edge_sc_cr_hscr{"*" if include_dud else "[0-9]"}.fits')
             )
         elif not sims and not randoms:
             return Path(
-                "/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/data/hsc/cat/hscy3_cat.fits"
+                f"/global/cfs/projectdirs/desi/users/{username}/desi-y3-hsc/data/hsc/cat/{hsc_catalog}.fits"
             )
     except PermissionError:
         logging.error(f"Permission denied accessing HSC files and randoms = {randoms}")

@@ -13,11 +13,10 @@ from pathlib import Path
 from argparse import ArgumentParser
 from pycorr import setup_logging
 
-import sys
-project_root ="/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/"
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-import src.statistics.corrutils as cu
+import corrutils_new as cu
+import config_loader as cl
+
+username = cl.username
 
 def parse_args():
     parser = ArgumentParser()
@@ -154,7 +153,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-
+    
     tgt1 = args.tgt1
     tgt2 = args.tgt2
     jackknife = args.jackknife
@@ -186,8 +185,8 @@ def main():
     if areas is not None:
         areas = np.array([int(p) for p in areas])
         assert len(areas) > 0, "areas should be a list of integers"
-        assert np.all((0 < areas) & (areas < len(cu.CorrelationMeta.moc_list))), (
-            f"areas should be less than {len(cu.CorrelationMeta.moc_list)} "
+        assert np.all((0 < areas) & (areas < len(cu.CorrelationMeta.moc_list)+1)), (
+            f"areas should be less than {len(cu.CorrelationMeta.moc_list)+1} "
             "and greater than 0"
         )
     else:

@@ -7,11 +7,10 @@ from astropy.cosmology import FlatLambdaCDM
 from astropy.table import vstack, Table
 from scipy.interpolate import interp1d
 
-import sys
-project_root ="/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/"
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-import src.statistics.corrfiles as cf
+import corrfiles_new as cf
+import config_loader as cl
+
+username = cl.username
 
 # Define the cosmology model and global constants.
 
@@ -333,9 +332,15 @@ def parametrize_bias(tracer, tomo_bin, wdm, scale_cut):
             alpha_model_p = lambda z: -0.646  # -0.369
         case 4:
             alpha_model_p = lambda z: -0.485  # -0.065
+        case 5:
+            alpha_model_p = lambda z: -0.535#-0.296
+        case 6:
+            alpha_model_p = lambda z: -0.425#-0.408
+        case 7:
+            alpha_model_p = lambda z: -0.317#0.564
         case _:
             raise ValueError(
-                f"Unknown tomographic bin: {tomo_bin}. Must be one of [1, 2, 3, 4]"
+                f"Unknown tomographic bin: {tomo_bin}. Must be one of [1, 2, 3, 4, 5, 6, 7]"
             )
 
     # --------------------------------------

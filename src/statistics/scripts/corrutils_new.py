@@ -19,24 +19,23 @@ from astropy import units as u
 from astropy.coordinates import SkyCoord
 from pycorr import TwoPointCorrelationFunction, KMeansSubsampler
 
-import sys
-project_root ="/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/"
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-import src.statistics.cosmotools as ct
-from src.statistics.corrfiles import (
+import cosmotools_new as ct
+from corrfiles_new import (
     fetch_desi_files,
     fetch_hsc_files,
     setup_crosscorr_logging,
 )
+import config_loader as cl
 
+username = cl.username
+desi_version = cl.desi_version
 
 class CorrelationMeta(ABC):
     """
     Meta class for the cross-correlation analysis, ruling out columns,
     redshift bins and other parameters, as well as a few setup and utilities.
     """
-
+    
     # Attributes that each cross corr code needs to know about
     ra_hsc_col = "ra"
     dec_hsc_col = "dec"
@@ -59,13 +58,13 @@ class CorrelationMeta(ABC):
     distance_col = "dist" # pointless in 2D, this was for some 3D tests at the time.
 
     # which DR, either DR1 or DR2
-    data_release = "DR2"
+    data_release = desi_version
 
     ## MOC list
     moc_list = sorted(
         [
             Path(
-                "/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/data/mocs/",
+                f"/global/cfs/projectdirs/desi/users/{username}/desi-y3-hsc/data/mocs/",
                 f"hsc_moc{i+1}.fits",
             )
             for i in range(0, 4)
@@ -79,10 +78,10 @@ class CorrelationMeta(ABC):
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
     # bins in DR2
-    bins_bgs = np.arange(0.0, 0.65, 0.05)  # 0 < z < 0.6
-    bins_lrg = np.arange(0.3, 1.25, 0.05)  # 0.3 < z < 1.2
-    bins_elg = np.arange(0.7, 1.65, 0.05)  # 0.7 < z < 1.6
-    bins_qso = np.arange(0.7, 2.85, 0.05)  # 0.7 < z < 2.8
+    #bins_bgs = np.arange(0.0, 0.65, 0.05)  # 0 < z < 0.6
+    #bins_lrg = np.arange(0.3, 1.25, 0.05)  # 0.3 < z < 1.2
+    #bins_elg = np.arange(0.7, 1.65, 0.05)  # 0.7 < z < 1.6
+    #bins_qso = np.arange(0.7, 2.85, 0.05)  # 0.7 < z < 2.8
 
     # bins in DR1
     # bins_bgs = np.arange(0.0, 0.55, 0.05) # 0 < z < 0.5
@@ -111,15 +110,16 @@ class CorrelationMeta(ABC):
     #bins_elg = np.arange(0., 0.2, 0.1)
     #bins_bgs = np.arange(0., 0.2, 0.1)
 
-    bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
+    #bins_hsc = np.arange(0.3, 1.8, 0.3) # 0.3 < z <= 1.5 (tomographic binning has .3 bins)
 
     
-    # bins for cross-corr of fake bin 5 with dr 2 QSO
-    #bins_qso = np.arange(0.7, 2.85, 0.05)
-    #bins_lrg = np.arange(0., 0.2, 0.1) # includes useless bins
-    #bins_elg = np.arange(0., 0.2, 0.1)
-    #bins_bgs = np.arange(0., 0.2, 0.1)
-    #bins_hsc = np.arange(1.8, 2.1, 0.2) # bin is 1.8 <= photoz < 2.0
+    # bins for cross-corr of bin 5 with dr2
+    bins_bgs = cl.bins_bgs  # 0 <= z < 0.6
+    bins_lrg = cl.bins_lrg  # 0.3 <= z < 1.2
+    bins_elg = cl.bins_elg  # 0.7 <= z < 1.6
+    bins_qso = cl.bins_qso  # 0.7 <= z < 2.8
+    bins_hsc = cl.bins_hsc
+    
     is_bin_5_test = False
     
     bins_tracers = {

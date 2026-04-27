@@ -9,15 +9,13 @@ import os
 from pathlib import Path
 from pycorr import TwoPointEstimator
 
-import sys
-project_root ="/global/cfs/projectdirs/desi/users/qlavier/desi-y3-hsc/"
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-import src.statistics.corrfiles as cf
-import src.statistics.combination as comb
-import src.statistics.corrutils as cu
-import src.statistics.cosmotools as ct
+import corrfiles_new as cf
+import combination_new as comb
+import corrutils_new as cu
+import cosmotools_new as ct
+import config_loader as cl
 
+username = cl.username
 
 def combine_estimators(estimators, which_patches=None, rebin=1):
     """
@@ -198,7 +196,8 @@ def wss(
             mocngc.append(k)
         if v == "SGC":
             mocsgc.append(k)
-
+    mocngc=[1]                                                                                          # copilot
+    mocsgc=[3]                                                                                          # copilot
     estimatorNGC = None
     estimatorSGC = None
 
@@ -257,7 +256,7 @@ def wpp(
     fr = cf.CorrFileReader(path)
     bins_hsc = fr.get_bins("HSC")
 
-    files = fr.get_file(bin_index, bin_index, "HSC", "HSC", moc=None)
+    files = fr.get_file(bin_index, bin_index, "HSC", "HSC", moc=which_patches)
     estimators = [TwoPointEstimator.load(f) for f in files]
     zloc = (bins_hsc[bin_index - 1] + bins_hsc[bin_index]) / 2
 
@@ -294,7 +293,7 @@ def wsp(
     estimators = []
     bins_tracer = fr.get_bins(tracer)
 
-    files = fr.get_file(fine_bin, tomo_bin, tracer, "HSC", moc=None)
+    files = fr.get_file(fine_bin, tomo_bin, tracer, "HSC", moc=which_patches)
 
     estimators = [TwoPointEstimator.load(f) for f in files]
     zloc = (bins_tracer[fine_bin - 1] + bins_tracer[fine_bin]) / 2
@@ -420,13 +419,15 @@ def compute_npz(
         )
 
     if precomp_wdm is None:
-        print("Not accounting for DM evolution, precomp_wdm is None.")
+        #print("Not accounting for DM evolution, precomp_wdm is None.")
         precomp_wdm = 1
 
     # case where we only use cross : we take into account w_dm only
     factor_wdm = precomp_wdm
     result = wsp_meas / factor_wdm
     combined_err = wsp_err / factor_wdm
+    n_z = result
+    n_z_err = combined_err
 
     if do_spec_correction:
         if do_phot_correction:
@@ -439,7 +440,11 @@ def compute_npz(
         combined_err = comb.combine_error_bars(
             x=wsp_meas, xerr=wsp_err, y=wss_meas, yerr=wss_err
         ) / (factor)
+        n_z_bs = result
+        n_z_bs_err = combined_err
     if do_phot_correction:
+        wpp_meas = (alpha*((1 + zloc) ** gamma))**2
+        wpp_err = 0 # not a measurement, just a correction factor, so no error bar associated
         result /= alpha * ((1 + zloc) ** gamma)
         combined_err_prealpha = np.sqrt(
             (combined_err / ((1 + zloc) ** gamma)) ** 2
@@ -449,9 +454,11 @@ def compute_npz(
             (combined_err_prealpha / alpha) ** 2
             + (result * delta_alpha / alpha**2) ** 2
         )
+        n_z_bs_bp = result
+        n_z_bs_bp_err = combined_err
 
     if return_chunks:
-        return wsp_meas, wsp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
+        return wsp_meas, wsp_err, wss_meas, wss_err, wpp_meas, wpp_err, deltaz, zloc, n_z, n_z_err, n_z_bs, n_z_bs_err, n_z_bs_bp, n_z_bs_bp_err
     return result, combined_err
 
 
@@ -472,11 +479,12 @@ def compute_npz_merged(
 
     if which_patches is not None:
         raise ValueError("which_patches must be None for merged catalogs")
-
-    fine_redshift = _get_fine_redshift_bins(
-        cf.CorrFileReader(path_dictionary["DESIxHSC"])
-    )
-
+    
+    if tomo_bin in [1,2,3,4]:                                                                                           # copilot
+        fine_redshift = _get_fine_redshift_bins(cf.CorrFileReader(path_dictionary["DESIxHSC"]))                         # copilot
+    else:                                                                                                               # copilot
+        fine_redshift = _get_fine_redshift_bins(cf.CorrFileReader(path_dictionary["DESIxHSC"]), tracer=tracer)          # copilot
+    
     # this is the redshift we are at with the desi tracer
     zloc = (fine_redshift[fine_bin - 1] + fine_redshift[fine_bin]) / 2
     deltaz = fine_redshift[fine_bin] - fine_redshift[fine_bin - 1]
