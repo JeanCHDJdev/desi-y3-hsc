@@ -5,14 +5,20 @@ data/**
 !data/bias/** */
 !data/pz/** */
 
+*.png
+*.npz
+*.fits
+*.json
+*.npy
+*.sacc
+*.fits
+*.parquet
+*.pkl
+*.nc
+*.txt
+
 # job logs
 cosmic_shear/logs/**
-
-*fits
-*parquet
-# for splines
-*pkl
-*nc
 
 #runs
 src/statistics/outputs/**
@@ -22,6 +28,7 @@ cosmic_shear/chains/**
 
 ## others
 src/statistics/deprecated/** */
+old/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
