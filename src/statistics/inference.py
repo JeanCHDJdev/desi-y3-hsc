@@ -420,20 +420,27 @@ def compute_npz(
             # if not doing phot correction then we take into account evolution of wdm with z for the phot sample
             # so a square root dependence on wdm, that we multiply by delta_z
             factor = np.sqrt(deltaz * precomp_wdm)
-        result = wsp_meas / (np.sqrt(wss_meas) * factor)
-        combined_err = comb.combine_error_bars(
+        n_z_bs = wsp_meas / (np.sqrt(wss_meas) * factor)
+        n_z_bs_err = comb.combine_error_bars(
             x=wsp_meas, xerr=wsp_err, y=wss_meas, yerr=wss_err
         ) / (factor)
+        
+        result = n_z_bs
+        combined_err = n_z_bs_err
+        
     if do_phot_correction:
-        result /= alpha * ((1 + zloc) ** gamma)
-        combined_err_prealpha = np.sqrt(
-            (combined_err / ((1 + zloc) ** gamma)) ** 2
-            + np.log(1 + zloc) * combined_err * delta_gamma / ((1 + zloc) ** gamma)
+        n_z_bs_bp = n_z_bs / (alpha * ((1 + zloc) ** gamma))
+        n_z_bs_bp_err_prealpha = np.sqrt(
+            (n_z_bs_err / ((1 + zloc) ** gamma)) ** 2
+            + (np.log(1 + zloc) * n_z_bs * delta_gamma / ((1 + zloc) ** gamma))**2
         )
-        combined_err = np.sqrt(
-            (combined_err_prealpha / alpha) ** 2
-            + (result * delta_alpha / alpha**2) ** 2
+
+        n_z_bs_bp_err = np.sqrt(
+            (n_z_bs_bp_err_prealpha / alpha) ** 2
+            + (n_z_bs_bp * delta_alpha / alpha) ** 2
         )
+        result = n_z_bs_bp
+        combined_err = n_z_bs_bp_err
 
     if return_chunks:
         return wsp_meas, wsp_err, wss_meas, wss_err, deltaz, zloc, result, combined_err
