@@ -83,6 +83,7 @@ def single_bin_corr(
     corr_sc = corr[scale_mask]
     comovsep_sc = comovsep[scale_mask]
     cov_sc = cov[scale_mask][:, scale_mask]
+    assert comovsep_sc.size > 0
 
     if integration == "none":
         return corr_sc, np.sqrt(np.diag(cov_sc)), comovsep_sc
@@ -97,7 +98,7 @@ def single_bin_corr(
     if integration == "single-bin":
         # compute the error bars given the covariance matrix
         w_bar = np.trapezoid(
-            y=np.multiply(wkernel, corr[scale_mask]), x=comovsep[scale_mask]
+            y=np.multiply(wkernel, corr[scale_mask]), x=comovsep_sc
         )
         # weights are trapezoidal integration weights so :
         delta_r = np.zeros_like(comovsep_sc)
@@ -466,7 +467,7 @@ def compute_npz_merged(
         raise ValueError("which_patches must be None for merged catalogs")
 
     fine_redshift = _get_fine_redshift_bins(
-        cf.CorrFileReader(path_dictionary["DESIxHSC"])
+        cf.CorrFileReader(path_dictionary["DESIxHSC"]), tracer=tracer
     )
 
     # this is the redshift we are at with the desi tracer
