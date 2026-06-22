@@ -280,10 +280,18 @@ def _get_bias_correction(scale_cut):
         # without DR1 ELGs
         # alpha = 0.41590054607117416 ± 0.0038119837752912016
         # beta  = 0.4304153126089022 ± 0.013780481431903305
-        g1 = 0.41590054607117416
-        delta_g1 = 0.0038119837752912016
-        g2 = 0.4304153126089022
-        delta_g2 = 0.013780481431903305
+        
+        ## old version, pre correction
+        #g1 = 0.41590054607117416
+        #delta_g1 = 0.0038119837752912016
+        #g2 = 0.4304153126089022
+        #delta_g2 = 0.013780481431903305
+
+        ## new version, post correction and error additions
+        g1 = 0.47585346685220986 
+        delta_g1 = 0.007846294054192455
+        g2 = 0.2755655035016896
+        delta_g2 = 0.024161451950752217
     elif scale_cut == [1, 5]:
         # with DR1 ELGs
         # g1 = 0.295
@@ -293,10 +301,18 @@ def _get_bias_correction(scale_cut):
         # without DR1 ELGs
         # alpha = 0.3074501687394755 ± 0.0042949661424663745
         # beta  = 0.5117933464025347 ± 0.02022743194083983
-        g1 = 0.3074501687394755
-        delta_g1 = 0.0042949661424663745
-        g2 = 0.5117933464025347
-        delta_g2 = 0.02022743194083983
+
+        ## old version, pre correction
+        #g1 = 0.3074501687394755
+        #delta_g1 = 0.0042949661424663745
+        #g2 = 0.5117933464025347
+        #delta_g2 = 0.02022743194083983
+
+        ## new version, post correction and error additions
+        g1 = 0.3431763273863235
+        delta_g1 = 0.009051681533269088
+        g2 = 0.3914273704554439 
+        delta_g2 = 0.03765699355702185
     else:
         raise ValueError(
             f"Scale cut {scale_cut} not recognized. Available options are [.3, 3.] and [1, 5]."

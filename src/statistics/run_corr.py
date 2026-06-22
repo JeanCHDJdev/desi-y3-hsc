@@ -299,19 +299,8 @@ def main():
 
                     # for this run (autocorrelations on small redshift bins)
                     # we only measure on nearby redshift bins (3*dz_phot)
-
-                    bin4_qso = False
-                    # moreover, if z < 0.9 use DR1 else use DR2
-                    if bin4_qso:
-                        if (bin2[b2 - 1] + bin2[b2]) / 2 > 0.9:  # > if DR1
-                            logger.info(
-                                f"Skipping cross-correlation for {t1}x{t2}, "
-                                f"bin 1 {b1} : {bin1[b1-1]:.2f}-{bin1[b1]:.2f}, bin 2 {b2} : {bin2[b2-1]:.2f}-{bin2[b2]:.2f} "
-                                f"(z > 0.9)"
-                            )
-                            continue
                             
-                    calib_photoz_bias = False
+                    calib_photoz_bias = True
                     if calib_photoz_bias:
                         if t2 == "HSC":
                             dz_phot = np.mean(np.diff(bin2))
@@ -326,6 +315,13 @@ def main():
                                     f"(redshift bins are too far apart)"
                                 )
                                 continue
+                        if (bin2[b2 - 1] + bin2[b2]) / 2 < 0.9:  # > if DR1, < if DR2
+                            logger.info(
+                                f"Skipping cross-correlation for {t1}x{t2}, "
+                                f"bin 1 {b1} : {bin1[b1-1]:.2f}-{bin1[b1]:.2f}, bin 2 {b2} : {bin2[b2-1]:.2f}-{bin2[b2]:.2f} "
+                                f"(z > 0.9)"
+                            )
+                            continue
 
                     tb1b2 = time.time()
                     cc.run(b1, b2, m)

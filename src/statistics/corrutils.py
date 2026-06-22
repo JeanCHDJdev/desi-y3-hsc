@@ -75,34 +75,34 @@ class CorrelationMeta(ABC):
     bins_rppi_mu = np.linspace(-100, 100, 21)
 
     # bins in DR2
-    # bins_bgs = np.arange(0.0, 0.65, 0.05)  # 0 < z < 0.5
-    # bins_lrg = np.arange(0.3, 1.25, 0.05)  # 0.3 < z < 1.2
-    # bins_elg = np.arange(0.7, 1.65, 0.05)  # 0.7 < z < 1.6
-    # bins_qso = np.arange(0.7, 2.85, 0.05)  # 0.7 < z < 2.8
+    # bins_bgs = np.arange(0.0, 0.62, 0.05)  # 0 < z < 0.6
+    # bins_lrg = np.arange(0.3, 1.22, 0.05)  # 0.3 < z < 1.2
+    # bins_elg = np.arange(0.7, 1.62, 0.05)  # 0.7 < z < 1.6
+    # bins_qso = np.arange(0.7, 2.82, 0.05)  # 0.7 < z < 2.8
 
     # bins in DR1
-    # bins_bgs = np.arange(0.0, 0.55, 0.05) # 0 < z < 0.5
-    # bins_lrg = np.arange(0.4, 1.15, 0.05) # 0.4 < z < 1.1
-    # bins_elg = np.arange(0.8, 1.65, 0.05) # 0.8 < z < 1.6
-    # bins_qso = np.arange(0.8, 2.85, 0.05) # 0.8 < z < 2.8
+    # bins_bgs = np.arange(0.0, 0.52, 0.05) # 0 < z < 0.5
+    # bins_lrg = np.arange(0.4, 1.12, 0.05) # 0.4 < z < 1.1
+    # bins_elg = np.arange(0.8, 1.62, 0.05) # 0.8 < z < 1.6
+    # bins_qso = np.arange(0.8, 2.82, 0.05) # 0.8 < z < 2.8
 
     # bins for HSC bias in DR1
-    # bins_bgs = np.arange(0.0, 0.525, 0.025)  # 0 < z < 0.5
-    # bins_lrg = np.arange(0.4, 1.125, 0.025)  # 0.4 < z < 1.1
-    # bins_elg = np.arange(0.8, 1.625, 0.025)  # 0.8 < z < 1.6
-    # bins_qso = np.arange(0.8, 2.825, 0.025)  # 0.8 < z < 2.8
+    #bins_bgs = np.arange(0.0, 0.52, 0.025)  # 0 < z < 0.5
+    #bins_lrg = np.arange(0.4, 1.12, 0.025)  # 0.4 < z < 1.1
+    #bins_elg = np.arange(0.8, 1.62, 0.025)  # 0.8 < z < 1.6
+    #bins_qso = np.arange(0.8, 2.82, 0.025)  # 0.8 < z < 2.8
     
     # bins for HSC bias in DR2
-    # bins_bgs = np.arange(0.0, 0.625, 0.025)  # 0 < z < 0.6
-    # bins_lrg = np.arange(0.3, 1.225, 0.025)  # 0.3 < z < 1.2
-    # bins_elg = np.arange(0.7, 1.625, 0.025)  # 0.7 < z < 1.6
-    # bins_qso = np.arange(0.7, 2.825, 0.025)  # 0.7 < z < 2.8
+    bins_bgs = np.arange(0.0, 0.62, 0.025)  # 0 < z < 0.6
+    bins_lrg = np.arange(0.3, 1.22, 0.025)  # 0.3 < z < 1.2
+    bins_elg = np.arange(0.7, 1.62, 0.025)  # 0.7 < z < 1.6
+    bins_qso = np.arange(0.7, 2.82, 0.025)  # 0.7 < z < 2.8
     
     # bins for HSC bias
-    # bins_hsc = np.arange(0, 1.9, 0.1)
+    bins_hsc = np.arange(0, 2.05, 0.1)
     
     # bins for cross-corr of bin 4 dr 1 with QSO
-    #bins_qso = np.arange(0.8, 2.85, 0.05)
+    #bins_qso = np.arange(0.8, 2.82, 0.05)
     #bins_lrg = np.arange(0., 0.2, 0.1) # includes useless bins
     #bins_elg = np.arange(0., 0.2, 0.1)
     #bins_bgs = np.arange(0., 0.2, 0.1)
@@ -111,12 +111,12 @@ class CorrelationMeta(ABC):
 
     
     # bins for cross-corr of fake bin 5 with dr 2 QSO
-    bins_qso = np.arange(0.7, 2.85, 0.05)
-    bins_lrg = np.arange(0., 0.2, 0.1) # includes useless bins
-    bins_elg = np.arange(0., 0.2, 0.1)
-    bins_bgs = np.arange(0., 0.2, 0.1)
-    bins_hsc = np.arange(1.8, 2.1, 0.2) # bin is 1.8 <= photoz < 2.0
-    is_bin_5_test = True
+    #bins_qso = np.arange(0.7, 2.82, 0.05)
+    #bins_lrg = np.arange(0., 0.2, 0.1) # includes useless bins
+    #bins_elg = np.arange(0., 0.2, 0.1)
+    #bins_bgs = np.arange(0., 0.2, 0.1)
+    #bins_hsc = np.arange(1.8, 2.1, 0.2) # bin is 1.8 <= photoz < 2.0
+    is_bin_5_test = False
     
     bins_tracers = {
         "LRG": bins_lrg,
@@ -173,7 +173,7 @@ class CorrelationMeta(ABC):
         nproc=None,
     ):
         ## this is somewhat deprecated so verify
-        assert sample_rate_1 == sample_rate_2 == 1, "Proceed with caution if subsampling."
+        #assert sample_rate_1 == sample_rate_2 == 1, "Proceed with caution if subsampling."
         if self.is_bin_5_test:
             logger.warning("Warning : is_bin_5_test activated.")
         assert logger is not None, "Logger not provided"
@@ -277,11 +277,11 @@ class CorrelationMeta(ABC):
         # weights : here base (nonKP or PIP) + FKP + ...
         self.w_cols_to_operate = [
             self.w_desi_col,
-            # self.w_fkp_desi_col,
+            self.w_fkp_desi_col,
         ]
 
         self.logger.info(f"Weights : {self.w_cols_to_operate} ")
-        self.w_operator = "*"
+        self.w_operator = "multiply"
         # usually PIP, nonKP...
         self.weight_type = weight_type
 
@@ -685,8 +685,6 @@ class CorrelationMeta(ABC):
         if not self.use_hsc:
             assert len(self.randoms1) == len(self.z_bool_r1)
 
-        # assert we don't have empty data because what the heck
-        # import ipdb; ipdb.set_trace()
         assert len(self.randoms1[self.z_bool_r1]) > 0
         assert len(self.data1[self.z_bool_d1]) > 0
         if not self.autocorr:
@@ -872,7 +870,7 @@ class CrossCorrelation(CorrelationMeta):
 
 
 class JackknifeCrossCorrelation(CorrelationMeta):
-    def __init__(self, nside: int = 256, nsamples: int = 80, seed: int = 42, **kwargs):
+    def __init__(self, nside: int = 256, nsamples: int = 100, seed: int = 42, **kwargs):
         super().__init__(**kwargs)
         self.nside = nside
         self.nsamples = nsamples
@@ -1023,6 +1021,13 @@ def _process_random_file(
                 operator=operator,
             )
             nrows = tbl.get_nrows()
+            if "isprimary" in tbl.get_colnames():
+                # if the isprimary column exists, we can use it to filter the randoms before the MOC filtering
+                data = data[data["isprimary"] == 1]
+                print(f"Filtered {nrows - len(data)} non-primary randoms in {f} using isprimary column")
+                nrows = len(data)
+                if nrows == 0:
+                    raise ValueError(f"No primary randoms left in {f} after filtering with isprimary column")
 
             if moc is not None:
                 print(f"Filtering {nrows} randoms in {f} using MOC")
@@ -1158,7 +1163,9 @@ def _get_data_to_read(
     extra_cols=None,
 ):
     # if HSC + zbin we can have an edge case where the z_col is two values, so flatten and unpack first
-    requested_cols = [ra_col, dec_col, main_w_col]
+    requested_cols = [ra_col, dec_col]
+    if main_w_col is not None:
+        requested_cols.append(main_w_col)
     if isinstance(z_col, list):
         if len(z_col) == 2:
             # we want both knowledge on zbin and z
@@ -1182,6 +1189,9 @@ def _get_data_to_read(
             cols_to_read.remove(main_w_col)
             cols_to_read += w_cols_to_operate
 
+    if "isprimary" in tbl.get_colnames():
+        cols_to_read.append("isprimary")
+
     assert all(
         c in tbl.get_colnames() for c in cols_to_read
     ), f"Columns {cols_to_read} not in {tbl}"
@@ -1202,7 +1212,7 @@ def _get_data_to_read(
         if w_cols_to_operate is not None:
             if operator is None:
                 raise ValueError("Operator not provided for weight columns")
-            if operator in ["*", "multiply", "times", "product"]:
+            if operator in ["multiply", "times", "product"]:
                 w_col = np.ones_like(data[ra_col])
                 for col in w_cols_to_operate:
                     w_col *= data[col]

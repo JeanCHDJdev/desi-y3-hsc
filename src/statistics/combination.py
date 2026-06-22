@@ -83,4 +83,4 @@ def combine_error_bars_mult(x, xerr, y, yerr):
     y = np.asarray(y).copy()
     xerr = np.asarray(xerr).copy()
     yerr = np.asarray(yerr).copy()
-    return np.sqrt(1 / (4 * x * y) * (x * yerr + y * xerr) ** 2)
+    return np.sqrt(1 / (4 * x * y) * ((x * yerr) **2 + (y * xerr) ** 2))

@@ -229,7 +229,7 @@ def fetch_hsc_files(randoms=False, include_dud=False, sims=False, sims_version=0
                 "/global/cfs/projectdirs/desi/users/jchdj/desi-y3-hsc/data/hsc/randoms"
             )
             return list(
-                root.glob(f'edge_sc_cr_hscr{"*" if include_dud else "[0-9]"}.fits')
+                root.glob(f'hscr{"*" if include_dud else "[0-9]"}.fits')
             )
         elif not sims and not randoms:
             return Path(
