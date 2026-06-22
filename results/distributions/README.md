@@ -4,14 +4,12 @@
 
 ### ADDENDUM
 ------------
-```
-Due to a minor bug on marginalization computation of the bp error, the correct measurements are actually in the `_newerr` directories. Note that the difference is extremely minor and does not affect conclusions of the paper, however for the sake of numerical precision the `_newerr` values are more accurate than the previous version, which is still kept for consistency with the reported values of the paper.
-```
+Due to a minor bug on marginalization computation of the bp error, the correct measurements are actually in the `_v1_p1` directories. Note that the difference is minor and does not affect conclusions of the paper, however for the sake of numerical precision the `_v1_p1` values are more accurate than the previous version.
 
 ### Files
 ---------
 
-In this folder, you will find the fiducial distributions. Sacale cuts are indicated by the folder name (0.3-3) and (1-5) in Mpc/h.
+In this folder, you will find the fiducial distributions. Scale cuts are indicated by the folder name (0.3-3) and (1-5) in Mpc/h.
 The median measurements of the samples are provided. 
 
 You can find all measurements (including removing other corrections, such as bias evolution) under the `distributions_*.npz` file :
