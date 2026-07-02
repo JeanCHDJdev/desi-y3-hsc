@@ -1,0 +1,130 @@
+---
+
+# Username.
+username: "qlavier" # type : str. Default : "qlavier". Username to use for file paths.
+
+bash:
+# bash parameters
+    qos: "regular" # type : str (among "interactive", "regular"). Default : "regular". Whether to run the jobs interactively (for tests, for 1 CORRELATION MAX /!\) or in regular mode.
+    job_name: "" # type : str. Default : "". Name of the job to run (for regular mode).
+    proc: "cpu" # type : str (among "cpu", "gpu"). Default : "cpu". Whether to run the jobs on CPU or GPU.
+    ntasks_per_node: 1 # type : int. Default : 1 for cpu, 4 for gpu. Number of tasks per node to request for each job.
+    cpus_per_task: 256 # type : int. Default : 256 for cpu, 32 for gpu. Number of cpus per task to request for each job.
+    memory: "0" # type : str. Default : "0" (or "512GB" for cpu, "256GB" for gpu). Amount of memory to request for each job.
+    time: "08:00:00" # type : str. Default : "06:00:00". Time to request for each job (format HH:MM:SS). For interactive jobs, high time will violate QOS policy.
+    account: "desi" # type : str. Default : "desi". Account to use for the job submission.
+
+data:
+# HSC data catalog
+    hsc_catalog: "hscy3_cat_withflags" # type : str (among "hscy3_cat_withflags", "hscpdr3_highz_final_maj.fits"...). Default : "hsc_cat_withflags". HSC catalog to use. Catalogs are stored in /global/cfs/projectdirs/desi/users/{username}/desi-y3-hsc/data/hsc/cat
+# DESI data release
+    desi_data_release: "dr1" # type : str (among "dr1", "dr2"). Default : "dr2". DESI data release to use.
+
+bins:
+# HSC bins for correlations and n(z) distributions : {number: [start, end]}. type : dict. Default: {1: [0.3, 0.6], 2: [0.6, 0.9], 3: [0.9, 1.2], 4: [1.2, 1.5], 5: [1.5, 2.0], 6: [2.0, 2.7],}. If not empty, will use these bins for HSC.
+    hsc: {
+        1: [0.3, 0.6], 
+        2: [0.6, 0.9], 
+        3: [0.9, 1.2],
+        4: [1.2, 1.5],
+        5: [1.5, 2.0], 
+        6: [2.0, 2.7],
+    }
+# DESI tracer bins for correlations and n(z) distributions : {tracer: [start, end, spacing]}. type : dict. Default: {"BGS_ANY": [0.0, 0.6, 0.05], "LRG": [0.3, 1.2, 0.05], "ELGnotqso": [0.7, 1.6, 0.05], "QSO": [0.7, 2.8, 0.05]}. If not empty, will use these bins for the DESI tracers.
+    desi: {
+        "BGS_ANY": [0.0, 0.5, 0.05],
+        "LRG": [0.4, 1.1, 0.05],
+        "ELGnotqso": [0.8, 1.6, 0.05],
+        "QSO": [0.8, 3.0, 0.05],
+    }
+
+tpcf:
+# parameters to enter for correlation computation
+    cross_correlations: ["BGS_ANY", "LRG", "QSO"] # type : list of str (among "BGS_ANY", "LRG", "ELGnotqso", "QSO"). Default : ["BGS_ANY", "LRG", "ELGnotqso", "QSO"]. DESI tracers to cross-correlate with HSC.
+    auto_correlations: ["BGS_ANY", "LRG", "QSO"] # type : list of str (among "BGS_ANY", "LRG", "ELGnotqso", "QSO", "HSC"). Default : ["BGS_ANY", "LRG", "ELGnotqso", "QSO", "HSC"]. Targets to compute auto-correlations for.
+    areas: {
+        "cross": [1, 2, 3, 4], 
+        "auto": [1, 3]
+    } # type : dict. of list of int (among 1, 2, 3, 4). Default : {cross: [1, 2, 3, 4], "auto": [1, 3]}. Areas of the sky to cross-correlate for resp. cross/auto correlations. 1, 4 = NGC; 2, 3 = SGC. Cross need all 4 to cover all the sky while auto need only NGC and SGC (i.e. 1 & 3 for ex.)
+    jackknife: True # type : bool. Default : True. Whether to perform cross correlation with jackknife estimates.
+    nsamples: 100 # type : int. Default : 64. Number of jackknife samples.
+
+advanced:
+# advanced correlation parameters
+    output_dir: None # type : str. Default : None. Relative path to the output file (storing the auto & cross correlations).
+    estimator: "davispeebles" # type : str (among "davispeebles", "landyszalay", "peebleshauser"). Default : "davispeebles". Correlation estimator to use.
+    resolution: 256 # type : int. Default : 256. Healpix pixel resolution for jackknife subsampling.
+    sample_rate_1: 1 # type : int. Default : 1. Sampling rate for DESI randoms.
+    sample_rate_2: 1 # type : int. Default : 1. Sampling rate for HSC randoms catalog.
+    weight: "nonKP" # type : str (among "nonKP", "PIP", "base"). Default : "nonKP". Weighting scheme to use.
+    skip_moc: [False, True] # type : list of bool. Default : [False, True]. Whether to skip the MOC masking. 1st is for cross-correlations, 2nd is for auto-correlations. 0: no simulation.
+    z_bin: [True, False] # type : list of bool. Default : [True, False]. Whether to bin by the redshift column or the z_bin column, for resp. cross/auto correlations.
+    calibration_cut: 2.5 # type : float. Default : 2.7. Which calibration cut to apply in order to remove bimodal sources.
+    sims: 0 # type : int. Default : 0. Among 0, 1, 2, 3, 4, 5. Whether to use the simulated data, and which version.
+    corr_type: "theta" # type : str (among "theta", "rp"). Default : "theta". Type of correlation to run.
+    log: False # type : bool. Default : False. Log file to store run settings.
+    nproc: None # type : int. Default : None. Number of threads to use for correlation. None will use os.cpu_count()-2.
+    overwrite_files: False # type : bool. Default : True. Whether to overwrite on previous files.
+    corr_title: "final-calib2.5" # type : str. Default : "". Whether to add a personalized title to the output files names.
+
+nz:
+# parameters to enter for redshift distributions plots
+    tomo_bins: [1, 2, 3, 4, 5, 6] # type : list of int. Default : [1, 2, 3, 4]. Tomographic bins to consider for the redshift distribution.
+    tomo_to_tracer: {
+        1: ["BGS_ANY", "LRG"],
+        2: ["BGS_ANY", "LRG", "QSO"],
+        3: ["LRG", "QSO"],
+        4: ["LRG", "QSO"],
+        5: ["BGS_ANY", "LRG", "QSO"],
+        6: ["BGS_ANY", "LRG", "QSO"],
+    } # type : dict. Default : {1: ["BGS_ANY", "LRG"], 2: ["BGS_ANY", "LRG", "QSO"], 3: ["LRG", "ELGnotqso", "QSO"], 4: "LRG", "ELGnotqso", "QSO"], 5: ["BGS_ANY", "LRG", "ELGnotqso", "QSO"], 6: ["BGS_ANY", "LRG", "QSO"],}. Which DESI tracers to consider for each tomo bin.
+    scale_cut: [1, 5] # type : list of two floats (among [0.3, 3] and [1, 5]). Default : [0.3, 3]. Minimal and maximal distances used for the correlations (in Mpc/h).
+    areas: [1, 2, 3, 4] # type : list of int (among 1, 2, 3, 4). Default : [1, 3]. Areas of the sky to consider for the redshift distribution. 1, 4 = NGC; 2, 3 = SGC.
+    version: "vF" # type : str (among "vF", "vtest"...). Default : "vF". Version of the merged files used.
+    imag_cut: None # type : float. Default : None. Cut on the i-band magnitude. Used for the magnification correction computation. If None, will be set as the imag,max.
+    corrections: ["npz_bs_bp_mag"] # type : list of str (among "npz_cross", "npz_bs", "npz_bs_bp", "npz_bs_bp_mag"). Default : ["npz_cross", "npz_bs", "npz_bs_bp", "npz_bs_bp_mag"]. Which corrections to include for the plots.
+    bounds: {
+        1: [0.0, 0.8],
+        2: [0.3, 1.3],
+        3: [0.3, 2.1],
+        4: [0.7, 2.1],
+        5: [1.0, 2.5],
+        6: [1.5, 3.0],
+        } # type : dict. Default : {1: [0, 0.8], 2: [0.3, 1.3], 3: [0.3, 2.1], 4: [0.7, 2.1], 5: [0, 2.7], 6: [0, 2.7], 7: [0, 3.5]}. Bounds of the plots for each tomo bin.
+    title: "final-calib2.5-wss" # type : str. Default : "". Whether to add a personalized title to the file name. If "" no title will be added.
+    qso_spectro_bias: "wss" # type : str. Default : "wss" (among "wss", "Laurent", "Charles"). Whether to compute the spectroscopic bias for QSO with ou auto-correlations (wss) measurements or fit formulas from Laurent et al. 2017 or Charles et al.
+    corr_title: "final-calib2.5" # type : str. Default : "". Whether to add a personalized title to the output correlation files names.
+
+nz_splines:
+# parameters to enter for redshift distributions plots with spline fits
+    tomo_bins: [1, 2, 3, 4, 5, 6] # type : list of int. Default : [1, 2, 3, 4]. Tomographic bins to consider for the redshift distribution.
+    tomo_to_tracer: {
+        1: ["BGS_ANY", "LRG"],
+        2: ["BGS_ANY", "LRG", "QSO"],
+        3: ["LRG", "QSO"],
+        4: ["LRG", "QSO"],
+        5: ["BGS_ANY", "LRG", "QSO"],
+        6: ["BGS_ANY", "LRG", "QSO"],
+    } # type : dict. Default : {1: ["BGS_ANY", "LRG"], 2: ["BGS_ANY", "LRG", "QSO"], 3: ["LRG", "ELGnotqso", "QSO"], 4: "LRG", "ELGnotqso", "QSO"], 5: ["BGS_ANY", "LRG", "ELGnotqso", "QSO"], 6: ["BGS_ANY", "LRG", "ELGnotqso", "QSO"], 7: ["BGS_ANY", "LRG", "ELGnotqso", "QSO"]}. Which DESI tracers to consider for each tomo bin.
+    scale_cut: [1, 5] # type : list of two floats (among [0.3, 3] and [1, 5]). Default : [0.3, 3]. Minimal and maximal distances used for the correlations (in Mpc/h).
+    areas: [1, 2, 3, 4] # type : list of int (among 1, 2, 3, 4). Default : [1, 3]. Areas of the sky to consider for the redshift distribution. 1, 4 = NGC; 2, 3 = SGC.
+    version: "vF" # type : str (among "vF", "vtest"...). Default : "vF". Version of the merged files used.
+    imag_cut: None # type : float. Default : None. Cut on the i-band magnitude. Used for the magnification correction computation. If None, will be set as the imag,max.
+    corrections: ["npz_bs_bp_mag"] # type : list of str (among "npz_cross", "npz_bs", "npz_bs_bp", "npz_bs_bp_mag"). Default : ["npz_cross", "npz_bs", "npz_bs_bp", "npz_bs_bp_mag"]. Which corrections to include for the plots.
+    bounds: {
+        1: [0.0, 0.8],
+        2: [0.3, 1.3],
+        3: [0.3, 2.1],
+        4: [0.7, 2.1],
+        5: [1.0, 2.5],
+        6: [1.5, 3.0],
+        } # type : dict. Default : {1: [0, 0.8], 2: [0.3, 1.3], 3: [0.3, 2.1], 4: [0.7, 2.1], 5: [0, 2.7], 6: [0, 2.7], 7: [0, 3.5]}. Bounds of the plots for each tomo bin.
+    title: "final-calib2.5-wss" # type : str. Default : "". Whether to add a personalized title to the file name. If "" no title will be added.
+    # Spline hyperparameters :
+    n_tune: 400
+    n_samples: 1600
+    target_accept: 0.99
+    prior_concentration: 3
+    base_alpha: 0.05
+
+...

@@ -1,0 +1,12 @@
+hscpdr3_bao-wl-size:
+  25.1:
+    a_opt: 0.603
+    b_opt: -0.967
+hscpdr3_highz_final:
+  25.1:
+    a_opt: 0.603
+    b_opt: -0.967
+hscy3_cat_withflags:
+  24.5:
+    a_opt: 0.633
+    b_opt: -1.29
