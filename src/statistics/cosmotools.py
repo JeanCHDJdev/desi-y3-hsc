@@ -265,7 +265,7 @@ def spec_bias(z, tracer="QSO", return_coeffs=False):
         return alpha * (1 + z) ** 2 + beta
 
 
-def _get_bias_correction(scale_cut):
+def _get_bias_correction(scale_cut, mode):
     """
     NOTE : This function is actually returning the wpp correction,
     hence significant differences between scale cuts. One should correct for dark matter
@@ -288,10 +288,18 @@ def _get_bias_correction(scale_cut):
         #delta_g2 = 0.013780481431903305
 
         ## new version, post correction and error additions
-        g1 = 0.47585346685220986 
-        delta_g1 = 0.007846294054192455
-        g2 = 0.2755655035016896
-        delta_g2 = 0.024161451950752217
+        if mode=="powerlaw":
+            g1 = 0.47585346685220986 
+            delta_g1 = 0.007846294054192455
+            g2 = 0.2755655035016896
+            delta_g2 = 0.024161451950752217
+        elif mode=="polynomial":
+            alpha = 0.0035720046689597684 
+            alpha_err = 0.016994429547050518
+            beta  = 0.07096613342496609 
+            beta_err = 0.0648486512692185
+            gamma = 0.41702843216591756 
+            gamma_err = 0.06010590320271767
     elif scale_cut == [1, 5]:
         # with DR1 ELGs
         # g1 = 0.295
@@ -328,7 +336,7 @@ def parametrize_bias(tracer, tomo_bin, wdm, scale_cut):
     """
     # --------------------------------------
     # galaxy bias for the photometric tracer. we note that a, b are g1, g2 and _, _ are the errors on these
-    a, _, b, _ = _get_bias_correction(scale_cut=scale_cut)
+    a, _, b, _ = _get_bias_correction(scale_cut=scale_cut, mode="powerlaw")
     # small tomographic bins are 0.1 in size
     dzp = 0.1
     # wdm is passed as precomputed over the tomographic bins
@@ -426,6 +434,7 @@ def magnification_coefficients(
     bias_model_s: callable,
     w_dm_values: np.ndarray = None,
     contribution: str = "all",
+    perturbation: float = 0.0
 ) -> np.ndarray:
     """
     Computes the magnification correction coefficients for a given redshift index.
@@ -448,6 +457,8 @@ def magnification_coefficients(
         The dark matter correlation function values at each redshift.
     contribution : str or list, optional
         The contribution(s) to incluge: 'ug', 'gu', 'gg', or 'all'.
+    perturbation : float, optional
+        A perturbation to apply to the magnification correction coefficients (alpha).
 
     Returns
     -------
@@ -486,8 +497,11 @@ def magnification_coefficients(
         return cosmofactor * ((1 + zi) / _H(zi).value) * cosmotransverse * dz
 
     magnification = np.zeros_like(zvalues)
+    perturbation = perturbation if perturbation is not None else 0.0
+    perturb_value_s = np.random.normal(0, perturbation)
+    perturb_value_p = np.random.normal(0, perturbation)
 
-    mag1_const = alpha_model_s(zi) / (bias_model_p(zi) * bias_model_s(zi))
+    mag1_const = (alpha_model_s(zi) + perturb_value_s) / (bias_model_p(zi) * bias_model_s(zi))
     mag2_const = 1 / bias_model_p(zi)
 
     # order : spectroscopic x photometric
@@ -508,7 +522,9 @@ def magnification_coefficients(
         # galaxy x magnification contribution (magnification from the photometric tracer)
         elif zj_ind > zi_ind and "gu" in contribution:
             Dn_ij = _Dn_ij(zi, zj)
-            magnification[zj_ind] = mag2_const * alpha_model_p(zj) * Dn_ij
+            ## have it seeded
+            mag_contribution = alpha_model_p(zj) + perturb_value_p
+            magnification[zj_ind] = mag2_const * mag_contribution * Dn_ij
 
     return magnification
 
