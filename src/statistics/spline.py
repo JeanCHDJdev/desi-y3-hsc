@@ -134,6 +134,7 @@ class BayesianBSpline:
         prior_concentration=10.0,
         base_alpha=0.1,
         seed=42,
+        cores=None,
     ):
         """
         Fit the model using PyMC with Dirichlet prior and free amplitude parameter.
@@ -157,6 +158,13 @@ class BayesianBSpline:
             Number of chains to run in the sampler
         target_accept : float
             Target acceptance rate for the sampler (default 0.95)
+        cores : int or None
+            Number of chains to sample in parallel. None (the default) leaves PyMC's
+            own choice, which forks one worker process per chain. `cores=1` samples the
+            chains sequentially inside this process instead: same chains, same seeds,
+            same posterior, roughly n_chains times slower, but with no forked workers to
+            die -- which is what the `ConnectionResetError: [Errno 104]` failures on a
+            loaded node actually are.
         """
         self.nz = np.asarray(nz)
         self.nz_err = np.asarray(nz_err)
@@ -193,6 +201,7 @@ class BayesianBSpline:
                 target_accept=target_accept,
                 progressbar=True,
                 random_seed=seed,
+                cores=cores,
             )
 
         self.trace = trace

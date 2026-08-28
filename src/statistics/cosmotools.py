@@ -265,12 +265,21 @@ def spec_bias(z, tracer="QSO", return_coeffs=False):
         return alpha * (1 + z) ** 2 + beta
 
 
-def _get_bias_correction(scale_cut, mode):
+def _get_bias_correction(scale_cut, mode="powerlaw"):
     """
     NOTE : This function is actually returning the wpp correction,
     hence significant differences between scale cuts. One should correct for dark matter
     autocorrelation to recover bias.
+
+    Only the power law `g1 * (1 + z) ** g2` is expressible as this 4-tuple. The degree-2
+    polynomial has three (strongly correlated) parameters, so it goes through
+    `get_photo_bias_model` instead, which carries the full covariance.
     """
+    if mode != "powerlaw":
+        raise ValueError(
+            f"_get_bias_correction only handles the powerlaw, got mode={mode!r}. "
+            "Use get_photo_bias_model(scale_cut, mode=...) for the other models."
+        )
     if scale_cut == [0.3, 3.0]:
         # with DR1 ELGs
         # g1 = 0.409
@@ -288,18 +297,10 @@ def _get_bias_correction(scale_cut, mode):
         #delta_g2 = 0.013780481431903305
 
         ## new version, post correction and error additions
-        if mode=="powerlaw":
-            g1 = 0.47585346685220986 
-            delta_g1 = 0.007846294054192455
-            g2 = 0.2755655035016896
-            delta_g2 = 0.024161451950752217
-        elif mode=="polynomial":
-            alpha = 0.0035720046689597684 
-            alpha_err = 0.016994429547050518
-            beta  = 0.07096613342496609 
-            beta_err = 0.0648486512692185
-            gamma = 0.41702843216591756 
-            gamma_err = 0.06010590320271767
+        g1 = 0.47585346685220986
+        delta_g1 = 0.007846294054192455
+        g2 = 0.2755655035016896
+        delta_g2 = 0.024161451950752217
     elif scale_cut == [1, 5]:
         # with DR1 ELGs
         # g1 = 0.295
@@ -329,18 +330,56 @@ def _get_bias_correction(scale_cut, mode):
     return g1, delta_g1, g2, delta_g2
 
 
-def parametrize_bias(tracer, tomo_bin, wdm, scale_cut):
+#: default version of the cached photometric-bias fits (see src/statistics/biasfit.py)
+PHOTO_BIAS_VERSION = "v_1p1"
+
+
+def get_photo_bias_model(
+    scale_cut, mode="powerlaw", version=None, use_covariance=None, root=None
+):
+    """
+    Return a `biasfit.PhotoBiasModel` for the photometric bias correction.
+
+    Parameters
+    ----------
+    scale_cut : list
+        [rp_min, rp_max] in h^-1 Mpc.
+    mode : {'powerlaw', 'polynomial'}
+    version : str, optional
+        Version of the cached fit. Defaults to `PHOTO_BIAS_VERSION`.
+    use_covariance : bool, optional
+        Whether to propagate the full parameter covariance. Defaults to False.
+    """
+    import src.statistics.biasfit as biasfit
+
+    if use_covariance is None:
+        use_covariance = mode != "powerlaw"
+    return biasfit.PhotoBiasModel.from_cache(
+        scale_cut,
+        version if version is not None else PHOTO_BIAS_VERSION,
+        mode=mode,
+        root=root,
+        use_covariance=use_covariance,
+    )
+
+
+def parametrize_bias(tracer, tomo_bin, wdm, scale_cut, bias_mode="powerlaw"):
     """
     Returns the alpha and bias models for the magnification correction.
     These are the models used in the HSC WL-photoz tomographic analysis.
     """
     # --------------------------------------
-    # galaxy bias for the photometric tracer. we note that a, b are g1, g2 and _, _ are the errors on these
-    a, _, b, _ = _get_bias_correction(scale_cut=scale_cut, mode="powerlaw")
+    # galaxy bias for the photometric tracer.
     # small tomographic bins are 0.1 in size
     dzp = 0.1
     # wdm is passed as precomputed over the tomographic bins
-    bias_model_p = lambda z: a * (1 + z) ** b * np.sqrt(dzp / wdm(z))
+    if bias_mode == "powerlaw":
+        # a, b are g1, g2 and _, _ are the errors on these
+        a, _, b, _ = _get_bias_correction(scale_cut=scale_cut, mode="powerlaw")
+        bias_model_p = lambda z: a * (1 + z) ** b * np.sqrt(dzp / wdm(z))
+    else:
+        _bmodel = get_photo_bias_model(scale_cut=scale_cut, mode=bias_mode)
+        bias_model_p = lambda z: _bmodel.value(z) * np.sqrt(dzp / wdm(z))
 
     # --------------------------------------
     # magnification bias for the photometric tracer
@@ -434,7 +473,8 @@ def magnification_coefficients(
     bias_model_s: callable,
     w_dm_values: np.ndarray = None,
     contribution: str = "all",
-    perturbation: float = 0.0
+    alpha_offset_p: float = 0.0,
+    alpha_offset_s: float = 0.0,
 ) -> np.ndarray:
     """
     Computes the magnification correction coefficients for a given redshift index.
@@ -457,8 +497,11 @@ def magnification_coefficients(
         The dark matter correlation function values at each redshift.
     contribution : str or list, optional
         The contribution(s) to incluge: 'ug', 'gu', 'gg', or 'all'.
-    perturbation : float, optional
-        A perturbation to apply to the magnification correction coefficients (alpha).
+    alpha_offset_p, alpha_offset_s : float, optional
+        Additive shift of the photometric / spectroscopic magnification coefficients,
+        alpha -> alpha(z) + alpha_offset. 0.0 (the default) leaves them untouched.
+        Passed in rather than drawn here so a realization stays coherent across every
+        row of the magnification matrix (see `solve_magnification`).
 
     Returns
     -------
@@ -497,11 +540,10 @@ def magnification_coefficients(
         return cosmofactor * ((1 + zi) / _H(zi).value) * cosmotransverse * dz
 
     magnification = np.zeros_like(zvalues)
-    perturbation = perturbation if perturbation is not None else 0.0
-    perturb_value_s = np.random.normal(0, perturbation)
-    perturb_value_p = np.random.normal(0, perturbation)
 
-    mag1_const = (alpha_model_s(zi) + perturb_value_s) / (bias_model_p(zi) * bias_model_s(zi))
+    mag1_const = (alpha_model_s(zi) + alpha_offset_s) / (
+        bias_model_p(zi) * bias_model_s(zi)
+    )
     mag2_const = 1 / bias_model_p(zi)
 
     # order : spectroscopic x photometric
@@ -522,11 +564,35 @@ def magnification_coefficients(
         # galaxy x magnification contribution (magnification from the photometric tracer)
         elif zj_ind > zi_ind and "gu" in contribution:
             Dn_ij = _Dn_ij(zi, zj)
-            ## have it seeded
-            mag_contribution = alpha_model_p(zj) + perturb_value_p
+            mag_contribution = alpha_model_p(zj) + alpha_offset_p
             magnification[zj_ind] = mag2_const * mag_contribution * Dn_ij
 
     return magnification
+
+
+def draw_alpha_offsets(mag_sigma, rng=None, size=None):
+    """
+    Draw additive shifts `N(0, mag_sigma)` for the magnification coefficients alpha.
+
+    `mag_sigma` is an *absolute* error: 0.1 is a 1-sigma error of 0.1 on alpha itself,
+    independent of how large alpha is. That is the form alpha is measured in -- from the
+    slope of the number counts, with absolute quoted errors.
+
+    Draw once per realization and reuse across the whole tomographic bin / tracer loop:
+    the coefficients are a systematic, not a per-redshift noise term.
+
+    Parameters
+    ----------
+    mag_sigma : float
+        Absolute 1-sigma error on alpha. 0 returns exactly 0.0 (unperturbed).
+    rng : np.random.Generator, optional
+    size : int or tuple, optional
+        Shape of the draw. None returns a scalar.
+    """
+    if not mag_sigma:
+        return 0.0 if size is None else np.zeros(size)
+    rng = np.random.default_rng() if rng is None else rng
+    return rng.normal(0.0, mag_sigma, size=size)
 
 
 def solve_magnification(
@@ -536,17 +602,48 @@ def solve_magnification(
     tomo_bin,
     zvalues,
     return_matrices=False,
+    alpha_offset_p=0.0,
+    alpha_offset_s=0.0,
+    bias_mode="powerlaw",
+    w_dm_values=None,
 ):
+    """
+    Invert the magnification matrix to recover the magnification-corrected n(z).
+
+    Parameters
+    ----------
+    meas : tuple
+        (n(z) values, n(z) errors) before magnification correction.
+    alpha_offset_p, alpha_offset_s : float, optional
+        Additive shift of the photometric / spectroscopic magnification coefficients,
+        alpha -> alpha(z) + alpha_offset; 0.0 (the default) is the unperturbed,
+        fiducial analysis. Use `draw_alpha_offsets` for a perturbed realization.
+    bias_mode : {'powerlaw', 'polynomial'}, optional
+        Model used for the photometric galaxy bias entering the magnification kernel.
+    w_dm_values : np.ndarray, optional
+        Pre-computed w_dm at `zvalues`. It only depends on the scale cut and the
+        redshift grid, so caching it across realizations avoids
+        redoing the (expensive) CCL calls for every realization.
+    """
     meas_vals, meas_err = meas
 
     rp_vals = np.linspace(scale_cut[0], scale_cut[-1], 101)  # in h^-1 Mpc
     # precompute the angular dark matter correlation function contribution first
-    w_dm_values = np.array([w_dm(rp_vals, z, integrate=True) for z in zvalues])
+    if w_dm_values is None:
+        w_dm_values = np.array([w_dm(rp_vals, z, integrate=True) for z in zvalues])
+    else:
+        w_dm_values = np.asarray(w_dm_values)
+        if w_dm_values.shape[0] != len(zvalues):
+            raise ValueError("w_dm_values must have one entry per value in zvalues.")
     w_dm_interp = interp1d(zvalues, w_dm_values, axis=0, fill_value="extrapolate")
 
     # obtain bias, alpha models (parametrize bias has them hardcoded)
     alpha_p, alpha_s, bias_p, bias_s = parametrize_bias(
-        tracer=tracer, tomo_bin=tomo_bin, wdm=w_dm_interp, scale_cut=scale_cut
+        tracer=tracer,
+        tomo_bin=tomo_bin,
+        wdm=w_dm_interp,
+        scale_cut=scale_cut,
+        bias_mode=bias_mode,
     )
 
     Mag = np.array(
@@ -560,6 +657,8 @@ def solve_magnification(
                 bias_model_s=bias_s,
                 w_dm_values=w_dm_values,
                 contribution="all",
+                alpha_offset_p=alpha_offset_p,
+                alpha_offset_s=alpha_offset_s,
             )
             for i in range(len(zvalues))
         ]

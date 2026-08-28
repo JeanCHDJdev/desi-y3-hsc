@@ -174,3 +174,4 @@ cython_debug/
 .pypirc
 
 src/photoz_cuts/outputs/**
+.pytensor_cache/

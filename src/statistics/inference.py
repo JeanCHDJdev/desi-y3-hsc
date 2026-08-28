@@ -310,6 +310,7 @@ def compute_npz(
     rebin=1,
     return_chunks=False,
     precomp_wdm=None,
+    bias_model=None,
 ):
     """
     Computes n(z) for the provided tracer and binning.
@@ -391,11 +392,6 @@ def compute_npz(
         integration="single-bin",
     )
 
-    alpha, delta_alpha, gamma, delta_gamma = (
-        _get_bias_correction(scale_cut=scale_cuts)
-        if do_phot_correction
-        else (1, 0, 0, 0)
-    )
     if not do_spec_correction:
         wss_meas = 1
         wss_err = 0
@@ -430,15 +426,11 @@ def compute_npz(
         combined_err = n_z_bs_err
         
     if do_phot_correction:
-        n_z_bs_bp = n_z_bs / (alpha * ((1 + zloc) ** gamma))
-        n_z_bs_bp_err_prealpha = np.sqrt(
-            (n_z_bs_err / ((1 + zloc) ** gamma)) ** 2
-            + (np.log(1 + zloc) * n_z_bs * delta_gamma / ((1 + zloc) ** gamma))**2
-        )
-
+        # n_z_bs_bp = n_z_bs / f(z), so the fit uncertainty enters as a relative error.
+        bias_f, bias_rel_sigma = _photo_bias_factor(zloc, scale_cuts, bias_model)
+        n_z_bs_bp = n_z_bs / bias_f
         n_z_bs_bp_err = np.sqrt(
-            (n_z_bs_bp_err_prealpha / alpha) ** 2
-            + (n_z_bs_bp * delta_alpha / alpha) ** 2
+            (n_z_bs_err / bias_f) ** 2 + (n_z_bs_bp * bias_rel_sigma) ** 2
         )
         result = n_z_bs_bp
         combined_err = n_z_bs_bp_err
@@ -461,6 +453,7 @@ def compute_npz_merged(
     return_chunks=False,
     verbose=False,
     precomp_wdm=None,
+    bias_model=None,
 ):
 
     if which_patches is not None:
@@ -501,11 +494,6 @@ def compute_npz_merged(
         scale_cuts=scale_cuts,
     )
 
-    alpha, delta_alpha, gamma, delta_gamma = (
-        _get_bias_correction(scale_cut=scale_cuts)
-        if do_phot_correction
-        else (1, 0, 0, 0)
-    )
     if not do_spec_correction:
         wss_meas = 1
         wss_err = 0
@@ -531,14 +519,10 @@ def compute_npz_merged(
             x=wsp_meas, xerr=wsp_err, y=wss_meas, yerr=wss_err
         ) / (factor)
     if do_phot_correction:
-        result /= alpha * ((1 + zloc) ** gamma)
-        combined_err_prealpha = np.sqrt(
-            (combined_err / ((1 + zloc) ** gamma)) ** 2
-            + np.log(1 + zloc) * combined_err * delta_gamma / ((1 + zloc) ** gamma)
-        )
+        bias_f, bias_rel_sigma = _photo_bias_factor(zloc, scale_cuts, bias_model)
+        result = result / bias_f
         combined_err = np.sqrt(
-            (combined_err_prealpha / alpha) ** 2
-            + (result * delta_alpha / alpha**2) ** 2
+            (combined_err / bias_f) ** 2 + (result * bias_rel_sigma) ** 2
         )
 
     if return_chunks:
@@ -558,6 +542,7 @@ def full_npz_tomo(
     return_chunks=False,
     precomp_wdm=None,
     mode="Standard",
+    bias_model=None,
 ):
     """
     Computes n(z) for the provided tracer and specific tomographic. Returns the array of n(z) values
@@ -651,6 +636,7 @@ def full_npz_tomo(
             rebin=rebin,
             return_chunks=return_chunks,
             precomp_wdm=wdm,
+            bias_model=bias_model,
         )
 
         if return_chunks:
@@ -692,8 +678,29 @@ def _get_fine_redshift_bins(fr: cf.CorrFileReader, tracer="Merged"):
     return fine_redshift
 
 
-def _get_bias_correction(scale_cut):
-    return ct._get_bias_correction(scale_cut=scale_cut)
+def _get_bias_correction(scale_cut, mode="powerlaw"):
+    return ct._get_bias_correction(scale_cut=scale_cut, mode=mode)
+
+
+def _photo_bias_factor(zloc, scale_cuts, bias_model=None):
+    """
+    Value and *relative* uncertainty of the photometric bias correction f(z) that the
+    raw n(z) is divided by.
+
+    `bias_model=None` reproduces the fiducial power-law analysis exactly: the
+    correction is `alpha * (1 + z) ** gamma`. 
+    Pass a `biasfit.PhotoBiasModel` to use another model.
+    """
+    if bias_model is None:
+        alpha, delta_alpha, gamma, delta_gamma = _get_bias_correction(
+            scale_cut=scale_cuts
+        )
+        f = alpha * ((1 + zloc) ** gamma)
+        rel_sigma = np.sqrt(
+            (delta_alpha / alpha) ** 2 + (np.log(1 + zloc) * delta_gamma) ** 2
+        )
+        return f, rel_sigma
+    return bias_model.value(zloc), bias_model.rel_sigma(zloc)
 
 
 def compute_rcc(

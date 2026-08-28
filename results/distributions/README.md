@@ -4,7 +4,7 @@
 
 ### ADDENDUM
 ------------
-Due to a minor bug on marginalization computation of the bp error, the correct measurements are actually in the `_v1_p1` directories. Note that the difference is minor and does not affect conclusions of the paper, however for the sake of numerical precision the `_v1_p1` values are more accurate than the previous version.
+Due to a minor bug on marginalization computation of the bp error, the correct measurements are actually in the `_v_1p1` directories. Note that the difference is minor and does not affect conclusions of the paper, however for the sake of numerical precision the `_v_1p1` values are more accurate than the previous version.
 
 ### Files
 ---------
